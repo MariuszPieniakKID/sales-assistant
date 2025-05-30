@@ -8,6 +8,7 @@ require('dotenv').config();
 const { Pool } = require('pg');
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
+const { OpenAI } = require('openai');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -546,11 +547,11 @@ INSTRUKCJE:
     }
 });
 
-// Endpoint do wysyłania wiadomości do OpenAI
+// Endpoint do komunikacji z OpenAI (streaming)
 app.post('/api/chat/message', requireAuth, async (req, res) => {
-    console.log('📍 Request: POST /api/chat/message');
+    console.log('📍 Request: POST /api/chat/message (STREAMING)');
     
-    const { message, systemPrompt, conversationHistory = [] } = req.body;
+    const { message, systemPrompt, conversationHistory } = req.body;
     
     if (!message) {
         return res.status(400).json({ 
@@ -560,72 +561,66 @@ app.post('/api/chat/message', requireAuth, async (req, res) => {
     }
     
     try {
-        // Sprawdź czy OPENAI_API_KEY istnieje
-        if (!process.env.OPENAI_API_KEY) {
-            console.error('❌ Brak OPENAI_API_KEY w zmiennych środowiskowych');
-            return res.status(500).json({ 
-                success: false, 
-                message: 'API key OpenAI nie jest skonfigurowany' 
-            });
-        }
+        const openai = new OpenAI({
+            apiKey: process.env.OPENAI_API_KEY
+        });
         
-        // Przygotuj historię konwersacji dla OpenAI
+        console.log('🤖 Wysyłam streaming request do OpenAI...');
+        
+        // Skrócona historia (ostatnie 6 wiadomości dla szybkości)
+        const recentHistory = conversationHistory.slice(-6);
+        
         const messages = [
-            {
-                role: 'system',
-                content: systemPrompt
+            { 
+                role: 'system', 
+                content: systemPrompt || `Jesteś profesjonalnym asystentem sprzedażowym. Odpowiadaj KRÓTKO i KONKRETNIE (max 2-3 zdania). Mów naturalnie, jak w rozmowie telefonicznej.`
             },
-            ...conversationHistory,
-            {
-                role: 'user',
-                content: message
-            }
+            ...recentHistory,
+            { role: 'user', content: message }
         ];
         
-        console.log('🤖 Wysyłam zapytanie do OpenAI...');
-        
-        // Wywołaj OpenAI API
-        const response = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                model: 'gpt-4',
-                messages: messages,
-                max_tokens: 300,
-                temperature: 0.7,
-                top_p: 1,
-                frequency_penalty: 0,
-                presence_penalty: 0
-            })
+        // Ustaw nagłówki dla streaming
+        res.writeHead(200, {
+            'Content-Type': 'text/plain; charset=utf-8',
+            'Transfer-Encoding': 'chunked',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive'
         });
         
-        if (!response.ok) {
-            const errorData = await response.text();
-            console.error('❌ Błąd OpenAI API:', response.status, errorData);
-            throw new Error(`OpenAI API error: ${response.status}`);
+        const stream = await openai.chat.completions.create({
+            model: 'gpt-3.5-turbo', // Szybszy model
+            messages: messages,
+            stream: true,
+            max_tokens: 150, // Ograniczenie dla szybkości
+            temperature: 0.7
+        });
+        
+        console.log('📡 Rozpoczynam streaming odpowiedzi...');
+        let fullResponse = '';
+        
+        for await (const chunk of stream) {
+            const content = chunk.choices[0]?.delta?.content || '';
+            if (content) {
+                fullResponse += content;
+                // Wyślij chunk natychmiast
+                res.write(content);
+                console.log('📤 Chunk:', content);
+            }
         }
         
-        const data = await response.json();
-        const aiResponse = data.choices[0].message.content;
-        
-        console.log('✅ Otrzymano odpowiedź od OpenAI');
-        
-        res.json({
-            success: true,
-            response: aiResponse,
-            usage: data.usage
-        });
+        res.end();
+        console.log('✅ Streaming zakończony, pełna odpowiedź:', fullResponse);
         
     } catch (error) {
-        console.error('❌ Błąd komunikacji z OpenAI:', error.message);
-        res.status(500).json({ 
-            success: false, 
-            message: 'Błąd komunikacji z ChatGPT',
-            error: error.message 
-        });
+        console.error('❌ Błąd streaming OpenAI:', error);
+        if (!res.headersSent) {
+            res.status(500).json({ 
+                success: false, 
+                message: 'Błąd komunikacji z ChatGPT: ' + error.message 
+            });
+        } else {
+            res.end();
+        }
     }
 });
 

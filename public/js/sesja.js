@@ -734,14 +734,14 @@ function initSpeechRecognition() {
                 // Resetuj timer ciszy
                 clearTimeout(silenceTimer);
                 
-                // Ustaw nowy timer ciszy (2 sekundy po zakończeniu mówienia)
+                // Ustaw nowy timer ciszy (1 sekunda zamiast 2 dla szybkości)
                 silenceTimer = setTimeout(() => {
                     if (finalTranscript.trim() && !isProcessingResponse) {
                         console.log('🗣️ Wykryto ciszę - wysyłam: ', finalTranscript.trim());
                         sendMessageToChatGPT(finalTranscript.trim());
                         finalTranscript = '';
                     }
-                }, 2000);
+                }, 1000);
                 
             } else {
                 interimTranscript += transcript;
@@ -849,9 +849,9 @@ function updateVoiceUI(recording) {
     }
 }
 
-// Główna funkcja wysyłania wiadomości do ChatGPT
+// Główna funkcja wysyłania wiadomości do ChatGPT (STREAMING)
 async function sendMessageToChatGPT(message) {
-    console.log('🤖 Wysyłam wiadomość do ChatGPT:', message);
+    console.log('🤖 Wysyłam wiadomość do ChatGPT (STREAMING):', message);
     
     if (!currentSession || !currentSession.chatContext) {
         showToast('Brak aktywnej sesji chatu', 'error');
@@ -868,10 +868,15 @@ async function sendMessageToChatGPT(message) {
         // Ukryj tymczasowy transkrypt
         updateInterimTranscript('');
         
-        // Pokaż loader
-        showChatLoader();
+        // Dodaj pustą wiadomość AI dla streaming
+        const aiMessageId = addStreamingMessageToChat();
         
-        // Wyślij do API
+        // Skrócona historia dla szybkości (ostatnie 4 wiadomości)
+        const recentHistory = currentSession.conversationHistory.slice(-4);
+        
+        console.log('📡 Rozpoczynam streaming request...');
+        
+        // Wyślij streaming request
         const response = await fetchWithAuth('/api/chat/message', {
             method: 'POST',
             headers: {
@@ -880,46 +885,67 @@ async function sendMessageToChatGPT(message) {
             body: JSON.stringify({
                 message: message,
                 systemPrompt: currentSession.chatContext.systemPrompt,
-                conversationHistory: currentSession.conversationHistory
+                conversationHistory: recentHistory
             })
         });
         
         if (!response) {
-            hideChatLoader();
+            removeStreamingMessage(aiMessageId);
+            isProcessingResponse = false;
             return; // fetchWithAuth już obsłużył przekierowanie
         }
         
         if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.message || 'Błąd komunikacji z ChatGPT');
+            throw new Error('Błąd komunikacji z ChatGPT');
         }
         
-        const chatData = await response.json();
-        console.log('✅ Otrzymano odpowiedź od ChatGPT:', chatData.response);
+        console.log('📡 Odbieram streaming odpowiedź...');
         
-        // Ukryj loader
-        hideChatLoader();
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let fullResponse = '';
+        
+        while (true) {
+            const { done, value } = await reader.read();
+            
+            if (done) {
+                console.log('✅ Streaming zakończony');
+                break;
+            }
+            
+            const chunk = decoder.decode(value, { stream: true });
+            fullResponse += chunk;
+            
+            // Aktualizuj wiadomość w real-time
+            updateStreamingMessage(aiMessageId, fullResponse);
+            
+            console.log('📤 Otrzymano chunk:', chunk);
+        }
+        
+        // Finalizuj wiadomość
+        finalizeStreamingMessage(aiMessageId, fullResponse);
         
         // Oznacz że skończyliśmy przetwarzać odpowiedź
         isProcessingResponse = false;
         
-        // Dodaj odpowiedź AI do UI
-        addMessageToChat('ai', chatData.response);
-        
         // Zaktualizuj historię konwersacji
         currentSession.conversationHistory.push(
             { role: 'user', content: message },
-            { role: 'assistant', content: chatData.response }
+            { role: 'assistant', content: fullResponse }
         );
         
-        // Odczytaj odpowiedź głosowo
-        speakText(chatData.response);
+        // Odczytaj odpowiedź głosowo (NATYCHMIAST po otrzymaniu)
+        speakText(fullResponse);
+        
+        console.log('🎉 Streaming message zakończony:', fullResponse);
         
     } catch (error) {
-        console.error('❌ Błąd wysyłania wiadomości:', error);
+        console.error('❌ Błąd streaming wysyłania wiadomości:', error);
         
-        // Ukryj loader
-        hideChatLoader();
+        // Usuń niepełną wiadomość
+        if (typeof aiMessageId !== 'undefined') {
+            removeStreamingMessage(aiMessageId);
+        }
         
         // Oznacz że skończyliśmy przetwarzać odpowiedź
         isProcessingResponse = false;
@@ -1012,23 +1038,23 @@ function hideChatLoader() {
     }
 }
 
-// Odczytywanie tekstu głosowo
+// Odczytywanie tekstu głosowo (OPTIMIZED)
 function speakText(text) {
     if (!speechSynthesis) {
         console.warn('⚠️ Speech synthesis nie jest obsługiwane');
         return;
     }
     
-    // Zatrzymaj poprzednie odczytywanie
+    // Zatrzymaj poprzednie odczytywanie NATYCHMIAST
     speechSynthesis.cancel();
     
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'pl-PL';
-    utterance.rate = 1.0;
+    utterance.rate = 1.2; // SZYBSZE tempo
     utterance.pitch = 1.0;
-    utterance.volume = 0.8;
+    utterance.volume = 0.9;
     
-    // Znajdź polski głos jeśli dostępny
+    // Znajdź polski głos jeśli dostępny (cache voices)
     const voices = speechSynthesis.getVoices();
     const polishVoice = voices.find(voice => voice.lang.startsWith('pl'));
     if (polishVoice) {
@@ -1036,7 +1062,7 @@ function speakText(text) {
     }
     
     utterance.onstart = function() {
-        console.log('🔊 Rozpoczęto odczytywanie');
+        console.log('🔊 Rozpoczęto szybkie odczytywanie');
     };
     
     utterance.onend = function() {
@@ -1047,6 +1073,7 @@ function speakText(text) {
         console.error('❌ Błąd odczytywania:', event.error);
     };
     
+    // Rozpocznij NATYCHMIAST
     speechSynthesis.speak(utterance);
 }
 
@@ -1160,6 +1187,83 @@ function sendTextMessage() {
     // Ukryj tymczasowy transkrypt
     updateInterimTranscript('');
     sendMessageToChatGPT(message);
+}
+
+// Dodawanie pustej wiadomości AI dla streaming
+function addStreamingMessageToChat() {
+    const chatMessages = document.getElementById('chatMessages');
+    if (!chatMessages) return null;
+    
+    const messageDiv = document.createElement('div');
+    const messageId = 'streaming-' + Date.now();
+    messageDiv.id = messageId;
+    messageDiv.className = 'chat-message ai-message streaming-message';
+    
+    const timestamp = new Date().toLocaleTimeString('pl-PL', { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+    });
+    
+    messageDiv.innerHTML = `
+        <div class="message-header">
+            <i class="fas fa-robot"></i>
+            <span class="sender-name">ChatGPT</span>
+            <span class="message-time">${timestamp}</span>
+        </div>
+        <div class="message-content">
+            <p class="streaming-text"><span class="cursor">|</span></p>
+        </div>
+    `;
+    
+    chatMessages.appendChild(messageDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    
+    return messageId;
+}
+
+// Aktualizacja streaming wiadomości
+function updateStreamingMessage(messageId, text) {
+    if (!messageId) return;
+    
+    const messageDiv = document.getElementById(messageId);
+    if (!messageDiv) return;
+    
+    const textElement = messageDiv.querySelector('.streaming-text');
+    if (textElement) {
+        textElement.innerHTML = text + '<span class="cursor">|</span>';
+    }
+    
+    // Auto-scroll
+    const chatMessages = document.getElementById('chatMessages');
+    if (chatMessages) {
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+}
+
+// Finalizacja streaming wiadomości
+function finalizeStreamingMessage(messageId, finalText) {
+    if (!messageId) return;
+    
+    const messageDiv = document.getElementById(messageId);
+    if (!messageDiv) return;
+    
+    const textElement = messageDiv.querySelector('.streaming-text');
+    if (textElement) {
+        textElement.innerHTML = finalText; // Usuń cursor
+    }
+    
+    // Usuń klasę streaming
+    messageDiv.classList.remove('streaming-message');
+}
+
+// Usuwanie streaming wiadomości (w przypadku błędu)
+function removeStreamingMessage(messageId) {
+    if (!messageId) return;
+    
+    const messageDiv = document.getElementById(messageId);
+    if (messageDiv) {
+        messageDiv.remove();
+    }
 }
 
 // ... existing code ... 
