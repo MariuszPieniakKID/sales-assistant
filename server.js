@@ -96,6 +96,32 @@ function requireAdmin(req, res, next) {
   }
 }
 
+// Debugging middleware (tylko w development)
+if (process.env.NODE_ENV !== 'production') {
+    app.use('/debug-session', (req, res) => {
+        res.json({
+            session: req.session,
+            sessionID: req.sessionID,
+            user: req.session?.user || null,
+            isAuthenticated: !!req.session?.user,
+            timestamp: new Date().toISOString()
+        });
+    });
+}
+
+// Session debugging middleware
+app.use((req, res, next) => {
+    if (req.url.includes('/api/') && req.session) {
+        console.log(`🔍 Session Debug [${req.method} ${req.url}]:`, {
+            sessionID: req.sessionID?.substring(0, 8),
+            userID: req.session.user?.id,
+            userEmail: req.session.user?.email,
+            hasUser: !!req.session.user
+        });
+    }
+    next();
+});
+
 // Routes
 
 // Strona logowania
