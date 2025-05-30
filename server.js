@@ -67,14 +67,14 @@ function getNeonPool() {
         console.log('🔌 Tworzenie nowego pool połączeń Neon...');
         pool = new Pool({
             connectionString: process.env.DATABASE_URL,
-            // Bardzo agresywne serverless settings
+            // Przywracam mniej agresywne settings
             max: 1, // Tylko 1 połączenie
             min: 0, // Żadnych stałych połączeń
-            idleTimeoutMillis: 500, // Bardzo krótki idle timeout
-            connectionTimeoutMillis: 2000, // 2s timeout połączenia  
-            statement_timeout: 3000, // 3s timeout statement
-            query_timeout: 3000, // 3s timeout query
-            acquireTimeoutMillis: 2000, // 2s timeout na acquire
+            idleTimeoutMillis: 2000, // 2s zamiast 500ms
+            connectionTimeoutMillis: 5000, // 5s zamiast 2s
+            statement_timeout: 8000, // 8s zamiast 3s
+            query_timeout: 8000, // 8s zamiast 3s
+            acquireTimeoutMillis: 5000, // 5s zamiast 2s
             // SSL dla Neon
             ssl: {
                 rejectUnauthorized: false
@@ -88,7 +88,7 @@ function getNeonPool() {
         pool.on('connect', (client) => {
             console.log('✅ Neon client połączony');
             // Ustaw timeout na connection level
-            client.query('SET statement_timeout = 3000');
+            client.query('SET statement_timeout = 8000');
         });
         
         pool.on('error', (err) => {
@@ -141,7 +141,7 @@ async function safeQuery(query, params = []) {
     try {
         // Timeout wrapper
         const timeoutPromise = new Promise((_, reject) => {
-            setTimeout(() => reject(new Error('Query timeout po 3 sekundach')), 3000);
+            setTimeout(() => reject(new Error('Query timeout po 8 sekundach')), 8000);
         });
         
         const queryPromise = (async () => {
@@ -167,14 +167,14 @@ async function safeQuery(query, params = []) {
 function requireAuth(req, res, next) {
     console.log('🔐 [AUTH] Sprawdzanie autoryzacji:', {
         hasSession: !!req.session,
-        hasUserId: !!req.session?.userID,
-        userId: req.session?.userID,
+        hasUserId: !!req.session?.userId,
+        userId: req.session?.userId,
         sessionID: req.session?.id,
         url: req.url,
         isAjax: req.xhr || req.headers['x-requested-with'] === 'XMLHttpRequest'
     });
 
-    if (!req.session || !req.session.userID) {
+    if (!req.session || !req.session.userId) {
         console.log('❌ [AUTH] Brak autoryzacji - przekierowanie do logowania');
         
         // Sprawdź czy to AJAX request
@@ -221,10 +221,10 @@ app.use((req, res, next) => {
     if (req.url.includes('/api/') && req.session) {
         console.log(`🔍 Session Debug [${req.method} ${req.url}]:`, {
             sessionID: req.sessionID?.substring(0, 8),
-            userID: req.session.userId,
+            userId: req.session.userId,  // małe d
             userFirstName: req.session.userFirstName,
             userLastName: req.session.userLastName,
-            hasUser: !!req.session.userId
+            hasUser: !!req.session.userId  // małe d
         });
     }
     next();
@@ -296,15 +296,15 @@ app.post('/api/login', async (req, res) => {
             });
         }
 
-        // Ustawienie sesji - bez role
-        req.session.userID = user.id; 
+        // Ustawienie sesji - PRZYWRACAM ORYGINALNE NAZEWNICTWO
+        req.session.userId = user.id;  // małe d jak było wcześniej
         req.session.userEmail = user.email;
         req.session.userFirstName = user.first_name;
         req.session.userLastName = user.last_name;
 
         console.log('✅ Logowanie udane - sesja ustawiona:', {
             sessionID: req.session.id,
-            userID: req.session.userID,
+            userId: req.session.userId,  // małe d
             userEmail: req.session.userEmail
         });
 
@@ -345,7 +345,7 @@ app.post('/api/login', async (req, res) => {
 app.get('/dashboard', requireAuth, async (req, res) => {
     console.log('📍 Request: GET /dashboard');
     console.log('🔍 Dashboard access for user:', {
-        userID: req.session.userID,
+        userId: req.session.userId,
         userEmail: req.session.userEmail
     });
     
@@ -353,7 +353,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
         // Pobierz podstawowe informacje o użytkowniku
         const userResult = await safeQuery(
             'SELECT id, email, first_name, last_name FROM users WHERE id = $1',
-            [req.session.userID]
+            [req.session.userId]
         );
 
         if (userResult.rows.length === 0) {
@@ -379,7 +379,7 @@ app.get('/api/user', requireAuth, async (req, res) => {
     try {
         const result = await safeQuery(
             'SELECT id, email, first_name, last_name FROM users WHERE id = $1',
-            [req.session.userID]
+            [req.session.userId]
         );
 
         if (result.rows.length === 0) {
@@ -464,16 +464,16 @@ app.get('/api/products', requireAuth, async (req, res) => {
     console.log('📍 Request: GET /api/products');
     console.log('🔍 Session Debug [GET /api/products]:', {
         sessionID: req.session?.id?.slice(0, 8) + '...',
-        userID: req.session?.userID,
+        userId: req.session?.userId,
         userFirstName: req.session?.userFirstName,
         userLastName: req.session?.userLastName,
-        hasUser: !!req.session?.userID
+        hasUser: !!req.session?.userId
     });
 
     try {
         const pool = getNeonPool();
-        const result = await pool.query('SELECT * FROM products WHERE user_id = $1 ORDER BY id DESC', [req.session.userID]);
-        console.log(`✅ Pobrano ${result.rows.length} produktów dla user_id: ${req.session.userID}`);
+        const result = await pool.query('SELECT * FROM products WHERE user_id = $1 ORDER BY id DESC', [req.session.userId]);
+        console.log(`✅ Pobrano ${result.rows.length} produktów dla user_id: ${req.session.userId}`);
         res.json(result.rows);
     } catch (error) {
         console.error('❌ Błąd podczas pobierania produktów:', error.message);
@@ -617,14 +617,14 @@ app.get('/api/clients', requireAuth, async (req, res) => {
     console.log('📍 Request: GET /api/clients');
     console.log('🔍 Session Debug [GET /api/clients]:', {
         sessionID: req.session?.id?.slice(0, 8) + '...',
-        userID: req.session?.userID,
-        hasUser: !!req.session?.userID
+        userId: req.session?.userId,
+        hasUser: !!req.session?.userId
     });
 
     try {
         const pool = getNeonPool();
-        const result = await pool.query('SELECT * FROM clients WHERE user_id = $1 ORDER BY id DESC', [req.session.userID]);
-        console.log(`✅ Pobrano ${result.rows.length} klientów dla user_id: ${req.session.userID}`);
+        const result = await pool.query('SELECT * FROM clients WHERE user_id = $1 ORDER BY id DESC', [req.session.userId]);
+        console.log(`✅ Pobrano ${result.rows.length} klientów dla user_id: ${req.session.userId}`);
         res.json(result.rows);
     } catch (error) {
         console.error('❌ Błąd podczas pobierania klientów:', error.message);
