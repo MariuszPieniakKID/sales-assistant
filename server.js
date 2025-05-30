@@ -649,12 +649,10 @@ app.post('/api/clients', requireAuth, async (req, res) => {
   const { name, description, comment, ai_notes } = req.body;
   
   try {
-    const client = await pool.connect();
-    const result = await client.query(
-      'INSERT INTO clients (name, description, comment, ai_notes) VALUES ($1, $2, $3, $4) RETURNING *',
-      [name, description, comment, ai_notes]
+    const result = await safeQuery(
+      'INSERT INTO clients (user_id, name, description, comment, ai_notes) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [req.session.userId, name, description, comment, ai_notes]
     );
-    await client.release();
     res.json({ success: true, client: result.rows[0] });
   } catch (err) {
     console.error('Błąd dodawania klienta:', err);
@@ -668,18 +666,21 @@ app.put('/api/clients/:id', requireAuth, async (req, res) => {
   const { name, description, comment, ai_notes } = req.body;
   
   try {
-    const client = await pool.connect();
-    const result = await client.query(
-      'UPDATE clients SET name = $1, description = $2, comment = $3, ai_notes = $4 WHERE id = $5 RETURNING *',
-      [name, description, comment, ai_notes, clientId]
+    // Sprawdź czy klient należy do użytkownika
+    const checkResult = await safeQuery(
+      'SELECT * FROM clients WHERE id = $1 AND user_id = $2',
+      [clientId, req.session.userId]
     );
     
-    if (result.rows.length === 0) {
-      await client.release();
+    if (checkResult.rows.length === 0) {
       return res.status(404).json({ success: false, message: 'Klient nie znaleziony' });
     }
     
-    await client.release();
+    const result = await safeQuery(
+      'UPDATE clients SET name = $1, description = $2, comment = $3, ai_notes = $4 WHERE id = $5 AND user_id = $6 RETURNING *',
+      [name, description, comment, ai_notes, clientId, req.session.userId]
+    );
+    
     res.json({ success: true, client: result.rows[0] });
   } catch (err) {
     console.error('Błąd edycji klienta:', err);
@@ -692,15 +693,16 @@ app.delete('/api/clients/:id', requireAuth, async (req, res) => {
   const clientId = req.params.id;
   
   try {
-    const client = await pool.connect();
-    const result = await client.query('DELETE FROM clients WHERE id = $1', [clientId]);
+    // Sprawdź czy klient należy do użytkownika i usuń
+    const result = await safeQuery(
+      'DELETE FROM clients WHERE id = $1 AND user_id = $2',
+      [clientId, req.session.userId]
+    );
     
     if (result.rowCount === 0) {
-      await client.release();
       return res.status(404).json({ success: false, message: 'Klient nie znaleziony' });
     }
     
-    await client.release();
     res.json({ success: true, message: 'Klient usunięty' });
   } catch (err) {
     console.error('Błąd usuwania klienta:', err);
