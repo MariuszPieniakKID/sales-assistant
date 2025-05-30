@@ -119,57 +119,69 @@ app.get('/login', (req, res) => {
 app.post('/api/login', async (req, res) => {
   const { email, password } = req.body;
   
-  console.log('🔑 Próba logowania dla email:', email);
-  console.log('📝 Otrzymane dane:', { email, hasPassword: !!password });
+  console.log('🔑 [LOGIN] Próba logowania dla email:', email);
+  console.log('📝 [LOGIN] Otrzymane dane:', { email, hasPassword: !!password, passwordLength: password?.length });
   
   try {
-    console.log('🔗 Łączenie z bazą danych...');
+    console.log('🔗 [LOGIN] Łączenie z bazą danych...');
     const client = await pool.connect();
     
-    console.log('🔍 Szukanie użytkownika w bazie...');
+    console.log('🔍 [LOGIN] Szukanie użytkownika w bazie...');
     const result = await client.query('SELECT * FROM users WHERE email = $1', [email]);
     
-    console.log('📊 Wynik zapytania:', {
+    console.log('📊 [LOGIN] Wynik zapytania:', {
       found: result.rows.length > 0,
       userCount: result.rows.length
     });
     
     if (result.rows.length === 0) {
-      console.log('❌ Użytkownik nie znaleziony w bazie');
+      console.log('❌ [LOGIN] Użytkownik nie znaleziony w bazie');
       await client.release();
       return res.status(401).json({ success: false, message: 'Nieprawidłowy email lub hasło' });
     }
     
     const user = result.rows[0];
-    console.log('👤 Znaleziony użytkownik:', {
+    console.log('👤 [LOGIN] Znaleziony użytkownik:', {
       id: user.id,
       email: user.email,
       firstName: user.first_name,
-      hasPasswordHash: !!user.password_hash
+      hasPasswordHash: !!user.password_hash,
+      hashLength: user.password_hash?.length,
+      hashStart: user.password_hash?.substring(0, 10)
     });
     
-    console.log('🔐 Sprawdzanie hasła...');
+    console.log('🔐 [LOGIN] Sprawdzanie hasła...');
+    console.log('🔐 [LOGIN] Porównanie:', {
+      inputPassword: password,
+      storedHash: user.password_hash
+    });
+    
     const isValidPassword = await bcrypt.compare(password, user.password_hash);
-    console.log('🔑 Wynik sprawdzenia hasła:', isValidPassword);
+    console.log('🔑 [LOGIN] Wynik sprawdzenia hasła:', isValidPassword);
     
     if (!isValidPassword) {
-      console.log('❌ Nieprawidłowe hasło');
+      console.log('❌ [LOGIN] Nieprawidłowe hasło');
       await client.release();
       return res.status(401).json({ success: false, message: 'Nieprawidłowy email lub hasło' });
     }
     
-    console.log('✅ Logowanie udane, tworzenie sesji...');
+    console.log('✅ [LOGIN] Logowanie udane, tworzenie sesji...');
     req.session.userId = user.id;
     req.session.userFirstName = user.first_name;
     req.session.userLastName = user.last_name;
     
+    console.log('🎉 [LOGIN] Sesja utworzona:', {
+      userId: req.session.userId,
+      firstName: req.session.userFirstName
+    });
+    
     await client.release();
-    console.log('🎉 Sesja utworzona pomyślnie');
+    console.log('🎉 [LOGIN] Sesja utworzona pomyślnie');
     res.json({ success: true, message: 'Zalogowano pomyślnie' });
     
   } catch (err) {
-    console.error('💥 Błąd logowania:', err.message);
-    console.error('🔍 Pełny błąd:', err);
+    console.error('💥 [LOGIN] Błąd logowania:', err.message);
+    console.error('🔍 [LOGIN] Pełny błąd:', err);
     res.status(500).json({ success: false, message: 'Błąd serwera: ' + err.message });
   }
 });
@@ -193,6 +205,12 @@ app.get('/api/health', async (req, res) => {
   try {
     const client = await pool.connect();
     const result = await client.query('SELECT COUNT(*) as user_count FROM users');
+    
+    // Test hasła
+    const testUser = await client.query('SELECT email, password_hash FROM users WHERE email = $1', ['test@test.pl']);
+    const passwordTest = testUser.rows.length > 0 ? 
+      await bcrypt.compare('test123', testUser.rows[0].password_hash) : false;
+    
     await client.release();
     
     res.json({
@@ -202,7 +220,10 @@ app.get('/api/health', async (req, res) => {
       userCount: result.rows[0].user_count,
       environment: process.env.NODE_ENV,
       hasSessionSecret: !!process.env.SESSION_SECRET,
-      hasDatabaseUrl: !!process.env.DATABASE_URL
+      hasDatabaseUrl: !!process.env.DATABASE_URL,
+      bcryptTest: passwordTest,
+      testUserExists: testUser.rows.length > 0,
+      testUserHash: testUser.rows.length > 0 ? testUser.rows[0].password_hash.substring(0, 10) + '...' : 'N/A'
     });
   } catch (err) {
     console.error('Health check error:', err);
