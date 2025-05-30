@@ -6,6 +6,7 @@ const fs = require('fs');
 require('dotenv').config();
 const { Pool } = require('pg');
 const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -66,25 +67,36 @@ function getNeonPool() {
         console.log('🔌 Tworzenie nowego pool połączeń Neon...');
         pool = new Pool({
             connectionString: process.env.DATABASE_URL,
-            // Serverless optimized settings
-            max: 1, // Maks 1 połączenie w serverless
-            idleTimeoutMillis: 1000, // Krótki timeout idle
-            connectionTimeoutMillis: 3000, // 3s timeout połączenia
-            statement_timeout: 5000, // 5s timeout statement
-            query_timeout: 5000, // 5s timeout query
+            // Bardzo agresywne serverless settings
+            max: 1, // Tylko 1 połączenie
+            min: 0, // Żadnych stałych połączeń
+            idleTimeoutMillis: 500, // Bardzo krótki idle timeout
+            connectionTimeoutMillis: 2000, // 2s timeout połączenia  
+            statement_timeout: 3000, // 3s timeout statement
+            query_timeout: 3000, // 3s timeout query
+            acquireTimeoutMillis: 2000, // 2s timeout na acquire
             // SSL dla Neon
             ssl: {
                 rejectUnauthorized: false
-            }
+            },
+            // Dodatkowe opcje dla stabilności
+            keepAlive: false,
+            keepAliveInitialDelayMillis: 0
         });
         
         // Event handlers
         pool.on('connect', (client) => {
             console.log('✅ Neon client połączony');
+            // Ustaw timeout na connection level
+            client.query('SET statement_timeout = 3000');
         });
         
         pool.on('error', (err) => {
             console.error('❌ Błąd Neon pool:', err.message);
+        });
+        
+        pool.on('remove', () => {
+            console.log('🔌 Neon client usunięty z pool');
         });
     }
     return pool;
@@ -117,6 +129,36 @@ async function testNeonConnection(retries = 3) {
             }
             // Czekaj przed retry
             await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+    }
+}
+
+// Bezpieczna funkcja do wykonywania query z timeout handling
+async function safeQuery(query, params = []) {
+    const pool = getNeonPool();
+    let client;
+    
+    try {
+        // Timeout wrapper
+        const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('Query timeout po 3 sekundach')), 3000);
+        });
+        
+        const queryPromise = (async () => {
+            client = await pool.connect();
+            const result = await client.query(query, params);
+            return result;
+        })();
+        
+        const result = await Promise.race([queryPromise, timeoutPromise]);
+        return result;
+        
+    } catch (error) {
+        console.error('❌ Błąd safeQuery:', error.message);
+        throw error;
+    } finally {
+        if (client) {
+            client.release();
         }
     }
 }
@@ -223,11 +265,9 @@ app.post('/api/login', async (req, res) => {
     }
 
     try {
-        const pool = getNeonPool();
-        
-        // Sprawdzenie czy użytkownik istnieje
-        const userResult = await pool.query(
-            'SELECT id, email, password, first_name, last_name, role FROM users WHERE email = $1',
+        // Sprawdzenie czy użytkownik istnieje - POPRAWNA KOLUMNA!
+        const userResult = await safeQuery(
+            'SELECT id, email, password_hash, first_name, last_name, role FROM users WHERE email = $1',
             [email]
         );
 
@@ -246,8 +286,10 @@ app.post('/api/login', async (req, res) => {
             role: user.role 
         });
 
-        // Sprawdzenie hasła (w rzeczywistej aplikacji należy używać bcrypt)
-        if (password !== user.password) {
+        // Sprawdzenie hasła z bcrypt
+        const isValidPassword = await bcrypt.compare(password, user.password_hash);
+        
+        if (!isValidPassword) {
             console.log('❌ Nieprawidłowe hasło dla:', email);
             return res.status(401).json({ 
                 success: false, 
