@@ -1,13 +1,14 @@
 const express = require('express');
 const session = require('express-session');
-const bcrypt = require('bcryptjs');
 const path = require('path');
 const multer = require('multer');
 const fs = require('fs');
 require('dotenv').config();
+const { Pool } = require('pg');
+const crypto = require('crypto');
 
 // Importuj konfigurację Neon
-const pool = require('./neon-config');
+const neonConfig = require('./config/neon');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -26,18 +27,23 @@ if (process.env.NODE_ENV === 'production') {
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Konfiguracja sesji
+// Konfiguracja sesji dla Vercel serverless
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'your-secret-key',
-  resave: true,
-  saveUninitialized: false,
-  rolling: true,
-  cookie: { 
-    secure: false, // set to true if using HTTPS
-    maxAge: 30 * 60 * 1000, // 30 minut zamiast 24 godzin
-    httpOnly: true
-  },
-  name: 'sales-assistant-session'
+    secret: process.env.SESSION_SECRET || 'sales-assistant-secret-key-2023',
+    resave: true, // Kluczowe dla Vercel
+    rolling: true, // Odnawianie sesji
+    saveUninitialized: false,
+    name: 'sales.sid', // Custom name
+    cookie: {
+        secure: process.env.NODE_ENV === 'production', // HTTPS w produkcji
+        httpOnly: true,
+        maxAge: 30 * 60 * 1000, // 30 minut
+        sameSite: 'lax' // Ważne dla Vercel
+    },
+    // Dodatkowa konfiguracja dla serverless
+    genid: function(req) {
+        return require('crypto').randomBytes(16).toString('hex');
+    }
 }));
 
 // Konfiguracja multer dla uploadów
@@ -56,66 +62,95 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage: storage });
 
-// Funkcja do testowania połączenia z bazą danych Neon
-async function testNeonConnection() {
-  console.log('🔌 Testowanie połączenia z bazą danych Neon...');
-  
-  try {
-    const client = await pool.connect();
-    console.log('✅ Połączenie z bazą danych Neon udane!');
-    
-    // Sprawdź czy tabele istnieją
-    const result = await client.query(`
-      SELECT table_name 
-      FROM information_schema.tables 
-      WHERE table_schema = 'public'
-    `);
-    console.log('📊 Dostępne tabele:', result.rows.map(r => r.table_name));
-    
-    client.release();
-    return true;
-  } catch (err) {
-    console.error('❌ Błąd połączenia z bazą danych Neon:', err.message);
-    console.error('🔍 Szczegóły błędu:', err);
-    return false;
-  }
+// Globalna konfiguracja pool dla Neon (serverless optimized)
+let pool;
+function getNeonPool() {
+    if (!pool) {
+        console.log('🔌 Tworzenie nowego pool połączeń Neon...');
+        pool = new Pool({
+            connectionString: process.env.DATABASE_URL,
+            // Serverless optimized settings
+            max: 1, // Maks 1 połączenie w serverless
+            idleTimeoutMillis: 1000, // Krótki timeout idle
+            connectionTimeoutMillis: 3000, // 3s timeout połączenia
+            statement_timeout: 5000, // 5s timeout statement
+            query_timeout: 5000, // 5s timeout query
+            // SSL dla Neon
+            ssl: {
+                rejectUnauthorized: false
+            }
+        });
+        
+        // Event handlers
+        pool.on('connect', (client) => {
+            console.log('✅ Neon client połączony');
+        });
+        
+        pool.on('error', (err) => {
+            console.error('❌ Błąd Neon pool:', err.message);
+        });
+    }
+    return pool;
 }
 
-// Middleware sprawdzający uwierzytelnienie
-function requireAuth(req, res, next) {
-  console.log('🔐 [AUTH] Sprawdzanie autoryzacji:', {
-    hasSession: !!req.session,
-    hasUserId: !!req.session?.userId,
-    userId: req.session?.userId,
-    sessionID: req.sessionID?.substring(0, 8),
-    url: req.url,
-    isAjax: req.headers['x-requested-with'] === 'XMLHttpRequest' || req.headers['x-section-request'] === 'true'
-  });
-  
-  if (req.session && req.session.userId) {
-    console.log('✅ [AUTH] Autoryzacja udana');
-    next();
-  } else {
-    console.log('❌ [AUTH] Brak autoryzacji - przekierowanie do logowania');
-    
-    // Sprawdź czy to żądanie AJAX/sekcji
-    const isAjaxRequest = req.headers['x-requested-with'] === 'XMLHttpRequest' || 
-                         req.headers['x-section-request'] === 'true' ||
-                         req.url.startsWith('/api/');
-    
-    if (isAjaxRequest) {
-      console.log('🔧 [AUTH] AJAX request - zwracam JSON error');
-      return res.status(401).json({ 
-        success: false, 
-        message: 'Sesja wygasła',
-        redirect: '/login'
-      });
+// Testowanie połączenia z Neon (z retry logic)
+async function testNeonConnection(retries = 3) {
+    for (let i = 0; i < retries; i++) {
+        try {
+            console.log(`🔌 Próba połączenia z Neon (${i + 1}/${retries})...`);
+            const pool = getNeonPool();
+            const result = await pool.query('SELECT NOW()');
+            console.log('✅ Połączenie z bazą danych Neon udane!');
+            
+            // Sprawdzenie tabel
+            const tablesResult = await pool.query(`
+                SELECT table_name 
+                FROM information_schema.tables 
+                WHERE table_schema = 'public'
+                ORDER BY table_name
+            `);
+            const tables = tablesResult.rows.map(row => row.table_name);
+            console.log('📊 Dostępne tabele:', tables);
+            return true;
+        } catch (error) {
+            console.error(`❌ Próba ${i + 1} nieudana:`, error.message);
+            if (i === retries - 1) {
+                console.error('🔧 Szczegóły błędu:', error);
+                throw error;
+            }
+            // Czekaj przed retry
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
     }
-    
-    // Jeśli to żądanie strony, przekieruj
-    console.log('🔄 [AUTH] HTML request - przekierowanie do /login');
-    res.redirect('/login');
-  }
+}
+
+// Middleware do sprawdzania autoryzacji
+function requireAuth(req, res, next) {
+    console.log('🔐 [AUTH] Sprawdzanie autoryzacji:', {
+        hasSession: !!req.session,
+        hasUserId: !!req.session?.userID,
+        userId: req.session?.userID,
+        sessionID: req.session?.id,
+        url: req.url,
+        isAjax: req.xhr || req.headers['x-requested-with'] === 'XMLHttpRequest'
+    });
+
+    if (!req.session || !req.session.userID) {
+        console.log('❌ [AUTH] Brak autoryzacji - przekierowanie do logowania');
+        
+        // Sprawdź czy to AJAX request
+        if (req.xhr || req.headers['x-requested-with'] === 'XMLHttpRequest' || req.headers.accept?.includes('application/json')) {
+            console.log('🔧 [AUTH] AJAX request - zwracam JSON error');
+            return res.status(401).json({ 
+                success: false, 
+                message: 'Sesja wygasła. Zaloguj się ponownie.',
+                redirect: '/login.html'
+            });
+        }
+        
+        return res.redirect('/login.html');
+    }
+    next();
 }
 
 // Middleware sprawdzający uprawnienia admina
@@ -177,87 +212,170 @@ app.get('/login', (req, res) => {
 
 // Endpoint logowania
 app.post('/api/login', async (req, res) => {
-  const { email, password } = req.body;
-  
-  console.log('🔑 [LOGIN] Próba logowania dla email:', email);
-  console.log('📝 [LOGIN] Otrzymane dane:', { email, hasPassword: !!password, passwordLength: password?.length });
-  
-  try {
-    console.log('🔗 [LOGIN] Łączenie z bazą danych...');
-    const client = await pool.connect();
+    console.log('📍 Request: POST /api/login');
+    console.log('🔐 Login attempt for:', req.body.email);
     
-    console.log('🔍 [LOGIN] Szukanie użytkownika w bazie...');
-    const result = await client.query('SELECT * FROM users WHERE email = $1', [email]);
+    const { email, password } = req.body;
     
-    console.log('📊 [LOGIN] Wynik zapytania:', {
-      found: result.rows.length > 0,
-      userCount: result.rows.length
-    });
-    
-    if (result.rows.length === 0) {
-      console.log('❌ [LOGIN] Użytkownik nie znaleziony w bazie');
-      await client.release();
-      return res.status(401).json({ success: false, message: 'Nieprawidłowy email lub hasło' });
+    if (!email || !password) {
+        console.log('❌ Brak email lub hasła');
+        return res.status(400).json({ 
+            success: false, 
+            message: 'Email i hasło są wymagane' 
+        });
     }
-    
-    const user = result.rows[0];
-    console.log('👤 [LOGIN] Znaleziony użytkownik:', {
-      id: user.id,
-      email: user.email,
-      firstName: user.first_name,
-      hasPasswordHash: !!user.password_hash,
-      hashLength: user.password_hash?.length,
-      hashStart: user.password_hash?.substring(0, 10)
-    });
-    
-    console.log('🔐 [LOGIN] Sprawdzanie hasła...');
-    console.log('🔐 [LOGIN] Porównanie:', {
-      inputPassword: password,
-      storedHash: user.password_hash
-    });
-    
-    const isValidPassword = await bcrypt.compare(password, user.password_hash);
-    console.log('🔑 [LOGIN] Wynik sprawdzenia hasła:', isValidPassword);
-    
-    if (!isValidPassword) {
-      console.log('❌ [LOGIN] Nieprawidłowe hasło');
-      await client.release();
-      return res.status(401).json({ success: false, message: 'Nieprawidłowy email lub hasło' });
+
+    try {
+        const pool = getNeonPool();
+        
+        // Sprawdzenie czy użytkownik istnieje
+        const userResult = await pool.query(
+            'SELECT id, email, password, first_name, last_name, role FROM users WHERE email = $1',
+            [email]
+        );
+
+        if (userResult.rows.length === 0) {
+            console.log('❌ Użytkownik nie istnieje:', email);
+            return res.status(401).json({ 
+                success: false, 
+                message: 'Nieprawidłowy email lub hasło' 
+            });
+        }
+
+        const user = userResult.rows[0];
+        console.log('👤 Znaleziony użytkownik:', { 
+            id: user.id, 
+            email: user.email, 
+            role: user.role 
+        });
+
+        // Sprawdzenie hasła (w rzeczywistej aplikacji należy używać bcrypt)
+        if (password !== user.password) {
+            console.log('❌ Nieprawidłowe hasło dla:', email);
+            return res.status(401).json({ 
+                success: false, 
+                message: 'Nieprawidłowy email lub hasło' 
+            });
+        }
+
+        // Ustawienie sesji - POPRAWNE NAZWY!
+        req.session.userID = user.id; // WAŻNE: userID (duże D)
+        req.session.userEmail = user.email;
+        req.session.userFirstName = user.first_name;
+        req.session.userLastName = user.last_name;
+        req.session.userRole = user.role;
+
+        console.log('✅ Logowanie udane - sesja ustawiona:', {
+            sessionID: req.session.id,
+            userID: req.session.userID,
+            userEmail: req.session.userEmail,
+            userRole: req.session.userRole
+        });
+
+        // Wymuś zapisanie sesji
+        req.session.save((err) => {
+            if (err) {
+                console.error('❌ Błąd zapisywania sesji:', err);
+                return res.status(500).json({ 
+                    success: false, 
+                    message: 'Błąd zapisywania sesji' 
+                });
+            }
+
+            console.log('💾 Sesja zapisana pomyślnie');
+            res.json({
+                success: true,
+                message: 'Zalogowano pomyślnie',
+                user: {
+                    id: user.id,
+                    email: user.email,
+                    firstName: user.first_name,
+                    lastName: user.last_name,
+                    role: user.role
+                }
+            });
+        });
+
+    } catch (error) {
+        console.error('❌ Błąd podczas logowania:', error.message);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Błąd serwera podczas logowania',
+            error: error.message 
+        });
     }
-    
-    console.log('✅ [LOGIN] Logowanie udane, tworzenie sesji...');
-    req.session.userId = user.id;
-    req.session.userFirstName = user.first_name;
-    req.session.userLastName = user.last_name;
-    
-    console.log('🎉 [LOGIN] Sesja utworzona:', {
-      userId: req.session.userId,
-      firstName: req.session.userFirstName
-    });
-    
-    await client.release();
-    console.log('🎉 [LOGIN] Sesja utworzona pomyślnie');
-    res.json({ success: true, message: 'Zalogowano pomyślnie' });
-    
-  } catch (err) {
-    console.error('💥 [LOGIN] Błąd logowania:', err.message);
-    console.error('🔍 [LOGIN] Pełny błąd:', err);
-    res.status(500).json({ success: false, message: 'Błąd serwera: ' + err.message });
-  }
 });
 
-// Dashboard - główna strona po zalogowaniu
-app.get('/dashboard', requireAuth, (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
+// Endpoint strony dashboard (dla zalogowanych użytkowników)
+app.get('/dashboard', requireAuth, async (req, res) => {
+    console.log('📍 Request: GET /dashboard');
+    console.log('🔍 Dashboard access for user:', {
+        userID: req.session.userID,
+        userEmail: req.session.userEmail,
+        userRole: req.session.userRole
+    });
+    
+    try {
+        // Pobierz podstawowe informacje o użytkowniku
+        const pool = getNeonPool();
+        const userResult = await pool.query(
+            'SELECT id, email, first_name, last_name, role FROM users WHERE id = $1',
+            [req.session.userID]
+        );
+
+        if (userResult.rows.length === 0) {
+            console.log('❌ User not found in database');
+            req.session.destroy();
+            return res.redirect('/login.html');
+        }
+
+        const user = userResult.rows[0];
+        console.log('✅ Dashboard loaded for user:', user.email);
+        
+        res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
+    } catch (error) {
+        console.error('❌ Błąd ładowania dashboard:', error.message);
+        res.status(500).send('Błąd serwera');
+    }
 });
 
-// API do pobierania danych użytkownika
-app.get('/api/user', requireAuth, (req, res) => {
-  res.json({
-    id: req.session.userId,
-    firstName: req.session.userFirstName,
-    lastName: req.session.userLastName
-  });
+// Endpoint do pobierania informacji o użytkowniku
+app.get('/api/user', requireAuth, async (req, res) => {
+    console.log('📍 Request: GET /api/user');
+    
+    try {
+        const pool = getNeonPool();
+        const result = await pool.query(
+            'SELECT id, email, first_name, last_name, role FROM users WHERE id = $1',
+            [req.session.userID]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ 
+                success: false, 
+                message: 'Użytkownik nie znaleziony' 
+            });
+        }
+
+        const user = result.rows[0];
+        res.json({
+            success: true,
+            user: {
+                id: user.id,
+                email: user.email,
+                firstName: user.first_name,
+                lastName: user.last_name,
+                role: user.role
+            }
+        });
+    } catch (error) {
+        console.error('❌ Błąd pobierania danych użytkownika:', error.message);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Błąd serwera',
+            error: error.message 
+        });
+    }
 });
 
 // Endpoint diagnostyczny dla Vercel
@@ -310,20 +428,30 @@ app.post('/api/logout', (req, res) => {
   });
 });
 
-// API dla produktów
+// Endpoint do pobierania produktów
 app.get('/api/products', requireAuth, async (req, res) => {
-  try {
-    const client = await pool.connect();
-    const result = await client.query(
-      'SELECT * FROM products WHERE user_id = $1 ORDER BY created_at DESC',
-      [req.session.userId]
-    );
-    await client.release();
-    res.json(result.rows);
-  } catch (err) {
-    console.error('Błąd pobierania produktów:', err);
-    res.status(500).json({ success: false, message: 'Błąd serwera' });
-  }
+    console.log('📍 Request: GET /api/products');
+    console.log('🔍 Session Debug [GET /api/products]:', {
+        sessionID: req.session?.id?.slice(0, 8) + '...',
+        userID: req.session?.userID,
+        userFirstName: req.session?.userFirstName,
+        userLastName: req.session?.userLastName,
+        hasUser: !!req.session?.userID
+    });
+
+    try {
+        const pool = getNeonPool();
+        const result = await pool.query('SELECT * FROM products WHERE user_id = $1 ORDER BY id DESC', [req.session.userID]);
+        console.log(`✅ Pobrano ${result.rows.length} produktów dla user_id: ${req.session.userID}`);
+        res.json(result.rows);
+    } catch (error) {
+        console.error('❌ Błąd podczas pobierania produktów:', error.message);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Błąd podczas pobierania produktów',
+            error: error.message 
+        });
+    }
 });
 
 app.post('/api/products', requireAuth, upload.array('files'), async (req, res) => {
@@ -453,17 +581,28 @@ app.delete('/api/products/:id', requireAuth, async (req, res) => {
   }
 });
 
-// API dla klientów
+// Endpoint do pobierania klientów
 app.get('/api/clients', requireAuth, async (req, res) => {
-  try {
-    const client = await pool.connect();
-    const result = await client.query('SELECT * FROM clients ORDER BY name ASC');
-    await client.release();
-    res.json(result.rows);
-  } catch (err) {
-    console.error('Błąd pobierania klientów:', err);
-    res.status(500).json({ success: false, message: 'Błąd serwera' });
-  }
+    console.log('📍 Request: GET /api/clients');
+    console.log('🔍 Session Debug [GET /api/clients]:', {
+        sessionID: req.session?.id?.slice(0, 8) + '...',
+        userID: req.session?.userID,
+        hasUser: !!req.session?.userID
+    });
+
+    try {
+        const pool = getNeonPool();
+        const result = await pool.query('SELECT * FROM clients WHERE user_id = $1 ORDER BY id DESC', [req.session.userID]);
+        console.log(`✅ Pobrano ${result.rows.length} klientów dla user_id: ${req.session.userID}`);
+        res.json(result.rows);
+    } catch (error) {
+        console.error('❌ Błąd podczas pobierania klientów:', error.message);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Błąd podczas pobierania klientów',
+            error: error.message 
+        });
+    }
 });
 
 app.post('/api/clients', requireAuth, async (req, res) => {
