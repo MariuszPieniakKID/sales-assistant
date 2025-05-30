@@ -27,10 +27,6 @@ function getNeonPool() {
             statement_timeout: 8000, // 8s zamiast 3s
             query_timeout: 8000, // 8s zamiast 3s
             acquireTimeoutMillis: 5000, // 5s zamiast 2s
-            // SSL dla Neon
-            ssl: {
-                rejectUnauthorized: false
-            },
             // Dodatkowe opcje dla stabilności
             keepAlive: false,
             keepAliveInitialDelayMillis: 0
@@ -466,6 +462,171 @@ app.post('/api/logout', (req, res) => {
     res.clearCookie('connect.sid');
     res.json({ success: true, message: 'Wylogowano pomyślnie' });
   });
+});
+
+// === OPENAI CHAT ENDPOINTS ===
+
+// Endpoint do rozpoczęcia live chatu z OpenAI
+app.post('/api/chat/start', requireAuth, async (req, res) => {
+    console.log('📍 Request: POST /api/chat/start');
+    
+    const { clientId, productId, notes } = req.body;
+    
+    if (!clientId || !productId) {
+        return res.status(400).json({ 
+            success: false, 
+            message: 'Client ID i Product ID są wymagane' 
+        });
+    }
+    
+    try {
+        // Pobierz informacje o kliencie i produkcie
+        const clientResult = await safeQuery(
+            'SELECT * FROM clients WHERE id = $1 AND user_id = $2',
+            [clientId, req.session.userId]
+        );
+        
+        const productResult = await safeQuery(
+            'SELECT * FROM products WHERE id = $1 AND user_id = $2',
+            [productId, req.session.userId]
+        );
+        
+        if (clientResult.rows.length === 0 || productResult.rows.length === 0) {
+            return res.status(404).json({ 
+                success: false, 
+                message: 'Klient lub produkt nie znaleziony' 
+            });
+        }
+        
+        const client = clientResult.rows[0];
+        const product = productResult.rows[0];
+        
+        // Utwórz kontekst dla ChatGPT
+        const systemPrompt = `Jesteś doradcą handlowym prowadzącym rozmowę sprzedażową. 
+
+INFORMACJE O KLIENCIE:
+- Nazwa: ${client.name}
+- Opis: ${client.description}
+- Komentarz: ${client.comment || 'Brak'}
+- AI Notes: ${client.ai_notes || 'Brak'}
+
+INFORMACJE O PRODUKCIE:
+- Nazwa: ${product.name}
+- Opis: ${product.description}
+- Komentarz: ${product.comment || 'Brak'}
+
+NOTATKI WSTĘPNE: ${notes || 'Brak'}
+
+INSTRUKCJE:
+- Prowadź profesjonalną rozmowę sprzedażową
+- Odpowiadaj po polsku
+- Bądź pomocny i przekonujący
+- Zadawaj pytania o potrzeby klienta
+- Przedstawiaj korzyści produktu
+- Odpowiadaj krótko i naturalnie (maksymalnie 2-3 zdania)
+- Zachowuj przyjazny ton`;
+        
+        res.json({
+            success: true,
+            message: 'Chat rozpoczęty',
+            chatContext: {
+                clientName: client.name,
+                productName: product.name,
+                systemPrompt: systemPrompt
+            }
+        });
+        
+    } catch (error) {
+        console.error('❌ Błąd rozpoczynania chatu:', error.message);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Błąd serwera podczas rozpoczynania chatu',
+            error: error.message 
+        });
+    }
+});
+
+// Endpoint do wysyłania wiadomości do OpenAI
+app.post('/api/chat/message', requireAuth, async (req, res) => {
+    console.log('📍 Request: POST /api/chat/message');
+    
+    const { message, systemPrompt, conversationHistory = [] } = req.body;
+    
+    if (!message) {
+        return res.status(400).json({ 
+            success: false, 
+            message: 'Wiadomość jest wymagana' 
+        });
+    }
+    
+    try {
+        // Sprawdź czy OPENAI_API_KEY istnieje
+        if (!process.env.OPENAI_API_KEY) {
+            console.error('❌ Brak OPENAI_API_KEY w zmiennych środowiskowych');
+            return res.status(500).json({ 
+                success: false, 
+                message: 'API key OpenAI nie jest skonfigurowany' 
+            });
+        }
+        
+        // Przygotuj historię konwersacji dla OpenAI
+        const messages = [
+            {
+                role: 'system',
+                content: systemPrompt
+            },
+            ...conversationHistory,
+            {
+                role: 'user',
+                content: message
+            }
+        ];
+        
+        console.log('🤖 Wysyłam zapytanie do OpenAI...');
+        
+        // Wywołaj OpenAI API
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                model: 'gpt-4',
+                messages: messages,
+                max_tokens: 300,
+                temperature: 0.7,
+                top_p: 1,
+                frequency_penalty: 0,
+                presence_penalty: 0
+            })
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.text();
+            console.error('❌ Błąd OpenAI API:', response.status, errorData);
+            throw new Error(`OpenAI API error: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        const aiResponse = data.choices[0].message.content;
+        
+        console.log('✅ Otrzymano odpowiedź od OpenAI');
+        
+        res.json({
+            success: true,
+            response: aiResponse,
+            usage: data.usage
+        });
+        
+    } catch (error) {
+        console.error('❌ Błąd komunikacji z OpenAI:', error.message);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Błąd komunikacji z ChatGPT',
+            error: error.message 
+        });
+    }
 });
 
 // Endpoint do pobierania produktów

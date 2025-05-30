@@ -397,6 +397,329 @@
         max-width: 100%;
     }
 }
+
+/* === LIVE CHAT INTERFACE STYLES === */
+
+.live-chat-interface {
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    border: 1px solid #e2e8f0;
+    overflow: hidden;
+    max-width: 100%;
+    height: 80vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.chat-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 20px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.chat-info h3 {
+    margin: 0 0 8px 0;
+    font-size: 18px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.session-details {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-top: 8px;
+    font-size: 14px;
+    opacity: 0.9;
+}
+
+.client-info, .product-info, .timer-info {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.chat-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.chat-messages {
+    flex: 1;
+    padding: 20px;
+    overflow-y: auto;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.chat-message {
+    margin-bottom: 16px;
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.message-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+    font-size: 12px;
+    color: #64748b;
+}
+
+.sender-name {
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.message-time {
+    margin-left: auto;
+    font-size: 11px;
+}
+
+.message-content {
+    background: white;
+    padding: 12px 16px;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    border: 1px solid #e2e8f0;
+}
+
+.user-message .message-content {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    margin-left: 60px;
+}
+
+.ai-message .message-content {
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    margin-right: 60px;
+}
+
+.system-message .message-content {
+    background: #ecfdf5;
+    border: 1px solid #10b981;
+    color: #065f46;
+    text-align: center;
+    margin: 0 40px;
+}
+
+.error-message .message-content {
+    background: #fef2f2;
+    border: 1px solid #ef4444;
+    color: #dc2626;
+    margin: 0 40px;
+}
+
+.message-content p {
+    margin: 0;
+    line-height: 1.5;
+}
+
+/* Typing indicator */
+.typing-indicator {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+.typing-indicator span {
+    width: 8px;
+    height: 8px;
+    background: #94a3b8;
+    border-radius: 50%;
+    animation: typing 1.4s infinite ease-in-out;
+}
+
+.typing-indicator span:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+.typing-indicator span:nth-child(3) {
+    animation-delay: 0.4s;
+}
+
+@keyframes typing {
+    0%, 60%, 100% {
+        transform: translateY(0);
+    }
+    30% {
+        transform: translateY(-10px);
+    }
+}
+
+.chat-input-section {
+    padding: 20px;
+    background: white;
+    border-top: 1px solid #e2e8f0;
+    flex-shrink: 0;
+}
+
+.voice-controls {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 16px;
+    padding: 16px;
+    background: #f8fafc;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+}
+
+.voice-btn {
+    min-width: 160px;
+    padding: 12px 20px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.voice-btn.recording {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+    }
+    70% {
+        box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+    }
+}
+
+.voice-status {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+}
+
+.status-text {
+    font-size: 14px;
+    color: #64748b;
+    font-weight: 500;
+}
+
+.voice-wave {
+    display: flex;
+    gap: 3px;
+    align-items: center;
+}
+
+.wave-bar {
+    width: 3px;
+    height: 16px;
+    background: #10b981;
+    border-radius: 2px;
+    animation: wave 1.2s ease-in-out infinite;
+}
+
+.wave-bar:nth-child(2) { animation-delay: 0.1s; }
+.wave-bar:nth-child(3) { animation-delay: 0.2s; }
+.wave-bar:nth-child(4) { animation-delay: 0.3s; }
+.wave-bar:nth-child(5) { animation-delay: 0.4s; }
+
+@keyframes wave {
+    0%, 100% {
+        transform: scaleY(0.4);
+    }
+    50% {
+        transform: scaleY(1);
+    }
+}
+
+.text-input-section {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.text-input-section input {
+    flex: 1;
+    padding: 12px 16px;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    font-size: 16px;
+    transition: all 0.3s ease;
+    background: #f9fafb;
+}
+
+.text-input-section input:focus {
+    outline: none;
+    border-color: #667eea;
+    background: white;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.text-input-section button {
+    padding: 12px 16px;
+    border-radius: 8px;
+    min-width: 48px;
+}
+
+/* Mobile responsiveness dla live chat */
+@media (max-width: 768px) {
+    .live-chat-interface {
+        height: 85vh;
+    }
+    
+    .chat-header {
+        padding: 16px;
+        flex-direction: column;
+        gap: 12px;
+        align-items: flex-start;
+    }
+    
+    .session-details {
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .voice-controls {
+        flex-direction: column;
+        text-align: center;
+    }
+    
+    .voice-btn {
+        min-width: 100%;
+    }
+    
+    .user-message .message-content {
+        margin-left: 20px;
+    }
+    
+    .ai-message .message-content {
+        margin-right: 20px;
+    }
+    
+    .system-message .message-content,
+    .error-message .message-content {
+        margin: 0 10px;
+    }
+}
 </style> 
 
 <script src="/js/sesja.js"></script> 

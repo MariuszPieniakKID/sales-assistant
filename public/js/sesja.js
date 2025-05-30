@@ -214,7 +214,7 @@ function validateSessionForm() {
 
 // Rozpoczęcie sesji
 async function startSession() {
-    console.log('🎙️ startSession() - rozpoczynam sesję...');
+    console.log('🎙️ startSession() - rozpoczynam live chat sesję...');
     
     const clientId = sessionClientSelect.value;
     const productId = sessionProductSelect.value;
@@ -229,44 +229,58 @@ async function startSession() {
     }
     
     try {
-        console.log('🔍 Sprawdzam dostępność nagrywania...');
+        console.log('🤖 Rozpoczynam live chat z ChatGPT...');
         
-        // Sprawdź czy przeglądarka obsługuje nagrywanie
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            console.log('❌ Przeglądarka nie obsługuje nagrywania');
-            showToast('Twoja przeglądarka nie obsługuje nagrywania audio', 'error');
-            return;
+        // Rozpocznij chat z OpenAI
+        const response = await fetchWithAuth('/api/chat/start', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                clientId: clientId,
+                productId: productId,
+                notes: notes
+            })
+        });
+        
+        if (!response) {
+            return; // fetchWithAuth już obsłużył przekierowanie
         }
         
-        console.log('✅ Przeglądarka obsługuje nagrywanie');
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Błąd rozpoczynania chatu');
+        }
         
-        // TYMCZASOWO WYŁĄCZAM DOSTĘP DO MIKROFONU
-        console.log('⚠️ TYMCZASOWO: Pomijam dostęp do mikrofonu');
+        const chatData = await response.json();
+        console.log('✅ Chat rozpoczęty:', chatData);
         
-        // Utwórz sesję BEZ strumienia audio
+        // Utwórz sesję
         currentSession = {
             clientId: clientId,
             productId: productId,
             notes: notes,
-            stream: null, // TYMCZASOWO null
+            chatContext: chatData.chatContext,
+            conversationHistory: [],
             startTime: new Date()
         };
         
         console.log('✅ Sesja utworzona:', currentSession);
         
-        // Pokaż interfejs nagrywania
-        console.log('🖥️ Pokazuję interfejs nagrywania...');
-        showRecordingInterface();
+        // Pokaż interfejs live chatu
+        console.log('🖥️ Pokazuję interfejs live chatu...');
+        showLiveChatInterface();
         
         // Rozpocznij timer
         console.log('⏰ Rozpoczynam timer...');
         startRecordingTimer();
         
-        console.log('🎉 Sesja rozpoczęta pomyślnie!');
-        showToast('Sesja rozpoczęta - nagrywanie symulowane', 'success');
+        console.log('🎉 Live chat sesja rozpoczęta pomyślnie!');
+        showToast('Live chat z ChatGPT rozpoczęty!', 'success');
         
     } catch (error) {
-        console.error('❌ Błąd rozpoczynania sesji:', error);
+        console.error('❌ Błąd rozpoczynania live chat sesji:', error);
         showToast('Błąd rozpoczynania sesji: ' + error.message, 'error');
     }
 }
@@ -526,4 +540,528 @@ window.testSesjaScript = function() {
     
     console.log('🧪 Testuje ładowanie produktów...');
     loadProducts();
-}; 
+};
+
+// Pokazanie interfejsu live chatu z ChatGPT
+function showLiveChatInterface() {
+    console.log('🖥️ showLiveChatInterface() - start');
+    
+    try {
+        // Ukryj formularz konfiguracji
+        const setupCard = document.querySelector('.setup-card');
+        if (setupCard) {
+            setupCard.style.display = 'none';
+        }
+        
+        // Ukryj stary status sesji
+        const sessionStatus = document.getElementById('sessionStatus');
+        if (sessionStatus) {
+            sessionStatus.style.display = 'none';
+        }
+        
+        // Ukryj recent sessions
+        const recentSessions = document.querySelector('.recent-sessions');
+        if (recentSessions) {
+            recentSessions.style.display = 'none';
+        }
+        
+        // Znajdź informacje o kliencie i produkcie
+        const selectedClient = clients.find(c => c.id == currentSession.clientId);
+        const selectedProduct = products.find(p => p.id == currentSession.productId);
+        
+        // Utwórz interfejs live chatu
+        const liveChatHTML = `
+            <div class="live-chat-interface" id="liveChatInterface">
+                <div class="chat-header">
+                    <div class="chat-info">
+                        <h3>
+                            <i class="fas fa-comments"></i>
+                            Live Chat z ChatGPT
+                        </h3>
+                        <div class="session-details">
+                            <span class="client-info">👤 ${selectedClient ? selectedClient.name : 'Nieznany klient'}</span>
+                            <span class="product-info">📦 ${selectedProduct ? selectedProduct.name : 'Nieznany produkt'}</span>
+                            <span class="timer-info">⏱️ <span id="liveChatTimer">00:00:00</span></span>
+                        </div>
+                    </div>
+                    <div class="chat-controls">
+                        <button type="button" class="btn btn-danger" id="endChatBtn">
+                            <i class="fas fa-phone-slash"></i>
+                            Zakończ sesję
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="chat-content">
+                    <div class="chat-messages" id="chatMessages">
+                        <div class="system-message">
+                            <i class="fas fa-robot"></i>
+                            <p>Witaj! Jestem Twoim asystentem sprzedażowym. Gotowy do rozmowy z klientem <strong>${selectedClient ? selectedClient.name : 'Nieznany'}</strong> na temat produktu <strong>${selectedProduct ? selectedProduct.name : 'Nieznany'}</strong>. Jak mogę Ci pomóc?</p>
+                        </div>
+                    </div>
+                    
+                    <div class="chat-input-section">
+                        <div class="voice-controls">
+                            <button type="button" class="btn btn-primary voice-btn" id="startVoiceBtn">
+                                <i class="fas fa-microphone"></i>
+                                Naciśnij i mów
+                            </button>
+                            <div class="voice-status" id="voiceStatus">
+                                <span class="status-text">Gotowy do nagrywania</span>
+                                <div class="voice-wave" id="voiceWave" style="display: none;">
+                                    <div class="wave-bar"></div>
+                                    <div class="wave-bar"></div>
+                                    <div class="wave-bar"></div>
+                                    <div class="wave-bar"></div>
+                                    <div class="wave-bar"></div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="text-input-section">
+                            <input type="text" id="chatTextInput" placeholder="Lub napisz wiadomość..." />
+                            <button type="button" class="btn btn-secondary" id="sendTextBtn">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Dodaj interfejs do session-content
+        const sessionContent = document.querySelector('.session-content');
+        if (sessionContent) {
+            sessionContent.insertAdjacentHTML('beforeend', liveChatHTML);
+        }
+        
+        // Konfiguruj event listenery dla live chatu
+        setupLiveChatEventListeners();
+        
+        console.log('✅ showLiveChatInterface() - zakończone pomyślnie');
+        
+    } catch (error) {
+        console.error('❌ BŁĄD w showLiveChatInterface():', error);
+        throw error;
+    }
+}
+
+// Konfiguracja event listenerów dla live chatu
+function setupLiveChatEventListeners() {
+    console.log('🔧 Konfiguracja event listenerów live chatu...');
+    
+    // Przycisk zakończ sesję
+    const endChatBtn = document.getElementById('endChatBtn');
+    if (endChatBtn) {
+        endChatBtn.addEventListener('click', endLiveChat);
+    }
+    
+    // Przycisk głosowy
+    const startVoiceBtn = document.getElementById('startVoiceBtn');
+    if (startVoiceBtn) {
+        startVoiceBtn.addEventListener('mousedown', startVoiceRecording);
+        startVoiceBtn.addEventListener('mouseup', stopVoiceRecording);
+        startVoiceBtn.addEventListener('mouseleave', stopVoiceRecording);
+        startVoiceBtn.addEventListener('touchstart', startVoiceRecording);
+        startVoiceBtn.addEventListener('touchend', stopVoiceRecording);
+    }
+    
+    // Input tekstowy
+    const chatTextInput = document.getElementById('chatTextInput');
+    const sendTextBtn = document.getElementById('sendTextBtn');
+    
+    if (chatTextInput && sendTextBtn) {
+        chatTextInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                sendTextMessage();
+            }
+        });
+        
+        sendTextBtn.addEventListener('click', sendTextMessage);
+    }
+    
+    console.log('✅ Event listenery live chatu skonfigurowane');
+}
+
+// Zmienne dla rozpoznawania mowy
+let recognition = null;
+let isRecording = false;
+let speechSynthesis = window.speechSynthesis;
+
+// Inicjalizacja rozpoznawania mowy
+function initSpeechRecognition() {
+    if ('webkitSpeechRecognition' in window) {
+        recognition = new webkitSpeechRecognition();
+    } else if ('SpeechRecognition' in window) {
+        recognition = new SpeechRecognition();
+    } else {
+        console.warn('⚠️ Rozpoznawanie mowy nie jest obsługiwane w tej przeglądarce');
+        return false;
+    }
+    
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = 'pl-PL';
+    
+    recognition.onstart = function() {
+        console.log('🎤 Rozpoczęto rozpoznawanie mowy');
+        isRecording = true;
+        updateVoiceUI(true);
+    };
+    
+    recognition.onresult = function(event) {
+        const transcript = event.results[0][0].transcript;
+        console.log('🗣️ Rozpoznano tekst:', transcript);
+        sendMessageToChatGPT(transcript);
+    };
+    
+    recognition.onerror = function(event) {
+        console.error('❌ Błąd rozpoznawania mowy:', event.error);
+        isRecording = false;
+        updateVoiceUI(false);
+        showToast('Błąd rozpoznawania mowy: ' + event.error, 'error');
+    };
+    
+    recognition.onend = function() {
+        console.log('🎤 Zakończono rozpoznawanie mowy');
+        isRecording = false;
+        updateVoiceUI(false);
+    };
+    
+    return true;
+}
+
+// Rozpoczęcie nagrywania głosu
+function startVoiceRecording() {
+    if (!recognition && !initSpeechRecognition()) {
+        showToast('Rozpoznawanie mowy nie jest obsługiwane', 'error');
+        return;
+    }
+    
+    if (isRecording) return;
+    
+    try {
+        recognition.start();
+    } catch (error) {
+        console.error('❌ Błąd rozpoczynania nagrywania:', error);
+        showToast('Błąd rozpoczynania nagrywania', 'error');
+    }
+}
+
+// Zatrzymanie nagrywania głosu
+function stopVoiceRecording() {
+    if (recognition && isRecording) {
+        recognition.stop();
+    }
+}
+
+// Aktualizacja UI dla głosu
+function updateVoiceUI(recording) {
+    const voiceBtn = document.getElementById('startVoiceBtn');
+    const voiceStatus = document.getElementById('voiceStatus');
+    const voiceWave = document.getElementById('voiceWave');
+    const statusText = voiceStatus.querySelector('.status-text');
+    
+    if (recording) {
+        voiceBtn.classList.add('recording');
+        voiceBtn.innerHTML = '<i class="fas fa-stop"></i> Mówię...';
+        statusText.textContent = 'Słucham...';
+        voiceWave.style.display = 'flex';
+    } else {
+        voiceBtn.classList.remove('recording');
+        voiceBtn.innerHTML = '<i class="fas fa-microphone"></i> Naciśnij i mów';
+        statusText.textContent = 'Gotowy do nagrywania';
+        voiceWave.style.display = 'none';
+    }
+}
+
+// Wysyłanie wiadomości tekstowej
+function sendTextMessage() {
+    const chatTextInput = document.getElementById('chatTextInput');
+    const message = chatTextInput.value.trim();
+    
+    if (!message) return;
+    
+    chatTextInput.value = '';
+    sendMessageToChatGPT(message);
+}
+
+// Główna funkcja wysyłania wiadomości do ChatGPT
+async function sendMessageToChatGPT(message) {
+    console.log('🤖 Wysyłam wiadomość do ChatGPT:', message);
+    
+    if (!currentSession || !currentSession.chatContext) {
+        showToast('Brak aktywnej sesji chatu', 'error');
+        return;
+    }
+    
+    try {
+        // Dodaj wiadomość użytkownika do UI
+        addMessageToChat('user', message);
+        
+        // Pokaż loader
+        showChatLoader();
+        
+        // Wyślij do API
+        const response = await fetchWithAuth('/api/chat/message', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                message: message,
+                systemPrompt: currentSession.chatContext.systemPrompt,
+                conversationHistory: currentSession.conversationHistory
+            })
+        });
+        
+        if (!response) {
+            hideChatLoader();
+            return; // fetchWithAuth już obsłużył przekierowanie
+        }
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || 'Błąd komunikacji z ChatGPT');
+        }
+        
+        const chatData = await response.json();
+        console.log('✅ Otrzymano odpowiedź od ChatGPT:', chatData.response);
+        
+        // Ukryj loader
+        hideChatLoader();
+        
+        // Dodaj odpowiedź AI do UI
+        addMessageToChat('ai', chatData.response);
+        
+        // Zaktualizuj historię konwersacji
+        currentSession.conversationHistory.push(
+            { role: 'user', content: message },
+            { role: 'assistant', content: chatData.response }
+        );
+        
+        // Odczytaj odpowiedź głosowo
+        speakText(chatData.response);
+        
+    } catch (error) {
+        console.error('❌ Błąd komunikacji z ChatGPT:', error);
+        hideChatLoader();
+        addMessageToChat('error', 'Błąd komunikacji z ChatGPT: ' + error.message);
+        showToast('Błąd ChatGPT: ' + error.message, 'error');
+    }
+}
+
+// Dodawanie wiadomości do chatu
+function addMessageToChat(type, message) {
+    const chatMessages = document.getElementById('chatMessages');
+    if (!chatMessages) return;
+    
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `chat-message ${type}-message`;
+    
+    const timestamp = new Date().toLocaleTimeString('pl-PL', { 
+        hour: '2-digit', 
+        minute: '2-digit' 
+    });
+    
+    let icon = '';
+    let senderName = '';
+    
+    switch (type) {
+        case 'user':
+            icon = '<i class="fas fa-user"></i>';
+            senderName = 'Ty';
+            break;
+        case 'ai':
+            icon = '<i class="fas fa-robot"></i>';
+            senderName = 'ChatGPT';
+            break;
+        case 'error':
+            icon = '<i class="fas fa-exclamation-triangle"></i>';
+            senderName = 'System';
+            messageDiv.className += ' error-message';
+            break;
+    }
+    
+    messageDiv.innerHTML = `
+        <div class="message-header">
+            ${icon}
+            <span class="sender-name">${senderName}</span>
+            <span class="message-time">${timestamp}</span>
+        </div>
+        <div class="message-content">
+            <p>${message}</p>
+        </div>
+    `;
+    
+    chatMessages.appendChild(messageDiv);
+    
+    // Scroll do dołu
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+// Pokazanie loadera w chacie
+function showChatLoader() {
+    const chatMessages = document.getElementById('chatMessages');
+    if (!chatMessages) return;
+    
+    const loaderDiv = document.createElement('div');
+    loaderDiv.className = 'chat-message ai-message loading-message';
+    loaderDiv.id = 'chatLoader';
+    
+    loaderDiv.innerHTML = `
+        <div class="message-header">
+            <i class="fas fa-robot"></i>
+            <span class="sender-name">ChatGPT</span>
+        </div>
+        <div class="message-content">
+            <div class="typing-indicator">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+        </div>
+    `;
+    
+    chatMessages.appendChild(loaderDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+// Ukrycie loadera w chacie
+function hideChatLoader() {
+    const loader = document.getElementById('chatLoader');
+    if (loader) {
+        loader.remove();
+    }
+}
+
+// Odczytywanie tekstu głosowo
+function speakText(text) {
+    if (!speechSynthesis) {
+        console.warn('⚠️ Speech synthesis nie jest obsługiwane');
+        return;
+    }
+    
+    // Zatrzymaj poprzednie odczytywanie
+    speechSynthesis.cancel();
+    
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'pl-PL';
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+    utterance.volume = 0.8;
+    
+    // Znajdź polski głos jeśli dostępny
+    const voices = speechSynthesis.getVoices();
+    const polishVoice = voices.find(voice => voice.lang.startsWith('pl'));
+    if (polishVoice) {
+        utterance.voice = polishVoice;
+    }
+    
+    utterance.onstart = function() {
+        console.log('🔊 Rozpoczęto odczytywanie');
+    };
+    
+    utterance.onend = function() {
+        console.log('🔊 Zakończono odczytywanie');
+    };
+    
+    utterance.onerror = function(event) {
+        console.error('❌ Błąd odczytywania:', event.error);
+    };
+    
+    speechSynthesis.speak(utterance);
+}
+
+// Zakończenie live chatu
+async function endLiveChat() {
+    console.log('🔚 Zakończenie live chatu...');
+    
+    try {
+        // Zatrzymaj timer
+        if (recordingTimer) {
+            clearInterval(recordingTimer);
+            recordingTimer = null;
+        }
+        
+        // Zatrzymaj rozpoznawanie mowy
+        if (recognition && isRecording) {
+            recognition.stop();
+        }
+        
+        // Zatrzymaj syntezę mowy
+        if (speechSynthesis) {
+            speechSynthesis.cancel();
+        }
+        
+        // Usuń interfejs live chatu
+        const liveChatInterface = document.getElementById('liveChatInterface');
+        if (liveChatInterface) {
+            liveChatInterface.remove();
+        }
+        
+        // Przywróć oryginalny interfejs
+        const setupCard = document.querySelector('.setup-card');
+        const recentSessions = document.querySelector('.recent-sessions');
+        
+        if (setupCard) {
+            setupCard.style.display = 'block';
+        }
+        
+        if (recentSessions) {
+            recentSessions.style.display = 'block';
+        }
+        
+        // Wyczyść formularz
+        if (sessionClientSelect) sessionClientSelect.value = '';
+        if (sessionProductSelect) sessionProductSelect.value = '';
+        if (sessionNotesTextarea) sessionNotesTextarea.value = '';
+        
+        // Reset zmiennych
+        currentSession = null;
+        recordingStartTime = null;
+        isRecording = false;
+        recognition = null;
+        
+        // Waliduj formularz
+        validateSessionForm();
+        
+        // Odśwież ostatnie sesje
+        loadRecentSessions();
+        
+        showToast('Live chat zakończony', 'success');
+        
+    } catch (error) {
+        console.error('❌ Błąd kończenia live chatu:', error);
+        showToast('Błąd kończenia sesji', 'error');
+    }
+}
+
+// Aktualizacja timera live chatu
+function updateRecordingTime() {
+    if (!recordingStartTime) return;
+    
+    const elapsed = Date.now() - recordingStartTime;
+    const hours = Math.floor(elapsed / 3600000);
+    const minutes = Math.floor((elapsed % 3600000) / 60000);
+    const seconds = Math.floor((elapsed % 60000) / 1000);
+    
+    const timeString = 
+        String(hours).padStart(2, '0') + ':' +
+        String(minutes).padStart(2, '0') + ':' +
+        String(seconds).padStart(2, '0');
+    
+    // Aktualizuj timer w live chat interface
+    const liveChatTimer = document.getElementById('liveChatTimer');
+    if (liveChatTimer) {
+        liveChatTimer.textContent = timeString;
+    }
+    
+    // Fallback na stary timer
+    const recordingTime = document.getElementById('recordingTime');
+    if (recordingTime) {
+        recordingTime.textContent = timeString;
+    }
+}
+
+// ... existing code ... 
