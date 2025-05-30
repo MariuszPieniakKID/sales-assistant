@@ -1,5 +1,7 @@
 // Produkty - zarządzanie produktami
 (function() {
+    'use strict';
+    
     let products = [];
     let currentProduct = null;
     let isEditing = false;

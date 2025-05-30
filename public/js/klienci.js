@@ -1,5 +1,7 @@
 // Klienci - zarządzanie klientami
 (function() {
+    'use strict';
+    
     let clients = [];
     let products = [];
     let currentClient = null;
