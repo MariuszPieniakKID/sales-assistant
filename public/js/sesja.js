@@ -590,91 +590,135 @@ function showLiveChatInterface() {
         const selectedClient = clients.find(c => c.id == currentSession.clientId);
         const selectedProduct = products.find(p => p.id == currentSession.productId);
         
-        // Utwórz interfejs live chatu z lepszym layoutem
+        // Nowy interfejs skupiony na sugestiach AI
         const liveChatHTML = `
-            <div class="live-chat-interface" id="liveChatInterface">
-                <div class="chat-header">
-                    <div class="chat-info">
-                        <h3>
-                            <i class="fas fa-comments"></i>
-                            Live Chat z ChatGPT
-                        </h3>
+            <div class="ai-assistant-interface" id="liveChatInterface">
+                <!-- Header z informacjami o sesji -->
+                <div class="session-header">
+                    <div class="session-info">
+                        <div class="session-title">
+                            <i class="fas fa-robot"></i>
+                            <h2>Asystent Sprzedażowy AI</h2>
+                            <div class="session-status-badge">
+                                <i class="fas fa-circle"></i>
+                                <span>Aktywny</span>
+                            </div>
+                        </div>
                         <div class="session-details">
-                            <span class="client-info">👤 ${selectedClient ? selectedClient.name : 'Nieznany klient'}</span>
-                            <span class="product-info">📦 ${selectedProduct ? selectedProduct.name : 'Nieznany produkt'}</span>
-                            <span class="timer-info">⏱️ <span id="liveChatTimer">00:00:00</span></span>
+                            <div class="detail-card">
+                                <i class="fas fa-user"></i>
+                                <div class="detail-content">
+                                    <span class="detail-label">Klient</span>
+                                    <span class="detail-value">${selectedClient ? selectedClient.name : 'Nieznany klient'}</span>
+                                </div>
+                            </div>
+                            <div class="detail-card">
+                                <i class="fas fa-box"></i>
+                                <div class="detail-content">
+                                    <span class="detail-label">Produkt</span>
+                                    <span class="detail-value">${selectedProduct ? selectedProduct.name : 'Nieznany produkt'}</span>
+                                </div>
+                            </div>
+                            <div class="detail-card">
+                                <i class="fas fa-clock"></i>
+                                <div class="detail-content">
+                                    <span class="detail-label">Czas trwania</span>
+                                    <span class="detail-value" id="liveChatTimer">00:00:00</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
-                    <div class="chat-controls">
-                        <button type="button" class="btn btn-danger" id="endChatBtn">
+                    <div class="session-controls">
+                        <button type="button" class="btn btn-danger btn-large" id="endChatBtn">
                             <i class="fas fa-phone-slash"></i>
                             Zakończ sesję
                         </button>
                     </div>
                 </div>
                 
-                <!-- Główna zawartość - podział na 2 kolumny -->
-                <div class="chat-main-content">
-                    <!-- Lewa kolumna - rozmowa -->
-                    <div class="conversation-column">
-                        <div class="conversation-header">
-                            <h4><i class="fas fa-comments"></i> Transkrypcja rozmowy</h4>
-                        </div>
-                        
-                        <div class="chat-messages" id="chatMessages">
-                            <div class="system-message">
-                                <div class="message-content">
-                                    <p><i class="fas fa-robot"></i> Witaj! Jestem Twoim asystentem sprzedażowym. Będę podpowiadać Ci w czasie rzeczywistym podczas rozmowy z klientem <strong>${selectedClient ? selectedClient.name : 'Nieznany'}</strong> na temat produktu <strong>${selectedProduct ? selectedProduct.name : 'Nieznany'}</strong>. Zacznij rozmowę!</p>
+                <!-- Główny panel sugestii AI -->
+                <div class="ai-suggestions-main">
+                    <div class="suggestions-header">
+                        <div class="header-content">
+                            <div class="header-title">
+                                <i class="fas fa-lightbulb"></i>
+                                <h3>Sugestie AI w czasie rzeczywistym</h3>
+                            </div>
+                            <div class="ai-status">
+                                <div class="ai-indicator">
+                                    <div class="pulse-dot"></div>
+                                    <span>AI analizuje rozmowę</span>
                                 </div>
                             </div>
-                        </div>
-                        
-                        <!-- Tymczasowy transkrypt -->
-                        <div class="interim-transcript" id="interimTranscript" style="display: none;">
-                            <!-- Tekst tymczasowy będzie tutaj -->
                         </div>
                     </div>
                     
-                    <!-- Prawa kolumna - sugestie -->
-                    <div class="suggestions-column">
-                        <div class="suggestions-panel" id="suggestionsPanel">
-                            <div class="suggestions-header">
-                                <i class="fas fa-lightbulb"></i>
-                                <span>Sugestie asystenta AI</span>
+                    <div class="suggestions-container" id="suggestionsContainer">
+                        <div class="welcome-message">
+                            <div class="welcome-icon">
+                                <i class="fas fa-handshake"></i>
                             </div>
-                            <div class="suggestions-content" id="suggestionsContent">
-                                <div class="suggestion-item initial">
-                                    <i class="fas fa-info-circle"></i>
-                                    <span>Kliknij przycisk "Rozpocznij nasłuchiwanie" poniżej, aby AI zaczął analizować rozmowę i podpowiadać Ci w czasie rzeczywistym.</span>
+                            <h4>Witaj w asystencie sprzedażowym!</h4>
+                            <p>Kliknij przycisk poniżej, aby rozpocząć nasłuchiwanie rozmowy. AI będzie analizować konwersację i podpowiadać Ci najlepsze strategie sprzedażowe w czasie rzeczywistym.</p>
+                            
+                            <div class="starter-tips">
+                                <div class="tip-card">
+                                    <i class="fas fa-comments"></i>
+                                    <div class="tip-content">
+                                        <h5>Rozpocznij od budowania relacji</h5>
+                                        <p>Zadaj pytania o potrzeby i wyzwania klienta</p>
+                                    </div>
                                 </div>
-                                <div class="suggestion-item initial">
-                                    <i class="fas fa-handshake"></i>
-                                    <span>Zacznij od ciepłego powitania i poznania potrzeb klienta.</span>
+                                <div class="tip-card">
+                                    <i class="fas fa-search"></i>
+                                    <div class="tip-content">
+                                        <h5>Odkryj prawdziwe potrzeby</h5>
+                                        <p>Słuchaj aktywnie i zadawaj pytania uzupełniające</p>
+                                    </div>
                                 </div>
-                                <div class="suggestion-item initial">
-                                    <i class="fas fa-questions"></i>
-                                    <span>Zadawaj otwarte pytania typu: "Co spowodowało, że szuka Pan tego produktu?"</span>
+                                <div class="tip-card">
+                                    <i class="fas fa-bullseye"></i>
+                                    <div class="tip-content">
+                                        <h5>Dopasuj rozwiązanie</h5>
+                                        <p>Pokaż jak produkt rozwiązuje konkretne problemy</p>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
                 
+                <!-- Tymczasowy transkrypt (mały) -->
+                <div class="current-speech" id="currentSpeech" style="display: none;">
+                    <div class="speech-indicator">
+                        <i class="fas fa-microphone"></i>
+                        <span>Słucham:</span>
+                    </div>
+                    <div class="speech-text" id="speechText">...</div>
+                </div>
+                
                 <!-- Kontrolki na dole -->
-                <div class="chat-input-section">
-                    <div class="voice-controls">
-                        <button type="button" class="btn btn-primary voice-btn btn-large" id="toggleListeningBtn">
-                            <i class="fas fa-microphone"></i>
-                            Rozpocznij nasłuchiwanie rozmowy
+                <div class="control-panel">
+                    <div class="main-control">
+                        <button type="button" class="btn-ai-listening" id="toggleListeningBtn">
+                            <div class="btn-content">
+                                <i class="fas fa-microphone"></i>
+                                <div class="btn-text">
+                                    <span class="btn-title">Rozpocznij analizę AI</span>
+                                    <span class="btn-subtitle">Kliknij aby AI zaczął słuchać i podpowiadać</span>
+                                </div>
+                            </div>
                         </button>
-                        <div class="voice-status" id="voiceStatus">
-                            <span class="status-text">Kliknij aby rozpocząć nasłuchiwanie i analizę AI</span>
-                            <div class="voice-wave" id="voiceWave" style="display: none;">
-                                <div class="wave-bar"></div>
-                                <div class="wave-bar"></div>
-                                <div class="wave-bar"></div>
-                                <div class="wave-bar"></div>
-                                <div class="wave-bar"></div>
+                        
+                        <div class="listening-status" id="listeningStatus">
+                            <div class="status-content">
+                                <span class="status-text">Gotowy do rozpoczęcia analizy</span>
+                                <div class="sound-waves" id="soundWaves" style="display: none;">
+                                    <div class="wave"></div>
+                                    <div class="wave"></div>
+                                    <div class="wave"></div>
+                                    <div class="wave"></div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -783,20 +827,36 @@ function stopListening() {
 // Aktualizacja UI nasłuchiwania
 function updateListeningUI(listening) {
     const toggleBtn = document.getElementById('toggleListeningBtn');
-    const voiceStatus = document.getElementById('voiceStatus');
-    const statusText = voiceStatus?.querySelector('.status-text');
-    const voiceWave = document.getElementById('voiceWave');
+    const statusText = document.querySelector('.status-text');
+    const soundWaves = document.getElementById('soundWaves');
+    const aiIndicator = document.querySelector('.ai-indicator');
     
     if (listening) {
         toggleBtn?.classList.add('recording');
-        toggleBtn.innerHTML = '<i class="fas fa-microphone-slash"></i> Zatrzymaj nasłuchiwanie';
-        if (statusText) statusText.textContent = '🎤 Nasłuchuję rozmowę...';
-        if (voiceWave) voiceWave.style.display = 'flex';
+        
+        // Aktualizuj tekst przycisku
+        const btnTitle = toggleBtn?.querySelector('.btn-title');
+        const btnSubtitle = toggleBtn?.querySelector('.btn-subtitle');
+        if (btnTitle) btnTitle.textContent = 'Zakończ analizę AI';
+        if (btnSubtitle) btnSubtitle.textContent = 'AI aktywnie analizuje rozmowę';
+        
+        // Aktualizuj status
+        if (statusText) statusText.textContent = '🤖 AI analizuje rozmowę w czasie rzeczywistym';
+        if (soundWaves) soundWaves.style.display = 'flex';
+        if (aiIndicator) aiIndicator.classList.add('active');
     } else {
         toggleBtn?.classList.remove('recording');
-        toggleBtn.innerHTML = '<i class="fas fa-microphone"></i> Rozpocznij nasłuchiwanie rozmowy';
-        if (statusText) statusText.textContent = 'Kliknij aby rozpocząć nasłuchiwanie';
-        if (voiceWave) voiceWave.style.display = 'none';
+        
+        // Przywróć oryginalny tekst
+        const btnTitle = toggleBtn?.querySelector('.btn-title');
+        const btnSubtitle = toggleBtn?.querySelector('.btn-subtitle');
+        if (btnTitle) btnTitle.textContent = 'Rozpocznij analizę AI';
+        if (btnSubtitle) btnSubtitle.textContent = 'Kliknij aby AI zaczął słuchać i podpowiadać';
+        
+        // Przywróć status
+        if (statusText) statusText.textContent = 'Gotowy do rozpoczęcia analizy';
+        if (soundWaves) soundWaves.style.display = 'none';
+        if (aiIndicator) aiIndicator.classList.remove('active');
     }
 }
 
@@ -890,10 +950,7 @@ function processSpeech(transcript) {
         conversationBuffer = words.slice(-150).join(' ');
     }
     
-    // Dodaj do UI jako nieprzypisaną wypowiedź
-    addMessageToChat('conversation', transcript);
-    
-    // Dodaj do historii sesji
+    // Dodaj do historii sesji (ale nie wyświetlaj w UI)
     if (currentSession) {
         currentSession.conversationHistory.push({
             role: 'speech',
@@ -902,7 +959,7 @@ function processSpeech(transcript) {
         });
     }
     
-    // Analizuj rozmowę w tle
+    // Analizuj rozmowę w tle - to jest najważniejsze!
     analyzeConversationInRealTime();
 }
 
@@ -1002,27 +1059,36 @@ Format odpowiedzi:
     }
 }
 
-// Wyświetlanie sugestii real-time
+// Wyświetlanie sugestii real-time w nowym układzie
 function displayRealtimeSuggestions(analysis) {
-    const suggestionsContent = document.getElementById('suggestionsContent');
-    if (!suggestionsContent) return;
+    const suggestionsContainer = document.getElementById('suggestionsContainer');
+    if (!suggestionsContainer) return;
+    
+    // Usuń welcome message przy pierwszej sugestii
+    const welcomeMessage = suggestionsContainer.querySelector('.welcome-message');
+    if (welcomeMessage) {
+        welcomeMessage.style.display = 'none';
+    }
     
     // Parsuj analizę
     const lines = analysis.split('\n').filter(line => line.trim());
     let speaker = '';
+    let intention = '';
     let suggestions = [];
     
     lines.forEach(line => {
         if (line.includes('[KTO MÓWI]:')) {
             speaker = line.split(':')[1]?.trim();
-        } else if (line.includes('[SUGESTIA]:') || line.includes('[INTENCJA]:')) {
-            suggestions.push(line);
+        } else if (line.includes('[INTENCJA]:')) {
+            intention = line.split(':')[1]?.trim();
+        } else if (line.includes('[SUGESTIA')) {
+            suggestions.push(line.split(':')[1]?.trim());
         }
     });
     
-    // Utwórz nową sugestię
-    const suggestionDiv = document.createElement('div');
-    suggestionDiv.className = 'suggestion-item realtime';
+    // Utwórz nową kartę sugestii
+    const suggestionCard = document.createElement('div');
+    suggestionCard.className = 'ai-suggestion-card new';
     
     const timestamp = new Date().toLocaleTimeString('pl-PL', { 
         hour: '2-digit', 
@@ -1030,31 +1096,71 @@ function displayRealtimeSuggestions(analysis) {
         second: '2-digit'
     });
     
-    suggestionDiv.innerHTML = `
+    // Określ typ sugestii na podstawie mówcy
+    const cardType = speaker === 'klient' ? 'client-speaking' : 'seller-speaking';
+    const cardIcon = speaker === 'klient' ? 'fas fa-user' : 'fas fa-user-tie';
+    const cardColor = speaker === 'klient' ? 'blue' : 'green';
+    
+    suggestionCard.innerHTML = `
         <div class="suggestion-header">
-            <span class="suggestion-time">${timestamp}</span>
-            ${speaker ? `<span class="speaker-label">${speaker}</span>` : ''}
+            <div class="speaker-info ${cardColor}">
+                <i class="${cardIcon}"></i>
+                <span>${speaker === 'klient' ? 'Klient mówi' : 'Ty mówisz'}</span>
+            </div>
+            <div class="suggestion-time">${timestamp}</div>
         </div>
-        <div class="suggestion-content">
-            ${suggestions.join('<br>')}
+        
+        ${intention ? `
+        <div class="situation-context">
+            <i class="fas fa-info-circle"></i>
+            <span>${intention}</span>
+        </div>
+        ` : ''}
+        
+        <div class="suggestions-list">
+            ${suggestions.map(suggestion => `
+                <div class="suggestion-item">
+                    <i class="fas fa-lightbulb"></i>
+                    <span>${suggestion}</span>
+                </div>
+            `).join('')}
         </div>
     `;
     
-    // Usuń stare sugestie jeśli jest ich za dużo
-    const allSuggestions = suggestionsContent.querySelectorAll('.suggestion-item');
-    if (allSuggestions.length > 10) {
-        allSuggestions[0].remove();
+    // Usuń stare sugestie jeśli jest ich za dużo (pozostaw ostatnie 8)
+    const allCards = suggestionsContainer.querySelectorAll('.ai-suggestion-card');
+    if (allCards.length >= 8) {
+        for (let i = 0; i < allCards.length - 7; i++) {
+            allCards[i].remove();
+        }
     }
     
-    suggestionsContent.appendChild(suggestionDiv);
+    suggestionsContainer.appendChild(suggestionCard);
     
     // Auto-scroll
-    suggestionsContent.scrollTop = suggestionsContent.scrollHeight;
+    suggestionsContainer.scrollTop = suggestionsContainer.scrollHeight;
     
-    // Animacja
+    // Animacja wejścia
     setTimeout(() => {
-        suggestionDiv.classList.add('visible');
-    }, 10);
+        suggestionCard.classList.add('visible');
+    }, 100);
+}
+
+// Aktualizacja tymczasowego tekstu (nowy mały widget)
+function updateInterimTranscript(transcript) {
+    const currentSpeech = document.getElementById('currentSpeech');
+    const speechText = document.getElementById('speechText');
+    
+    if (currentSpeech && speechText && transcript.trim()) {
+        speechText.textContent = transcript;
+        currentSpeech.style.display = 'flex';
+        
+        // Auto-hide po 3 sekundach bez aktualizacji
+        clearTimeout(currentSpeech.hideTimer);
+        currentSpeech.hideTimer = setTimeout(() => {
+            currentSpeech.style.display = 'none';
+        }, 3000);
+    }
 }
 
 // Zakończenie live chatu
@@ -1155,48 +1261,6 @@ async function endLiveChat() {
         console.error('❌ Błąd kończenia live chatu:', error);
         showToast('Błąd kończenia sesji', 'error');
     }
-}
-
-// Aktualizacja tymczasowego tekstu
-function updateInterimTranscript(transcript) {
-    const interimDiv = document.getElementById('interimTranscript');
-    if (interimDiv && transcript.trim()) {
-        interimDiv.textContent = transcript;
-        interimDiv.style.display = 'block';
-    } else if (interimDiv) {
-        interimDiv.style.display = 'none';
-    }
-}
-
-// Dodawanie wiadomości do chatu
-function addMessageToChat(type, message) {
-    const chatMessages = document.getElementById('chatMessages');
-    if (!chatMessages) return;
-    
-    const messageDiv = document.createElement('div');
-    messageDiv.className = `chat-message ${type}-message`;
-    
-    const timestamp = new Date().toLocaleTimeString('pl-PL', { 
-        hour: '2-digit', 
-        minute: '2-digit' 
-    });
-    
-    // Dla typu conversation nie dodajemy prefiksu
-    const displayMessage = type === 'conversation' ? message : message;
-    
-    messageDiv.innerHTML = `
-        <div class="message-header">
-            <span class="message-time">${timestamp}</span>
-        </div>
-        <div class="message-content">
-            <p>${displayMessage}</p>
-        </div>
-    `;
-    
-    chatMessages.appendChild(messageDiv);
-    
-    // Scroll do dołu
-    chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
 // Pokazanie podsumowania sesji po zakończeniu
