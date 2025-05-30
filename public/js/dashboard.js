@@ -204,10 +204,36 @@ document.addEventListener('DOMContentLoaded', function() {
             // Załaduj zewnętrzną sekcję
             try {
                 console.log(`🔄 Pobieranie treści dla sekcji: ${section}`);
-                const response = await fetch(`/${section}`);
+                
+                // Użyj fetchWithAuth aby sprawdzić sesję
+                const response = await fetchWithAuth(`/${section}`, {
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-Section-Request': 'true'
+                    }
+                });
+                if (!response) {
+                    // fetchWithAuth już obsłużył przekierowanie do logowania
+                    return;
+                }
                 
                 if (response.ok) {
                     const html = await response.text();
+                    
+                    // Sprawdź czy nie dostaliśmy przypadkiem strony logowania
+                    if (html.includes('<form') && html.includes('email') && html.includes('password')) {
+                        console.log('❌ Otrzymano stronę logowania zamiast sekcji - sesja wygasła');
+                        
+                        // Wyczyść interval sprawdzania sesji
+                        if (sessionCheckInterval) {
+                            clearInterval(sessionCheckInterval);
+                        }
+                        
+                        // Przekieruj do logowania
+                        window.location.href = '/login';
+                        return;
+                    }
+                    
                     contentArea.innerHTML = html;
                     console.log(`✅ Sekcja ${section} załadowana pomyślnie`);
                     
@@ -508,6 +534,29 @@ document.addEventListener('DOMContentLoaded', function() {
             // Sprawdź czy odpowiedź wskazuje na wygasłą sesję
             if (response.status === 401) {
                 console.log('❌ API zwróciło 401 - sesja wygasła');
+                
+                // Sprawdź czy to JSON response
+                const contentType = response.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    const data = await response.json();
+                    if (data.redirect) {
+                        console.log('🔄 Przekierowanie z JSON:', data.redirect);
+                    }
+                }
+                
+                // Wyczyść interval sprawdzania sesji
+                if (sessionCheckInterval) {
+                    clearInterval(sessionCheckInterval);
+                }
+                
+                // Przekieruj do logowania
+                window.location.href = '/login';
+                return null;
+            }
+            
+            // Dodatkowe sprawdzenie - czy nie dostaliśmy HTML przekierowania
+            if (response.ok && response.url.includes('/login')) {
+                console.log('❌ Otrzymano przekierowanie do /login przez URL');
                 
                 // Wyczyść interval sprawdzania sesji
                 if (sessionCheckInterval) {

@@ -88,7 +88,8 @@ function requireAuth(req, res, next) {
     hasUserId: !!req.session?.userId,
     userId: req.session?.userId,
     sessionID: req.sessionID?.substring(0, 8),
-    url: req.url
+    url: req.url,
+    isAjax: req.headers['x-requested-with'] === 'XMLHttpRequest' || req.headers['x-section-request'] === 'true'
   });
   
   if (req.session && req.session.userId) {
@@ -97,8 +98,13 @@ function requireAuth(req, res, next) {
   } else {
     console.log('❌ [AUTH] Brak autoryzacji - przekierowanie do logowania');
     
-    // Jeśli to żądanie API, zwróć JSON
-    if (req.url.startsWith('/api/')) {
+    // Sprawdź czy to żądanie AJAX/sekcji
+    const isAjaxRequest = req.headers['x-requested-with'] === 'XMLHttpRequest' || 
+                         req.headers['x-section-request'] === 'true' ||
+                         req.url.startsWith('/api/');
+    
+    if (isAjaxRequest) {
+      console.log('🔧 [AUTH] AJAX request - zwracam JSON error');
       return res.status(401).json({ 
         success: false, 
         message: 'Sesja wygasła',
@@ -107,6 +113,7 @@ function requireAuth(req, res, next) {
     }
     
     // Jeśli to żądanie strony, przekieruj
+    console.log('🔄 [AUTH] HTML request - przekierowanie do /login');
     res.redirect('/login');
   }
 }
