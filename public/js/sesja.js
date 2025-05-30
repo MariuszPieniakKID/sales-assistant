@@ -600,14 +600,19 @@ function showLiveChatInterface() {
                         </div>
                     </div>
                     
+                    <!-- Tymczasowy transkrypt -->
+                    <div class="interim-transcript" id="interimTranscript" style="display: none;">
+                        <!-- Tekst tymczasowy będzie tutaj -->
+                    </div>
+                    
                     <div class="chat-input-section">
                         <div class="voice-controls">
-                            <button type="button" class="btn btn-primary voice-btn" id="startVoiceBtn">
+                            <button type="button" class="btn btn-primary voice-btn" id="toggleVoiceBtn">
                                 <i class="fas fa-microphone"></i>
-                                Naciśnij i mów
+                                Rozpocznij rozmowę
                             </button>
                             <div class="voice-status" id="voiceStatus">
-                                <span class="status-text">Gotowy do nagrywania</span>
+                                <span class="status-text">Kliknij aby rozpocząć rozmowę</span>
                                 <div class="voice-wave" id="voiceWave" style="display: none;">
                                     <div class="wave-bar"></div>
                                     <div class="wave-bar"></div>
@@ -657,13 +662,9 @@ function setupLiveChatEventListeners() {
     }
     
     // Przycisk głosowy
-    const startVoiceBtn = document.getElementById('startVoiceBtn');
-    if (startVoiceBtn) {
-        startVoiceBtn.addEventListener('mousedown', startVoiceRecording);
-        startVoiceBtn.addEventListener('mouseup', stopVoiceRecording);
-        startVoiceBtn.addEventListener('mouseleave', stopVoiceRecording);
-        startVoiceBtn.addEventListener('touchstart', startVoiceRecording);
-        startVoiceBtn.addEventListener('touchend', stopVoiceRecording);
+    const toggleVoiceBtn = document.getElementById('toggleVoiceBtn');
+    if (toggleVoiceBtn) {
+        toggleVoiceBtn.addEventListener('click', toggleVoiceRecording);
     }
     
     // Input tekstowy
@@ -687,8 +688,12 @@ function setupLiveChatEventListeners() {
 let recognition = null;
 let isRecording = false;
 let speechSynthesis = window.speechSynthesis;
+let isContinuousMode = false;
+let silenceTimer = null;
+let lastSpeechTime = 0;
+let isProcessingResponse = false;
 
-// Inicjalizacja rozpoznawania mowy
+// Inicjalizacja rozpoznawania mowy dla trybu ciągłego
 function initSpeechRecognition() {
     if ('webkitSpeechRecognition' in window) {
         recognition = new webkitSpeechRecognition();
@@ -699,91 +704,149 @@ function initSpeechRecognition() {
         return false;
     }
     
-    recognition.continuous = false;
-    recognition.interimResults = false;
+    // Konfiguracja dla trybu ciągłego
+    recognition.continuous = true;
+    recognition.interimResults = true;
     recognition.lang = 'pl-PL';
+    recognition.maxAlternatives = 1;
+    
+    let finalTranscript = '';
+    let interimTranscript = '';
     
     recognition.onstart = function() {
-        console.log('🎤 Rozpoczęto rozpoznawanie mowy');
+        console.log('🎤 Rozpoczęto ciągłe rozpoznawanie mowy');
         isRecording = true;
+        isContinuousMode = true;
         updateVoiceUI(true);
     };
     
     recognition.onresult = function(event) {
-        const transcript = event.results[0][0].transcript;
-        console.log('🗣️ Rozpoznano tekst:', transcript);
-        sendMessageToChatGPT(transcript);
+        finalTranscript = '';
+        interimTranscript = '';
+        
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            const transcript = event.results[i][0].transcript;
+            
+            if (event.results[i].isFinal) {
+                finalTranscript += transcript;
+                lastSpeechTime = Date.now();
+                
+                // Resetuj timer ciszy
+                clearTimeout(silenceTimer);
+                
+                // Ustaw nowy timer ciszy (2 sekundy po zakończeniu mówienia)
+                silenceTimer = setTimeout(() => {
+                    if (finalTranscript.trim() && !isProcessingResponse) {
+                        console.log('🗣️ Wykryto ciszę - wysyłam: ', finalTranscript.trim());
+                        sendMessageToChatGPT(finalTranscript.trim());
+                        finalTranscript = '';
+                    }
+                }, 2000);
+                
+            } else {
+                interimTranscript += transcript;
+                updateInterimTranscript(interimTranscript);
+            }
+        }
     };
     
     recognition.onerror = function(event) {
         console.error('❌ Błąd rozpoznawania mowy:', event.error);
-        isRecording = false;
-        updateVoiceUI(false);
-        showToast('Błąd rozpoznawania mowy: ' + event.error, 'error');
+        
+        // Automatycznie restart w trybie ciągłym (chyba że użytkownik zatrzymał)
+        if (isContinuousMode && event.error !== 'aborted') {
+            setTimeout(() => {
+                if (isContinuousMode) {
+                    console.log('🔄 Automatyczny restart rozpoznawania...');
+                    startContinuousRecording();
+                }
+            }, 1000);
+        }
     };
     
     recognition.onend = function() {
         console.log('🎤 Zakończono rozpoznawanie mowy');
-        isRecording = false;
-        updateVoiceUI(false);
+        
+        // Automatycznie restart w trybie ciągłym
+        if (isContinuousMode) {
+            setTimeout(() => {
+                if (isContinuousMode) {
+                    console.log('🔄 Restart ciągłego rozpoznawania...');
+                    startContinuousRecording();
+                }
+            }, 100);
+        } else {
+            isRecording = false;
+            updateVoiceUI(false);
+        }
     };
     
     return true;
 }
 
-// Rozpoczęcie nagrywania głosu
-function startVoiceRecording() {
+// Rozpoczęcie ciągłego nagrywania
+function startContinuousRecording() {
     if (!recognition && !initSpeechRecognition()) {
         showToast('Rozpoznawanie mowy nie jest obsługiwane', 'error');
         return;
     }
     
-    if (isRecording) return;
-    
     try {
         recognition.start();
     } catch (error) {
-        console.error('❌ Błąd rozpoczynania nagrywania:', error);
-        showToast('Błąd rozpoczynania nagrywania', 'error');
+        console.error('❌ Błąd rozpoczynania ciągłego nagrywania:', error);
+        // Spróbuj ponownie po krótkiej przerwie
+        setTimeout(() => {
+            if (isContinuousMode) {
+                startContinuousRecording();
+            }
+        }, 500);
     }
 }
 
-// Zatrzymanie nagrywania głosu
-function stopVoiceRecording() {
-    if (recognition && isRecording) {
+// Zatrzymanie ciągłego nagrywania
+function stopContinuousRecording() {
+    console.log('🛑 Zatrzymuję ciągłe nagrywanie...');
+    isContinuousMode = false;
+    clearTimeout(silenceTimer);
+    
+    if (recognition) {
         recognition.stop();
     }
+    
+    isRecording = false;
+    updateVoiceUI(false);
 }
 
-// Aktualizacja UI dla głosu
-function updateVoiceUI(recording) {
-    const voiceBtn = document.getElementById('startVoiceBtn');
-    const voiceStatus = document.getElementById('voiceStatus');
-    const voiceWave = document.getElementById('voiceWave');
-    const statusText = voiceStatus.querySelector('.status-text');
-    
-    if (recording) {
-        voiceBtn.classList.add('recording');
-        voiceBtn.innerHTML = '<i class="fas fa-stop"></i> Mówię...';
-        statusText.textContent = 'Słucham...';
-        voiceWave.style.display = 'flex';
-    } else {
-        voiceBtn.classList.remove('recording');
-        voiceBtn.innerHTML = '<i class="fas fa-microphone"></i> Naciśnij i mów';
-        statusText.textContent = 'Gotowy do nagrywania';
-        voiceWave.style.display = 'none';
+// Aktualizacja tymczasowego tekstu
+function updateInterimTranscript(transcript) {
+    const interimDiv = document.getElementById('interimTranscript');
+    if (interimDiv && transcript.trim()) {
+        interimDiv.textContent = transcript;
+        interimDiv.style.display = 'block';
+    } else if (interimDiv) {
+        interimDiv.style.display = 'none';
     }
 }
 
-// Wysyłanie wiadomości tekstowej
-function sendTextMessage() {
-    const chatTextInput = document.getElementById('chatTextInput');
-    const message = chatTextInput.value.trim();
+// Aktualizacja UI dla trybu ciągłego
+function updateVoiceUI(recording) {
+    const voiceBtn = document.getElementById('toggleVoiceBtn');
+    const voiceStatus = document.getElementById('voiceStatus');
+    const voiceWave = document.getElementById('voiceWave');
+    const statusText = voiceStatus?.querySelector('.status-text');
     
-    if (!message) return;
-    
-    chatTextInput.value = '';
-    sendMessageToChatGPT(message);
+    if (recording && isContinuousMode) {
+        voiceBtn.classList.add('recording');
+        voiceBtn.innerHTML = '<i class="fas fa-microphone-slash"></i> Zatrzymaj rozmowę';
+        if (statusText) statusText.textContent = 'Słucham... mów normalnie';
+        if (voiceWave) voiceWave.style.display = 'flex';
+    } else {
+        voiceBtn.classList.remove('recording');
+        voiceBtn.innerHTML = '<i class="fas fa-microphone"></i> Rozpocznij rozmowę';
+        if (statusText) statusText.textContent = 'Kliknij aby rozpocząć rozmowę';
+        if (voiceWave) voiceWave.style.display = 'none';
+    }
 }
 
 // Główna funkcja wysyłania wiadomości do ChatGPT
@@ -796,8 +859,14 @@ async function sendMessageToChatGPT(message) {
     }
     
     try {
+        // Oznacz że przetwarzamy odpowiedź
+        isProcessingResponse = true;
+        
         // Dodaj wiadomość użytkownika do UI
         addMessageToChat('user', message);
+        
+        // Ukryj tymczasowy transkrypt
+        updateInterimTranscript('');
         
         // Pokaż loader
         showChatLoader();
@@ -831,6 +900,9 @@ async function sendMessageToChatGPT(message) {
         // Ukryj loader
         hideChatLoader();
         
+        // Oznacz że skończyliśmy przetwarzać odpowiedź
+        isProcessingResponse = false;
+        
         // Dodaj odpowiedź AI do UI
         addMessageToChat('ai', chatData.response);
         
@@ -844,10 +916,15 @@ async function sendMessageToChatGPT(message) {
         speakText(chatData.response);
         
     } catch (error) {
-        console.error('❌ Błąd komunikacji z ChatGPT:', error);
+        console.error('❌ Błąd wysyłania wiadomości:', error);
+        
+        // Ukryj loader
         hideChatLoader();
-        addMessageToChat('error', 'Błąd komunikacji z ChatGPT: ' + error.message);
-        showToast('Błąd ChatGPT: ' + error.message, 'error');
+        
+        // Oznacz że skończyliśmy przetwarzać odpowiedź
+        isProcessingResponse = false;
+        
+        showToast('Błąd komunikacji z ChatGPT', 'error');
     }
 }
 
@@ -1062,6 +1139,27 @@ function updateRecordingTime() {
     if (recordingTime) {
         recordingTime.textContent = timeString;
     }
+}
+
+// Przełączanie trybu głosowego
+function toggleVoiceRecording() {
+    if (isContinuousMode) {
+        stopContinuousRecording();
+    } else {
+        startContinuousRecording();
+    }
+}
+
+// Wysyłanie wiadomości tekstowej
+function sendTextMessage() {
+    const chatTextInput = document.getElementById('chatTextInput');
+    const message = chatTextInput.value.trim();
+    if (!message) return;
+    
+    chatTextInput.value = '';
+    // Ukryj tymczasowy transkrypt
+    updateInterimTranscript('');
+    sendMessageToChatGPT(message);
 }
 
 // ... existing code ... 

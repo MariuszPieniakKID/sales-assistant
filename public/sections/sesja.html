@@ -536,6 +536,37 @@
     line-height: 1.5;
 }
 
+/* Interim transcript styles */
+.interim-transcript {
+    padding: 12px 20px;
+    background: #fef3c7;
+    border: 1px solid #f59e0b;
+    border-radius: 8px;
+    margin: 10px 20px;
+    font-style: italic;
+    color: #92400e;
+    font-size: 14px;
+    animation: fadeIn 0.3s ease-out;
+    position: relative;
+}
+
+.interim-transcript::before {
+    content: "🎤 Słucham: ";
+    font-weight: 600;
+    color: #78350f;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-5px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
 /* Typing indicator */
 .typing-indicator {
     display: flex;
