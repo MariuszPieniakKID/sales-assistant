@@ -272,6 +272,17 @@ async function startSession() {
         console.log('🖥️ Pokazuję interfejs live chatu...');
         showLiveChatInterface();
         
+        // Wyczyść panel sugestii
+        const suggestionsContent = document.getElementById('suggestionsContent');
+        if (suggestionsContent) {
+            suggestionsContent.innerHTML = `
+                <div class="suggestion-item initial">
+                    <i class="fas fa-info-circle"></i>
+                    <span>Rozpocznij rozmowę z klientem. AI będzie analizował i podpowiadał w czasie rzeczywistym.</span>
+                </div>
+            `;
+        }
+        
         // Rozpocznij timer
         console.log('⏰ Rozpoczynam timer...');
         startRecordingTimer();
@@ -812,13 +823,13 @@ function initSpeechRecognition() {
                 // Resetuj timer ciszy
                 clearTimeout(silenceTimer);
                 
-                // Ustaw timer ciszy (1.5 sekundy)
+                // Ustaw timer ciszy (1 sekunda dla szybszej reakcji)
                 silenceTimer = setTimeout(() => {
                     if (currentTranscript.trim()) {
                         processSpeech(currentTranscript.trim());
                         currentTranscript = '';
                     }
-                }, 1500);
+                }, 1000);
                 
             } else {
                 interimTranscript += transcript;
@@ -901,7 +912,7 @@ async function analyzeConversationInRealTime() {
         
         // Przygotuj kontekst z ostatnich wypowiedzi
         const recentTranscripts = currentSession.conversationHistory
-            .slice(-10)
+            .slice(-15)
             .filter(msg => msg.role === 'speech')
             .map(msg => msg.content)
             .join(' ');
@@ -922,11 +933,13 @@ PAMIĘTAJ:
 - Skup się na tym co TERAZ jest ważne
 - Nie powtarzaj wcześniejszych sugestii
 - Reaguj na zmiany w rozmowie
+- ZAWSZE dawaj konkretne sugestie
 
 Format odpowiedzi:
 [KTO MÓWI]: handlowiec/klient
 [INTENCJA]: co się dzieje
-[SUGESTIA]: co zrobić TERAZ`;
+[SUGESTIA]: co zrobić TERAZ
+[SUGESTIA 2]: dodatkowa wskazówka (opcjonalnie)`;
         
         // Wyślij do AI
         const response = await fetchWithAuth('/api/chat/message', {
@@ -965,10 +978,10 @@ Format odpowiedzi:
         // Wyświetl sugestie
         displayRealtimeSuggestions(fullResponse);
         
-        // Opóźnienie przed następną analizą (3 sekundy)
+        // Opóźnienie przed następną analizą (1 sekunda zamiast 3)
         setTimeout(() => {
             isProcessingResponse = false;
-        }, 3000);
+        }, 1000);
         
     } catch (error) {
         console.error('❌ Błąd analizy real-time:', error);
@@ -1016,7 +1029,7 @@ function displayRealtimeSuggestions(analysis) {
     
     // Usuń stare sugestie jeśli jest ich za dużo
     const allSuggestions = suggestionsContent.querySelectorAll('.suggestion-item');
-    if (allSuggestions.length > 5) {
+    if (allSuggestions.length > 10) {
         allSuggestions[0].remove();
     }
     
