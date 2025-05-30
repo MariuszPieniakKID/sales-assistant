@@ -808,10 +808,20 @@ app.get('/api/admin/all-meetings', requireAuth, requireAdmin, async (req, res) =
 });
 
 // Start serwera
-app.listen(PORT, async () => {
-  console.log(`🚀 Serwer aplikacji doradców handlowych działa na porcie ${PORT}`);
-  console.log(`🌐 Otwórz http://localhost:${PORT} w przeglądarce`);
-  
-  // Test połączenia z bazą danych Neon
-  await testNeonConnection();
-}); 
+if (process.env.NODE_ENV !== 'production') {
+  // Tryb rozwojowy - uruchom normalnie
+  app.listen(PORT, async () => {
+    console.log(`🚀 Serwer aplikacji doradców handlowych działa na porcie ${PORT}`);
+    console.log(`🌐 Otwórz http://localhost:${PORT} w przeglądarce`);
+    
+    // Test połączenia z bazą danych Neon
+    await testNeonConnection();
+  });
+} else {
+  // Produkcja - Vercel
+  console.log('🚀 Sales Assistant App initialized for Vercel');
+  testNeonConnection().catch(console.error);
+}
+
+// Export dla Vercel
+module.exports = app; 
