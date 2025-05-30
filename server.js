@@ -265,9 +265,9 @@ app.post('/api/login', async (req, res) => {
     }
 
     try {
-        // Sprawdzenie czy użytkownik istnieje - POPRAWNA KOLUMNA!
+        // Sprawdzenie czy użytkownik istnieje - POPRAWKA: bez kolumny role!
         const userResult = await safeQuery(
-            'SELECT id, email, password_hash, first_name, last_name, role FROM users WHERE email = $1',
+            'SELECT id, email, password_hash, first_name, last_name FROM users WHERE email = $1',
             [email]
         );
 
@@ -282,8 +282,7 @@ app.post('/api/login', async (req, res) => {
         const user = userResult.rows[0];
         console.log('👤 Znaleziony użytkownik:', { 
             id: user.id, 
-            email: user.email, 
-            role: user.role 
+            email: user.email
         });
 
         // Sprawdzenie hasła z bcrypt
@@ -297,18 +296,16 @@ app.post('/api/login', async (req, res) => {
             });
         }
 
-        // Ustawienie sesji - POPRAWNE NAZWY!
-        req.session.userID = user.id; // WAŻNE: userID (duże D)
+        // Ustawienie sesji - bez role
+        req.session.userID = user.id; 
         req.session.userEmail = user.email;
         req.session.userFirstName = user.first_name;
         req.session.userLastName = user.last_name;
-        req.session.userRole = user.role;
 
         console.log('✅ Logowanie udane - sesja ustawiona:', {
             sessionID: req.session.id,
             userID: req.session.userID,
-            userEmail: req.session.userEmail,
-            userRole: req.session.userRole
+            userEmail: req.session.userEmail
         });
 
         // Wymuś zapisanie sesji
@@ -329,8 +326,7 @@ app.post('/api/login', async (req, res) => {
                     id: user.id,
                     email: user.email,
                     firstName: user.first_name,
-                    lastName: user.last_name,
-                    role: user.role
+                    lastName: user.last_name
                 }
             });
         });
@@ -350,15 +346,13 @@ app.get('/dashboard', requireAuth, async (req, res) => {
     console.log('📍 Request: GET /dashboard');
     console.log('🔍 Dashboard access for user:', {
         userID: req.session.userID,
-        userEmail: req.session.userEmail,
-        userRole: req.session.userRole
+        userEmail: req.session.userEmail
     });
     
     try {
         // Pobierz podstawowe informacje o użytkowniku
-        const pool = getNeonPool();
-        const userResult = await pool.query(
-            'SELECT id, email, first_name, last_name, role FROM users WHERE id = $1',
+        const userResult = await safeQuery(
+            'SELECT id, email, first_name, last_name FROM users WHERE id = $1',
             [req.session.userID]
         );
 
@@ -383,9 +377,8 @@ app.get('/api/user', requireAuth, async (req, res) => {
     console.log('📍 Request: GET /api/user');
     
     try {
-        const pool = getNeonPool();
-        const result = await pool.query(
-            'SELECT id, email, first_name, last_name, role FROM users WHERE id = $1',
+        const result = await safeQuery(
+            'SELECT id, email, first_name, last_name FROM users WHERE id = $1',
             [req.session.userID]
         );
 
@@ -403,8 +396,7 @@ app.get('/api/user', requireAuth, async (req, res) => {
                 id: user.id,
                 email: user.email,
                 firstName: user.first_name,
-                lastName: user.last_name,
-                role: user.role
+                lastName: user.last_name
             }
         });
     } catch (error) {
