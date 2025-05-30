@@ -133,8 +133,10 @@ if (process.env.NODE_ENV !== 'production') {
         res.json({
             session: req.session,
             sessionID: req.sessionID,
-            user: req.session?.user || null,
-            isAuthenticated: !!req.session?.user,
+            userId: req.session?.userId || null,
+            userFirstName: req.session?.userFirstName || null,
+            userLastName: req.session?.userLastName || null,
+            isAuthenticated: !!req.session?.userId,
             timestamp: new Date().toISOString()
         });
     });
@@ -145,9 +147,10 @@ app.use((req, res, next) => {
     if (req.url.includes('/api/') && req.session) {
         console.log(`🔍 Session Debug [${req.method} ${req.url}]:`, {
             sessionID: req.sessionID?.substring(0, 8),
-            userID: req.session.user?.id,
-            userEmail: req.session.user?.email,
-            hasUser: !!req.session.user
+            userID: req.session.userId,
+            userFirstName: req.session.userFirstName,
+            userLastName: req.session.userLastName,
+            hasUser: !!req.session.userId
         });
     }
     next();
