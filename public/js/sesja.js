@@ -10,6 +10,9 @@ let products = [];
 let currentSession = null;
 let recordingTimer = null;
 let recordingStartTime = null;
+let isRecording = false;
+let recognition = null;
+let isProcessingResponse = false;
 
 // Elementy DOM
 console.log('🔍 Szukanie elementów DOM...');
@@ -374,7 +377,13 @@ function updateRecordingTime() {
         String(minutes).padStart(2, '0') + ':' +
         String(seconds).padStart(2, '0');
     
-    // Aktualizuj timer w live chat interface
+    // Aktualizuj timer w nowym interfejsie
+    const sessionTimer = document.getElementById('sessionTimer');
+    if (sessionTimer) {
+        sessionTimer.textContent = timeString;
+    }
+    
+    // Aktualizuj timer w live chat interface (fallback)
     const liveChatTimer = document.getElementById('liveChatTimer');
     if (liveChatTimer) {
         liveChatTimer.textContent = timeString;
@@ -590,137 +599,75 @@ function showLiveChatInterface() {
         const selectedClient = clients.find(c => c.id == currentSession.clientId);
         const selectedProduct = products.find(p => p.id == currentSession.productId);
         
-        // Nowy interfejs skupiony na sugestiach AI
+        // NOWY PROSTY INTERFEJS - TYLKO SUGESTIE AI
         const liveChatHTML = `
-            <div class="ai-assistant-interface" id="liveChatInterface">
-                <!-- Header z informacjami o sesji -->
-                <div class="session-header">
+            <div class="ai-suggestions-interface">
+                <!-- Kompaktowy header -->
+                <div class="compact-header">
                     <div class="session-info">
-                        <div class="session-title">
-                            <i class="fas fa-robot"></i>
-                            <h2>Asystent Sprzedażowy AI</h2>
-                            <div class="session-status-badge">
-                                <i class="fas fa-circle"></i>
-                                <span>Aktywny</span>
-                            </div>
-                        </div>
-                        <div class="session-details">
-                            <div class="detail-card">
-                                <i class="fas fa-user"></i>
-                                <div class="detail-content">
-                                    <span class="detail-label">Klient</span>
-                                    <span class="detail-value">${selectedClient ? selectedClient.name : 'Nieznany klient'}</span>
-                                </div>
-                            </div>
-                            <div class="detail-card">
-                                <i class="fas fa-box"></i>
-                                <div class="detail-content">
-                                    <span class="detail-label">Produkt</span>
-                                    <span class="detail-value">${selectedProduct ? selectedProduct.name : 'Nieznany produkt'}</span>
-                                </div>
-                            </div>
-                            <div class="detail-card">
-                                <i class="fas fa-clock"></i>
-                                <div class="detail-content">
-                                    <span class="detail-label">Czas trwania</span>
-                                    <span class="detail-value" id="liveChatTimer">00:00:00</span>
-                                </div>
-                            </div>
-                        </div>
+                        <h1>🤖 AI Asystent Sprzedażowy</h1>
+                        <p>Klient: <strong>${selectedClient ? selectedClient.name : 'Nieznany'}</strong> | 
+                           Produkt: <strong>${selectedProduct ? selectedProduct.name : 'Nieznany'}</strong> | 
+                           Czas: <span id="sessionTimer">00:00:00</span></p>
                     </div>
-                    <div class="session-controls">
-                        <button type="button" class="btn btn-danger btn-large" id="endChatBtn">
-                            <i class="fas fa-phone-slash"></i>
-                            Zakończ sesję
-                        </button>
-                    </div>
+                    <button class="end-session-btn" id="endSessionBtn">
+                        Zakończ sesję
+                    </button>
                 </div>
                 
-                <!-- Główny panel sugestii AI -->
-                <div class="ai-suggestions-main">
-                    <div class="suggestions-header">
-                        <div class="header-content">
-                            <div class="header-title">
-                                <i class="fas fa-lightbulb"></i>
-                                <h3>Sugestie AI w czasie rzeczywistym</h3>
-                            </div>
-                            <div class="ai-status">
-                                <div class="ai-indicator">
-                                    <div class="pulse-dot"></div>
-                                    <span>AI analizuje rozmowę</span>
-                                </div>
-                            </div>
+                <!-- GŁÓWNY PANEL SUGESTII -->
+                <div class="ai-suggestions-panel">
+                    <div class="suggestions-title">
+                        <h2>💡 Sugestie AI w czasie rzeczywistym</h2>
+                        <div class="ai-status" id="aiStatus">
+                            <span class="status-dot"></span>
+                            <span>Oczekuje na rozpoczęcie</span>
                         </div>
                     </div>
                     
-                    <div class="suggestions-container" id="suggestionsContainer">
-                        <div class="welcome-message">
-                            <div class="welcome-icon">
-                                <i class="fas fa-handshake"></i>
-                            </div>
-                            <h4>Witaj w asystencie sprzedażowym!</h4>
-                            <p>Kliknij przycisk poniżej, aby rozpocząć nasłuchiwanie rozmowy. AI będzie analizować konwersację i podpowiadać Ci najlepsze strategie sprzedażowe w czasie rzeczywistym.</p>
+                    <div class="suggestions-area" id="suggestionsArea">
+                        <!-- Wiadomość startowa -->
+                        <div class="start-message">
+                            <div class="start-icon">🎯</div>
+                            <h3>Gotowy do pomocy!</h3>
+                            <p>Kliknij przycisk poniżej aby rozpocząć analizę rozmowy.<br>
+                               AI będzie podpowiadać Ci najlepsze strategie sprzedażowe.</p>
                             
-                            <div class="starter-tips">
-                                <div class="tip-card">
-                                    <i class="fas fa-comments"></i>
-                                    <div class="tip-content">
-                                        <h5>Rozpocznij od budowania relacji</h5>
-                                        <p>Zadaj pytania o potrzeby i wyzwania klienta</p>
-                                    </div>
+                            <div class="quick-tips">
+                                <div class="tip">
+                                    <span class="tip-icon">🤝</span>
+                                    <span>Buduj relację z klientem</span>
                                 </div>
-                                <div class="tip-card">
-                                    <i class="fas fa-search"></i>
-                                    <div class="tip-content">
-                                        <h5>Odkryj prawdziwe potrzeby</h5>
-                                        <p>Słuchaj aktywnie i zadawaj pytania uzupełniające</p>
-                                    </div>
+                                <div class="tip">
+                                    <span class="tip-icon">🔍</span>
+                                    <span>Odkryj prawdziwe potrzeby</span>
                                 </div>
-                                <div class="tip-card">
-                                    <i class="fas fa-bullseye"></i>
-                                    <div class="tip-content">
-                                        <h5>Dopasuj rozwiązanie</h5>
-                                        <p>Pokaż jak produkt rozwiązuje konkretne problemy</p>
-                                    </div>
+                                <div class="tip">
+                                    <span class="tip-icon">💎</span>
+                                    <span>Dopasuj rozwiązanie</span>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
                 
-                <!-- Tymczasowy transkrypt (mały) -->
-                <div class="current-speech" id="currentSpeech" style="display: none;">
-                    <div class="speech-indicator">
-                        <i class="fas fa-microphone"></i>
-                        <span>Słucham:</span>
-                    </div>
-                    <div class="speech-text" id="speechText">...</div>
-                </div>
-                
-                <!-- Kontrolki na dole -->
-                <div class="control-panel">
-                    <div class="main-control">
-                        <button type="button" class="btn-ai-listening" id="toggleListeningBtn">
-                            <div class="btn-content">
-                                <i class="fas fa-microphone"></i>
-                                <div class="btn-text">
-                                    <span class="btn-title">Rozpocznij analizę AI</span>
-                                    <span class="btn-subtitle">Kliknij aby AI zaczął słuchać i podpowiadać</span>
-                                </div>
-                            </div>
-                        </button>
-                        
-                        <div class="listening-status" id="listeningStatus">
-                            <div class="status-content">
-                                <span class="status-text">Gotowy do rozpoczęcia analizy</span>
-                                <div class="sound-waves" id="soundWaves" style="display: none;">
-                                    <div class="wave"></div>
-                                    <div class="wave"></div>
-                                    <div class="wave"></div>
-                                    <div class="wave"></div>
-                                </div>
-                            </div>
+                <!-- DUŻY PRZYCISK START -->
+                <div class="start-control">
+                    <button class="start-ai-btn" id="startAiBtn">
+                        <span class="btn-icon">🎤</span>
+                        <div class="btn-text">
+                            <div class="btn-title">Rozpocznij analizę AI</div>
+                            <div class="btn-subtitle">Kliknij aby AI zaczął słuchać i doradzać</div>
                         </div>
+                    </button>
+                    
+                    <div class="listening-indicator" id="listeningIndicator" style="display: none;">
+                        <div class="sound-waves">
+                            <span class="wave"></span>
+                            <span class="wave"></span>
+                            <span class="wave"></span>
+                        </div>
+                        <span class="listening-text">AI słucha i analizuje rozmowę...</span>
                     </div>
                 </div>
             </div>
@@ -732,8 +679,8 @@ function showLiveChatInterface() {
             sessionContent.insertAdjacentHTML('beforeend', liveChatHTML);
         }
         
-        // Konfiguruj event listenery dla live chatu
-        setupLiveChatEventListeners();
+        // Konfiguruj event listenery
+        setupSimpleEventListeners();
         
         console.log('✅ showLiveChatInterface() - zakończone pomyślnie');
         
@@ -743,60 +690,37 @@ function showLiveChatInterface() {
     }
 }
 
-// Konfiguracja event listenerów dla live chatu
-function setupLiveChatEventListeners() {
-    console.log('🔧 Konfiguracja event listenerów live chatu...');
+// Proste event listenery
+function setupSimpleEventListeners() {
+    console.log('🔧 Konfiguracja prostych event listenerów...');
     
     // Przycisk zakończ sesję
-    const endChatBtn = document.getElementById('endChatBtn');
-    if (endChatBtn) {
-        endChatBtn.addEventListener('click', endLiveChat);
+    const endSessionBtn = document.getElementById('endSessionBtn');
+    if (endSessionBtn) {
+        endSessionBtn.addEventListener('click', endLiveChat);
     }
     
-    // Przycisk nasłuchiwania
-    const toggleListeningBtn = document.getElementById('toggleListeningBtn');
-    const voiceStatus = document.getElementById('voiceStatus');
-    
-    if (toggleListeningBtn) {
-        toggleListeningBtn.addEventListener('click', toggleListening);
+    // Przycisk start AI
+    const startAiBtn = document.getElementById('startAiBtn');
+    if (startAiBtn) {
+        startAiBtn.addEventListener('click', toggleAIListening);
     }
     
-    // Input tekstowy (ukryty, tylko do testów)
-    const chatTextInput = document.getElementById('chatTextInput');
-    const sendTextBtn = document.getElementById('sendTextBtn');
-    
-    if (chatTextInput && sendTextBtn) {
-        chatTextInput.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                sendTextMessage();
-            }
-        });
-        
-        sendTextBtn.addEventListener('click', sendTextMessage);
-    }
-    
-    console.log('✅ Event listenery live chatu skonfigurowane');
+    console.log('✅ Proste event listenery skonfigurowane');
 }
 
-// Zmienne dla rozpoznawania mowy
-let recognition = null;
-let isRecording = false;
-let conversationBuffer = ''; // Bufor ostatnich wypowiedzi do analizy
-let silenceTimer = null;
-let isProcessingResponse = false;
-
-// Funkcja rozpoczęcia/zatrzymania nasłuchiwania
-function toggleListening() {
+// Toggle AI słuchania
+function toggleAIListening() {
     if (isRecording) {
-        stopListening();
+        stopAIListening();
     } else {
-        startListening();
+        startAIListening();
     }
 }
 
-// Rozpoczęcie nasłuchiwania całej rozmowy
-function startListening() {
-    console.log('🎤 Rozpoczynam nasłuchiwanie rozmowy...');
+// Start AI słuchania
+function startAIListening() {
+    console.log('🎤 Rozpoczynam AI słuchanie...');
     
     if (!recognition && !initSpeechRecognition()) {
         showToast('Rozpoznawanie mowy nie jest obsługiwane', 'error');
@@ -806,289 +730,104 @@ function startListening() {
     try {
         recognition.start();
         isRecording = true;
-        updateListeningUI(true);
+        updateAIUI(true);
     } catch (error) {
-        console.error('❌ Błąd rozpoczynania nasłuchiwania:', error);
+        console.error('❌ Błąd rozpoczynania AI słuchania:', error);
     }
 }
 
-// Zatrzymanie nasłuchiwania
-function stopListening() {
-    console.log('🛑 Zatrzymuję nasłuchiwanie');
+// Stop AI słuchania
+function stopAIListening() {
+    console.log('🛑 Zatrzymuję AI słuchanie');
     
     if (recognition) {
         recognition.stop();
     }
     
     isRecording = false;
-    updateListeningUI(false);
+    updateAIUI(false);
 }
 
-// Aktualizacja UI nasłuchiwania
-function updateListeningUI(listening) {
-    const toggleBtn = document.getElementById('toggleListeningBtn');
-    const statusText = document.querySelector('.status-text');
-    const soundWaves = document.getElementById('soundWaves');
-    const aiIndicator = document.querySelector('.ai-indicator');
+// Update AI UI
+function updateAIUI(listening) {
+    const startBtn = document.getElementById('startAiBtn');
+    const listeningIndicator = document.getElementById('listeningIndicator');
+    const aiStatus = document.getElementById('aiStatus');
+    const statusDot = aiStatus?.querySelector('.status-dot');
     
     if (listening) {
-        toggleBtn?.classList.add('recording');
+        // Przycisk
+        if (startBtn) {
+            startBtn.classList.add('recording');
+            const btnTitle = startBtn.querySelector('.btn-title');
+            const btnSubtitle = startBtn.querySelector('.btn-subtitle');
+            if (btnTitle) btnTitle.textContent = 'Zatrzymaj analizę AI';
+            if (btnSubtitle) btnSubtitle.textContent = 'AI aktywnie analizuje rozmowę';
+        }
         
-        // Aktualizuj tekst przycisku
-        const btnTitle = toggleBtn?.querySelector('.btn-title');
-        const btnSubtitle = toggleBtn?.querySelector('.btn-subtitle');
-        if (btnTitle) btnTitle.textContent = 'Zakończ analizę AI';
-        if (btnSubtitle) btnSubtitle.textContent = 'AI aktywnie analizuje rozmowę';
+        // Indicator
+        if (listeningIndicator) {
+            listeningIndicator.style.display = 'flex';
+        }
         
-        // Aktualizuj status
-        if (statusText) statusText.textContent = '🤖 AI analizuje rozmowę w czasie rzeczywistym';
-        if (soundWaves) soundWaves.style.display = 'flex';
-        if (aiIndicator) aiIndicator.classList.add('active');
+        // Status
+        if (aiStatus) {
+            aiStatus.classList.add('active');
+            const statusText = aiStatus.querySelector('span:last-child');
+            if (statusText) statusText.textContent = 'AI aktywny - analizuje';
+        }
+        
+        // Usuń start message
+        const startMessage = document.querySelector('.start-message');
+        if (startMessage) {
+            startMessage.style.display = 'none';
+        }
+        
     } else {
-        toggleBtn?.classList.remove('recording');
+        // Przycisk
+        if (startBtn) {
+            startBtn.classList.remove('recording');
+            const btnTitle = startBtn.querySelector('.btn-title');
+            const btnSubtitle = startBtn.querySelector('.btn-subtitle');
+            if (btnTitle) btnTitle.textContent = 'Rozpocznij analizę AI';
+            if (btnSubtitle) btnSubtitle.textContent = 'Kliknij aby AI zaczął słuchać i doradzać';
+        }
         
-        // Przywróć oryginalny tekst
-        const btnTitle = toggleBtn?.querySelector('.btn-title');
-        const btnSubtitle = toggleBtn?.querySelector('.btn-subtitle');
-        if (btnTitle) btnTitle.textContent = 'Rozpocznij analizę AI';
-        if (btnSubtitle) btnSubtitle.textContent = 'Kliknij aby AI zaczął słuchać i podpowiadać';
+        // Indicator
+        if (listeningIndicator) {
+            listeningIndicator.style.display = 'none';
+        }
         
-        // Przywróć status
-        if (statusText) statusText.textContent = 'Gotowy do rozpoczęcia analizy';
-        if (soundWaves) soundWaves.style.display = 'none';
-        if (aiIndicator) aiIndicator.classList.remove('active');
+        // Status
+        if (aiStatus) {
+            aiStatus.classList.remove('active');
+            const statusText = aiStatus.querySelector('span:last-child');
+            if (statusText) statusText.textContent = 'Oczekuje na rozpoczęcie';
+        }
     }
 }
 
-// Inicjalizacja rozpoznawania mowy z obsługą mówcy
-function initSpeechRecognition() {
-    if ('webkitSpeechRecognition' in window) {
-        recognition = new webkitSpeechRecognition();
-    } else if ('SpeechRecognition' in window) {
-        recognition = new SpeechRecognition();
-    } else {
-        console.warn('⚠️ Rozpoznawanie mowy nie jest obsługiwane');
-        return false;
-    }
-    
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = 'pl-PL';
-    recognition.maxAlternatives = 1;
-    
-    let currentTranscript = '';
-    
-    recognition.onstart = function() {
-        console.log('🎤 Rozpoczęto nagrywanie');
-        isRecording = true;
-    };
-    
-    recognition.onresult = function(event) {
-        let interimTranscript = '';
-        currentTranscript = '';
-        
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-            const transcript = event.results[i][0].transcript;
-            
-            if (event.results[i].isFinal) {
-                currentTranscript += transcript + ' ';
-                
-                // Resetuj timer ciszy
-                clearTimeout(silenceTimer);
-                
-                // Ustaw timer ciszy (1 sekunda dla szybszej reakcji)
-                silenceTimer = setTimeout(() => {
-                    if (currentTranscript.trim()) {
-                        processSpeech(currentTranscript.trim());
-                        currentTranscript = '';
-                    }
-                }, 1000);
-                
-            } else {
-                interimTranscript += transcript;
-            }
-        }
-        
-        // Aktualizuj tymczasowy tekst
-        if (interimTranscript || currentTranscript) {
-            updateInterimTranscript(interimTranscript || currentTranscript);
-        }
-    };
-    
-    recognition.onerror = function(event) {
-        console.error('❌ Błąd rozpoznawania:', event.error);
-        if (event.error !== 'aborted') {
-            stopListening();
-        }
-    };
-    
-    recognition.onend = function() {
-        console.log('🎤 Zakończono rozpoznawanie');
-        if (isRecording) {
-            // Restart jeśli nadal słuchamy
-            setTimeout(() => {
-                if (isRecording) {
-                    recognition.start();
-                }
-            }, 100);
-        }
-    };
-    
-    return true;
-}
-
-// Przetwarzanie wypowiedzi w czasie rzeczywistym
-function processSpeech(transcript) {
-    console.log('💬 Nowa wypowiedź:', transcript);
-    
-    // Dodaj do bufora konwersacji
-    conversationBuffer += transcript + '. ';
-    
-    // Zachowaj tylko ostatnie ~200 słów w buforze
-    const words = conversationBuffer.split(' ');
-    if (words.length > 200) {
-        conversationBuffer = words.slice(-150).join(' ');
-    }
-    
-    // Dodaj do historii sesji (ale nie wyświetlaj w UI)
-    if (currentSession) {
-        currentSession.conversationHistory.push({
-            role: 'speech',
-            content: transcript,
-            timestamp: new Date()
-        });
-    }
-    
-    // Analizuj rozmowę w tle - to jest najważniejsze!
-    analyzeConversationInRealTime();
-}
-
-// Analiza rozmowy w czasie rzeczywistym
-async function analyzeConversationInRealTime() {
-    console.log('🤖 Analizuję rozmowę w czasie rzeczywistym...');
-    
-    if (!currentSession || !currentSession.chatContext) {
-        return;
-    }
-    
-    // Nie analizuj jeśli już przetwarzamy
-    if (isProcessingResponse) {
-        console.log('⏳ Już analizuję, pomijam...');
-        return;
-    }
-    
-    try {
-        isProcessingResponse = true;
-        
-        // Przygotuj kontekst z ostatnich wypowiedzi
-        const recentTranscripts = currentSession.conversationHistory
-            .slice(-15)
-            .filter(msg => msg.role === 'speech')
-            .map(msg => msg.content)
-            .join(' ');
-        
-        // Specjalny prompt dla analizy real-time
-        const realtimePrompt = `${currentSession.chatContext.systemPrompt}
-
-TRANSKRYPCJA ROZMOWY W TOKU:
-"${recentTranscripts}"
-
-TWOJE ZADANIE:
-1. Rozpoznaj kto mówi (handlowiec vs klient) na podstawie kontekstu
-2. Zidentyfikuj najważniejsze elementy rozmowy
-3. Daj mi NATYCHMIASTOWE wskazówki co powinienem teraz zrobić/powiedzieć
-
-PAMIĘTAJ:
-- Odpowiadaj BARDZO KRÓTKO (max 2-3 wskazówki)
-- Skup się na tym co TERAZ jest ważne
-- Nie powtarzaj wcześniejszych sugestii
-- Reaguj na zmiany w rozmowie
-- ZAWSZE dawaj konkretne sugestie
-
-Format odpowiedzi:
-[KTO MÓWI]: handlowiec/klient
-[INTENCJA]: co się dzieje
-[SUGESTIA]: co zrobić TERAZ
-[SUGESTIA 2]: dodatkowa wskazówka (opcjonalnie)`;
-        
-        // Wyślij do AI
-        const response = await fetchWithAuth('/api/chat/message', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                message: realtimePrompt,
-                systemPrompt: 'Jesteś ekspertem od sprzedaży słuchającym rozmowy na żywo. Analizuj i doradzaj KRÓTKO.',
-                conversationHistory: []
-            })
-        });
-        
-        if (!response || !response.ok) {
-            console.error('❌ Błąd analizy AI');
-            isProcessingResponse = false;
-            return;
-        }
-        
-        // Odbierz sugestie
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let fullResponse = '';
-        
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            
-            const chunk = decoder.decode(value, { stream: true });
-            fullResponse += chunk;
-        }
-        
-        console.log('💡 Analiza real-time:', fullResponse);
-        
-        // Wyświetl sugestie
-        displayRealtimeSuggestions(fullResponse);
-        
-        // Opóźnienie przed następną analizą (1 sekunda zamiast 3)
-        setTimeout(() => {
-            isProcessingResponse = false;
-        }, 1000);
-        
-    } catch (error) {
-        console.error('❌ Błąd analizy real-time:', error);
-        isProcessingResponse = false;
-    }
-}
-
-// Wyświetlanie sugestii real-time w nowym układzie
-function displayRealtimeSuggestions(analysis) {
-    const suggestionsContainer = document.getElementById('suggestionsContainer');
-    if (!suggestionsContainer) return;
-    
-    // Usuń welcome message przy pierwszej sugestii
-    const welcomeMessage = suggestionsContainer.querySelector('.welcome-message');
-    if (welcomeMessage) {
-        welcomeMessage.style.display = 'none';
-    }
+// Wyświetlanie sugestii AI - NOWA FUNKCJA
+function displayAISuggestions(analysis) {
+    const suggestionsArea = document.getElementById('suggestionsArea');
+    if (!suggestionsArea) return;
     
     // Parsuj analizę
     const lines = analysis.split('\n').filter(line => line.trim());
     let speaker = '';
-    let intention = '';
     let suggestions = [];
     
     lines.forEach(line => {
         if (line.includes('[KTO MÓWI]:')) {
             speaker = line.split(':')[1]?.trim();
-        } else if (line.includes('[INTENCJA]:')) {
-            intention = line.split(':')[1]?.trim();
         } else if (line.includes('[SUGESTIA')) {
             suggestions.push(line.split(':')[1]?.trim());
         }
     });
     
-    // Utwórz nową kartę sugestii
+    // Utwórz kartę sugestii
     const suggestionCard = document.createElement('div');
-    suggestionCard.className = 'ai-suggestion-card new';
+    suggestionCard.className = 'suggestion-card';
     
     const timestamp = new Date().toLocaleTimeString('pl-PL', { 
         hour: '2-digit', 
@@ -1096,71 +835,46 @@ function displayRealtimeSuggestions(analysis) {
         second: '2-digit'
     });
     
-    // Określ typ sugestii na podstawie mówcy
-    const cardType = speaker === 'klient' ? 'client-speaking' : 'seller-speaking';
-    const cardIcon = speaker === 'klient' ? 'fas fa-user' : 'fas fa-user-tie';
-    const cardColor = speaker === 'klient' ? 'blue' : 'green';
+    const speakerIcon = speaker === 'klient' ? '👤' : '🎯';
+    const speakerText = speaker === 'klient' ? 'Klient mówi' : 'Twoja kolej';
+    const cardClass = speaker === 'klient' ? 'client-turn' : 'seller-turn';
     
     suggestionCard.innerHTML = `
-        <div class="suggestion-header">
-            <div class="speaker-info ${cardColor}">
-                <i class="${cardIcon}"></i>
-                <span>${speaker === 'klient' ? 'Klient mówi' : 'Ty mówisz'}</span>
+        <div class="card-header ${cardClass}">
+            <div class="speaker-badge">
+                <span class="speaker-icon">${speakerIcon}</span>
+                <span class="speaker-text">${speakerText}</span>
             </div>
-            <div class="suggestion-time">${timestamp}</div>
+            <div class="card-time">${timestamp}</div>
         </div>
-        
-        ${intention ? `
-        <div class="situation-context">
-            <i class="fas fa-info-circle"></i>
-            <span>${intention}</span>
-        </div>
-        ` : ''}
         
         <div class="suggestions-list">
             ${suggestions.map(suggestion => `
                 <div class="suggestion-item">
-                    <i class="fas fa-lightbulb"></i>
-                    <span>${suggestion}</span>
+                    <span class="suggestion-icon">💡</span>
+                    <span class="suggestion-text">${suggestion}</span>
                 </div>
             `).join('')}
         </div>
     `;
     
-    // Usuń stare sugestie jeśli jest ich za dużo (pozostaw ostatnie 8)
-    const allCards = suggestionsContainer.querySelectorAll('.ai-suggestion-card');
-    if (allCards.length >= 8) {
-        for (let i = 0; i < allCards.length - 7; i++) {
+    // Usuń stare karty jeśli jest ich za dużo
+    const allCards = suggestionsArea.querySelectorAll('.suggestion-card');
+    if (allCards.length >= 6) {
+        for (let i = 0; i < allCards.length - 5; i++) {
             allCards[i].remove();
         }
     }
     
-    suggestionsContainer.appendChild(suggestionCard);
+    suggestionsArea.appendChild(suggestionCard);
     
     // Auto-scroll
-    suggestionsContainer.scrollTop = suggestionsContainer.scrollHeight;
+    suggestionsArea.scrollTop = suggestionsArea.scrollHeight;
     
     // Animacja wejścia
     setTimeout(() => {
         suggestionCard.classList.add('visible');
     }, 100);
-}
-
-// Aktualizacja tymczasowego tekstu (nowy mały widget)
-function updateInterimTranscript(transcript) {
-    const currentSpeech = document.getElementById('currentSpeech');
-    const speechText = document.getElementById('speechText');
-    
-    if (currentSpeech && speechText && transcript.trim()) {
-        speechText.textContent = transcript;
-        currentSpeech.style.display = 'flex';
-        
-        // Auto-hide po 3 sekundach bez aktualizacji
-        clearTimeout(currentSpeech.hideTimer);
-        currentSpeech.hideTimer = setTimeout(() => {
-            currentSpeech.style.display = 'none';
-        }, 3000);
-    }
 }
 
 // Zakończenie live chatu
@@ -1492,4 +1206,189 @@ function sendTextMessage() {
     
     // Dodaj jako wypowiedź do rozmowy
     processSpeech(message);
+}
+
+// Analiza rozmowy w czasie rzeczywistym
+async function analyzeConversationInRealTime() {
+    console.log('🤖 Analizuję rozmowę w czasie rzeczywistym...');
+    
+    if (!currentSession || !currentSession.chatContext) {
+        return;
+    }
+    
+    // Nie analizuj jeśli już przetwarzamy
+    if (isProcessingResponse) {
+        console.log('⏳ Już analizuję, pomijam...');
+        return;
+    }
+    
+    try {
+        isProcessingResponse = true;
+        
+        // Przygotuj kontekst z ostatnich wypowiedzi
+        const recentTranscripts = currentSession.conversationHistory
+            .slice(-15)
+            .filter(msg => msg.role === 'speech')
+            .map(msg => msg.content)
+            .join(' ');
+        
+        // Specjalny prompt dla analizy real-time
+        const realtimePrompt = `${currentSession.chatContext.systemPrompt}
+
+TRANSKRYPCJA ROZMOWY W TOKU:
+"${recentTranscripts}"
+
+TWOJE ZADANIE:
+1. Rozpoznaj kto mówi (handlowiec vs klient) na podstawie kontekstu
+2. Zidentyfikuj najważniejsze elementy rozmowy
+3. Daj mi NATYCHMIASTOWE wskazówki co powinienem teraz zrobić/powiedzieć
+
+PAMIĘTAJ:
+- Odpowiadaj BARDZO KRÓTKO (max 2-3 wskazówki)
+- Skup się na tym co TERAZ jest ważne
+- Nie powtarzaj wcześniejszych sugestii
+- Reaguj na zmiany w rozmowie
+- ZAWSZE dawaj konkretne sugestie
+
+Format odpowiedzi:
+[KTO MÓWI]: handlowiec/klient
+[SUGESTIA]: co zrobić TERAZ
+[SUGESTIA 2]: dodatkowa wskazówka (opcjonalnie)`;
+        
+        // Wyślij do AI
+        const response = await fetchWithAuth('/api/chat/message', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                message: realtimePrompt,
+                systemPrompt: 'Jesteś ekspertem od sprzedaży słuchającym rozmowy na żywo. Analizuj i doradzaj KRÓTKO.',
+                conversationHistory: []
+            })
+        });
+        
+        if (!response || !response.ok) {
+            console.error('❌ Błąd analizy AI');
+            isProcessingResponse = false;
+            return;
+        }
+        
+        // Odbierz sugestie
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let fullResponse = '';
+        
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            
+            const chunk = decoder.decode(value, { stream: true });
+            fullResponse += chunk;
+        }
+        
+        console.log('💡 Analiza real-time:', fullResponse);
+        
+        // Wyświetl sugestie używając nowej funkcji
+        displayAISuggestions(fullResponse);
+        
+        // Opóźnienie przed następną analizą
+        setTimeout(() => {
+            isProcessingResponse = false;
+        }, 1000);
+        
+    } catch (error) {
+        console.error('❌ Błąd analizy real-time:', error);
+        isProcessingResponse = false;
+    }
+}
+
+// Inicjalizacja rozpoznawania mowy
+function initSpeechRecognition() {
+    if ('webkitSpeechRecognition' in window) {
+        recognition = new webkitSpeechRecognition();
+    } else if ('SpeechRecognition' in window) {
+        recognition = new SpeechRecognition();
+    } else {
+        console.warn('⚠️ Rozpoznawanie mowy nie jest obsługiwane');
+        return false;
+    }
+    
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'pl-PL';
+    recognition.maxAlternatives = 1;
+    
+    let currentTranscript = '';
+    let silenceTimer = null;
+    
+    recognition.onstart = function() {
+        console.log('🎤 Rozpoczęto nagrywanie');
+        isRecording = true;
+    };
+    
+    recognition.onresult = function(event) {
+        let interimTranscript = '';
+        currentTranscript = '';
+        
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            const transcript = event.results[i][0].transcript;
+            
+            if (event.results[i].isFinal) {
+                currentTranscript += transcript + ' ';
+                
+                // Resetuj timer ciszy
+                clearTimeout(silenceTimer);
+                
+                // Ustaw timer ciszy (1 sekunda dla szybszej reakcji)
+                silenceTimer = setTimeout(() => {
+                    if (currentTranscript.trim()) {
+                        processSpeech(currentTranscript.trim());
+                        currentTranscript = '';
+                    }
+                }, 1000);
+                
+            } else {
+                interimTranscript += transcript;
+            }
+        }
+    };
+    
+    recognition.onerror = function(event) {
+        console.error('❌ Błąd rozpoznawania:', event.error);
+        if (event.error !== 'aborted') {
+            stopAIListening();
+        }
+    };
+    
+    recognition.onend = function() {
+        console.log('🎤 Zakończono rozpoznawanie');
+        if (isRecording) {
+            // Restart jeśli nadal słuchamy
+            setTimeout(() => {
+                if (isRecording) {
+                    recognition.start();
+                }
+            }, 100);
+        }
+    };
+    
+    return true;
+}
+
+// Przetwarzanie wypowiedzi
+function processSpeech(transcript) {
+    console.log('💬 Nowa wypowiedź:', transcript);
+    
+    // Dodaj do historii sesji
+    if (currentSession) {
+        currentSession.conversationHistory.push({
+            role: 'speech',
+            content: transcript,
+            timestamp: new Date()
+        });
+    }
+    
+    // Analizuj rozmowę w tle
+    analyzeConversationInRealTime();
 } 
