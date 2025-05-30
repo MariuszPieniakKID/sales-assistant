@@ -590,7 +590,7 @@ function showLiveChatInterface() {
         const selectedClient = clients.find(c => c.id == currentSession.clientId);
         const selectedProduct = products.find(p => p.id == currentSession.productId);
         
-        // Utwórz interfejs live chatu
+        // Utwórz interfejs live chatu z lepszym layoutem
         const liveChatHTML = `
             <div class="live-chat-interface" id="liveChatInterface">
                 <div class="chat-header">
@@ -613,56 +613,69 @@ function showLiveChatInterface() {
                     </div>
                 </div>
                 
-                <div class="chat-content">
-                    <div class="chat-messages" id="chatMessages">
-                        <div class="system-message">
-                            <i class="fas fa-robot"></i>
-                            <p>Witaj! Jestem Twoim asystentem sprzedażowym. Będę podpowiadać Ci w czasie rzeczywistym podczas rozmowy z klientem <strong>${selectedClient ? selectedClient.name : 'Nieznany'}</strong> na temat produktu <strong>${selectedProduct ? selectedProduct.name : 'Nieznany'}</strong>. Zacznij rozmowę!</p>
+                <!-- Główna zawartość - podział na 2 kolumny -->
+                <div class="chat-main-content">
+                    <!-- Lewa kolumna - rozmowa -->
+                    <div class="conversation-column">
+                        <div class="conversation-header">
+                            <h4><i class="fas fa-comments"></i> Transkrypcja rozmowy</h4>
                         </div>
-                    </div>
-                    
-                    <!-- Panel sugestii asystenta -->
-                    <div class="suggestions-panel" id="suggestionsPanel">
-                        <div class="suggestions-header">
-                            <i class="fas fa-lightbulb"></i>
-                            <span>Sugestie asystenta</span>
-                        </div>
-                        <div class="suggestions-content" id="suggestionsContent">
-                            <div class="suggestion-item initial">
-                                <i class="fas fa-info-circle"></i>
-                                <span>Zacznij od poznania potrzeb klienta...</span>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Tymczasowy transkrypt -->
-                    <div class="interim-transcript" id="interimTranscript" style="display: none;">
-                        <!-- Tekst tymczasowy będzie tutaj -->
-                    </div>
-                    
-                    <div class="chat-input-section">
-                        <div class="voice-controls">
-                            <button type="button" class="btn btn-primary voice-btn" id="toggleListeningBtn">
-                                <i class="fas fa-microphone"></i>
-                                Rozpocznij nasłuchiwanie rozmowy
-                            </button>
-                            <div class="voice-status" id="voiceStatus">
-                                <span class="status-text">Kliknij aby rozpocząć nasłuchiwanie</span>
-                                <div class="voice-wave" id="voiceWave" style="display: none;">
-                                    <div class="wave-bar"></div>
-                                    <div class="wave-bar"></div>
-                                    <div class="wave-bar"></div>
-                                    <div class="wave-bar"></div>
-                                    <div class="wave-bar"></div>
+                        
+                        <div class="chat-messages" id="chatMessages">
+                            <div class="system-message">
+                                <div class="message-content">
+                                    <p><i class="fas fa-robot"></i> Witaj! Jestem Twoim asystentem sprzedażowym. Będę podpowiadać Ci w czasie rzeczywistym podczas rozmowy z klientem <strong>${selectedClient ? selectedClient.name : 'Nieznany'}</strong> na temat produktu <strong>${selectedProduct ? selectedProduct.name : 'Nieznany'}</strong>. Zacznij rozmowę!</p>
                                 </div>
                             </div>
                         </div>
                         
-                        <div class="text-input-section" style="display: none;">
-                            <input type="text" id="chatTextInput" placeholder="Testowa wiadomość..." />
-                            <button type="button" class="btn btn-secondary" id="sendTextBtn">
-                                <i class="fas fa-paper-plane"></i>
-                            </button>
+                        <!-- Tymczasowy transkrypt -->
+                        <div class="interim-transcript" id="interimTranscript" style="display: none;">
+                            <!-- Tekst tymczasowy będzie tutaj -->
+                        </div>
+                    </div>
+                    
+                    <!-- Prawa kolumna - sugestie -->
+                    <div class="suggestions-column">
+                        <div class="suggestions-panel" id="suggestionsPanel">
+                            <div class="suggestions-header">
+                                <i class="fas fa-lightbulb"></i>
+                                <span>Sugestie asystenta AI</span>
+                            </div>
+                            <div class="suggestions-content" id="suggestionsContent">
+                                <div class="suggestion-item initial">
+                                    <i class="fas fa-info-circle"></i>
+                                    <span>Kliknij przycisk "Rozpocznij nasłuchiwanie" poniżej, aby AI zaczął analizować rozmowę i podpowiadać Ci w czasie rzeczywistym.</span>
+                                </div>
+                                <div class="suggestion-item initial">
+                                    <i class="fas fa-handshake"></i>
+                                    <span>Zacznij od ciepłego powitania i poznania potrzeb klienta.</span>
+                                </div>
+                                <div class="suggestion-item initial">
+                                    <i class="fas fa-questions"></i>
+                                    <span>Zadawaj otwarte pytania typu: "Co spowodowało, że szuka Pan tego produktu?"</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Kontrolki na dole -->
+                <div class="chat-input-section">
+                    <div class="voice-controls">
+                        <button type="button" class="btn btn-primary voice-btn btn-large" id="toggleListeningBtn">
+                            <i class="fas fa-microphone"></i>
+                            Rozpocznij nasłuchiwanie rozmowy
+                        </button>
+                        <div class="voice-status" id="voiceStatus">
+                            <span class="status-text">Kliknij aby rozpocząć nasłuchiwanie i analizę AI</span>
+                            <div class="voice-wave" id="voiceWave" style="display: none;">
+                                <div class="wave-bar"></div>
+                                <div class="wave-bar"></div>
+                                <div class="wave-bar"></div>
+                                <div class="wave-bar"></div>
+                                <div class="wave-bar"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
