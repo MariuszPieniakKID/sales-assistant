@@ -631,18 +631,12 @@ function showLiveChatInterface() {
                     
                     <div class="chat-input-section">
                         <div class="voice-controls">
-                            <div class="speaker-buttons">
-                                <button type="button" class="btn btn-client voice-btn" id="clientVoiceBtn">
-                                    <i class="fas fa-user"></i>
-                                    Słucham klienta
-                                </button>
-                                <button type="button" class="btn btn-seller voice-btn" id="sellerVoiceBtn">
-                                    <i class="fas fa-headset"></i>
-                                    Mówię ja
-                                </button>
-                            </div>
+                            <button type="button" class="btn btn-primary voice-btn" id="toggleListeningBtn">
+                                <i class="fas fa-microphone"></i>
+                                Rozpocznij nasłuchiwanie rozmowy
+                            </button>
                             <div class="voice-status" id="voiceStatus">
-                                <span class="status-text">Wybierz kto mówi</span>
+                                <span class="status-text">Kliknij aby rozpocząć nasłuchiwanie</span>
                                 <div class="voice-wave" id="voiceWave" style="display: none;">
                                     <div class="wave-bar"></div>
                                     <div class="wave-bar"></div>
@@ -691,20 +685,12 @@ function setupLiveChatEventListeners() {
         endChatBtn.addEventListener('click', endLiveChat);
     }
     
-    // Przyciski głosowe - NOWA LOGIKA
-    const clientVoiceBtn = document.getElementById('clientVoiceBtn');
-    const sellerVoiceBtn = document.getElementById('sellerVoiceBtn');
+    // Przycisk nasłuchiwania
+    const toggleListeningBtn = document.getElementById('toggleListeningBtn');
+    const voiceStatus = document.getElementById('voiceStatus');
     
-    if (clientVoiceBtn) {
-        clientVoiceBtn.addEventListener('click', () => {
-            startListening('client');
-        });
-    }
-    
-    if (sellerVoiceBtn) {
-        sellerVoiceBtn.addEventListener('click', () => {
-            startListening('seller');
-        });
+    if (toggleListeningBtn) {
+        toggleListeningBtn.addEventListener('click', toggleListening);
     }
     
     // Input tekstowy (ukryty, tylko do testów)
@@ -727,80 +713,71 @@ function setupLiveChatEventListeners() {
 // Zmienne dla rozpoznawania mowy
 let recognition = null;
 let isRecording = false;
-let speechSynthesis = window.speechSynthesis;
-let isContinuousMode = false;
+let conversationBuffer = ''; // Bufor ostatnich wypowiedzi do analizy
 let silenceTimer = null;
-let lastSpeechTime = 0;
 let isProcessingResponse = false;
-let currentSpeaker = null; // 'client' lub 'seller' - KTO TERAZ MÓWI
 
-// Nowa funkcja - rozpoczęcie słuchania z określeniem kto mówi
-function startListening(speaker) {
-    console.log(`🎤 Rozpoczynam słuchanie: ${speaker}`);
-    
-    // Jeśli już nagrywamy, zatrzymaj
-    if (isRecording && currentSpeaker !== speaker) {
+// Funkcja rozpoczęcia/zatrzymania nasłuchiwania
+function toggleListening() {
+    if (isRecording) {
         stopListening();
-    }
-    
-    currentSpeaker = speaker;
-    
-    // Zaktualizuj UI
-    updateVoiceUIForSpeaker(speaker);
-    
-    // Rozpocznij nagrywanie
-    if (!isRecording) {
-        initSpeechRecognitionForSpeaker();
-        startRecordingForSpeaker();
     } else {
-        // Zatrzymaj jeśli ten sam przycisk
-        stopListening();
+        startListening();
     }
 }
 
-// Zatrzymanie słuchania
+// Rozpoczęcie nasłuchiwania całej rozmowy
+function startListening() {
+    console.log('🎤 Rozpoczynam nasłuchiwanie rozmowy...');
+    
+    if (!recognition && !initSpeechRecognition()) {
+        showToast('Rozpoznawanie mowy nie jest obsługiwane', 'error');
+        return;
+    }
+    
+    try {
+        recognition.start();
+        isRecording = true;
+        updateListeningUI(true);
+    } catch (error) {
+        console.error('❌ Błąd rozpoczynania nasłuchiwania:', error);
+    }
+}
+
+// Zatrzymanie nasłuchiwania
 function stopListening() {
-    console.log('🛑 Zatrzymuję słuchanie');
+    console.log('🛑 Zatrzymuję nasłuchiwanie');
     
     if (recognition) {
         recognition.stop();
     }
     
     isRecording = false;
-    currentSpeaker = null;
-    
-    // Reset UI
-    updateVoiceUIForSpeaker(null);
+    updateListeningUI(false);
 }
 
-// Aktualizacja UI dla konkretnego mówcy
-function updateVoiceUIForSpeaker(speaker) {
-    const clientBtn = document.getElementById('clientVoiceBtn');
-    const sellerBtn = document.getElementById('sellerVoiceBtn');
+// Aktualizacja UI nasłuchiwania
+function updateListeningUI(listening) {
+    const toggleBtn = document.getElementById('toggleListeningBtn');
     const voiceStatus = document.getElementById('voiceStatus');
     const statusText = voiceStatus?.querySelector('.status-text');
     const voiceWave = document.getElementById('voiceWave');
     
-    // Reset wszystkich przycisków
-    clientBtn?.classList.remove('recording');
-    sellerBtn?.classList.remove('recording');
-    
-    if (speaker === 'client') {
-        clientBtn?.classList.add('recording');
-        if (statusText) statusText.textContent = '🎤 Słucham klienta...';
-        if (voiceWave) voiceWave.style.display = 'flex';
-    } else if (speaker === 'seller') {
-        sellerBtn?.classList.add('recording');
-        if (statusText) statusText.textContent = '🎤 Nagrywam Ciebie...';
+    if (listening) {
+        toggleBtn?.classList.add('recording');
+        toggleBtn.innerHTML = '<i class="fas fa-microphone-slash"></i> Zatrzymaj nasłuchiwanie';
+        if (statusText) statusText.textContent = '🎤 Nasłuchuję rozmowę...';
         if (voiceWave) voiceWave.style.display = 'flex';
     } else {
-        if (statusText) statusText.textContent = 'Wybierz kto mówi';
+        toggleBtn?.classList.remove('recording');
+        toggleBtn.innerHTML = '<i class="fas fa-microphone"></i> Rozpocznij nasłuchiwanie rozmowy';
+        if (statusText) statusText.textContent = 'Kliknij aby rozpocząć nasłuchiwanie';
         if (voiceWave) voiceWave.style.display = 'none';
     }
 }
 
 // Inicjalizacja rozpoznawania mowy z obsługą mówcy
-function initSpeechRecognitionForSpeaker() {
+function initSpeechRecognition() {
     if ('webkitSpeechRecognition' in window) {
         recognition = new webkitSpeechRecognition();
     } else if ('SpeechRecognition' in window) {
@@ -818,7 +795,7 @@ function initSpeechRecognitionForSpeaker() {
     let currentTranscript = '';
     
     recognition.onstart = function() {
-        console.log(`🎤 Rozpoczęto nagrywanie (${currentSpeaker})`);
+        console.log('🎤 Rozpoczęto nagrywanie');
         isRecording = true;
     };
     
@@ -863,10 +840,10 @@ function initSpeechRecognitionForSpeaker() {
     
     recognition.onend = function() {
         console.log('🎤 Zakończono rozpoznawanie');
-        if (isRecording && currentSpeaker) {
+        if (isRecording) {
             // Restart jeśli nadal słuchamy
             setTimeout(() => {
-                if (isRecording && currentSpeaker) {
+                if (isRecording) {
                     recognition.start();
                 }
             }, 100);
@@ -876,76 +853,80 @@ function initSpeechRecognitionForSpeaker() {
     return true;
 }
 
-// Rozpoczęcie nagrywania dla mówcy
-function startRecordingForSpeaker() {
-    if (!recognition && !initSpeechRecognitionForSpeaker()) {
-        showToast('Rozpoznawanie mowy nie jest obsługiwane', 'error');
-        return;
-    }
-    
-    try {
-        recognition.start();
-    } catch (error) {
-        console.error('❌ Błąd rozpoczynania nagrywania:', error);
-    }
-}
-
-// Przetwarzanie wypowiedzi w zależności od mówcy
+// Przetwarzanie wypowiedzi w czasie rzeczywistym
 function processSpeech(transcript) {
-    console.log(`💬 ${currentSpeaker}: ${transcript}`);
+    console.log('💬 Nowa wypowiedź:', transcript);
     
-    // Dodaj do historii konwersacji
-    const speaker = currentSpeaker === 'client' ? 'KLIENT' : 'JA';
-    const message = `${speaker}: ${transcript}`;
+    // Dodaj do bufora konwersacji
+    conversationBuffer += transcript + '. ';
     
-    // Dodaj do UI
-    addMessageToChat(currentSpeaker, message);
+    // Zachowaj tylko ostatnie ~200 słów w buforze
+    const words = conversationBuffer.split(' ');
+    if (words.length > 200) {
+        conversationBuffer = words.slice(-150).join(' ');
+    }
+    
+    // Dodaj do UI jako nieprzypisaną wypowiedź
+    addMessageToChat('conversation', transcript);
     
     // Dodaj do historii sesji
     if (currentSession) {
         currentSession.conversationHistory.push({
-            role: currentSpeaker,
-            content: transcript
+            role: 'speech',
+            content: transcript,
+            timestamp: new Date()
         });
     }
     
-    // Jeśli mówi KLIENT - wyślij do AI na analizę
-    if (currentSpeaker === 'client') {
-        analyzeClientSpeech(transcript);
-    }
+    // Analizuj rozmowę w tle
+    analyzeConversationInRealTime();
 }
 
-// Analiza wypowiedzi klienta przez AI
-async function analyzeClientSpeech(clientTranscript) {
-    console.log('🤖 Analizuję wypowiedź klienta:', clientTranscript);
+// Analiza rozmowy w czasie rzeczywistym
+async function analyzeConversationInRealTime() {
+    console.log('🤖 Analizuję rozmowę w czasie rzeczywistym...');
     
     if (!currentSession || !currentSession.chatContext) {
         return;
     }
     
+    // Nie analizuj jeśli już przetwarzamy
+    if (isProcessingResponse) {
+        console.log('⏳ Już analizuję, pomijam...');
+        return;
+    }
+    
     try {
-        // Przygotuj kontekst ostatnich wypowiedzi
-        const recentContext = currentSession.conversationHistory
-            .slice(-6)
-            .map(msg => `${msg.role === 'client' ? 'KLIENT' : 'SPRZEDAWCA'}: ${msg.content}`)
-            .join('\n');
+        isProcessingResponse = true;
         
-        // Specjalny prompt dla analizy
-        const analysisPrompt = `${currentSession.chatContext.systemPrompt}
+        // Przygotuj kontekst z ostatnich wypowiedzi
+        const recentTranscripts = currentSession.conversationHistory
+            .slice(-10)
+            .filter(msg => msg.role === 'speech')
+            .map(msg => msg.content)
+            .join(' ');
+        
+        // Specjalny prompt dla analizy real-time
+        const realtimePrompt = `${currentSession.chatContext.systemPrompt}
 
-OSTATNI KONTEKST ROZMOWY:
-${recentContext}
+TRANSKRYPCJA ROZMOWY W TOKU:
+"${recentTranscripts}"
 
-AKTUALNA WYPOWIEDŹ KLIENTA:
-"${clientTranscript}"
+TWOJE ZADANIE:
+1. Rozpoznaj kto mówi (handlowiec vs klient) na podstawie kontekstu
+2. Zidentyfikuj najważniejsze elementy rozmowy
+3. Daj mi NATYCHMIASTOWE wskazówki co powinienem teraz zrobić/powiedzieć
 
-ANALIZUJ WYPOWIEDŹ I DAJ MI KONKRETNE WSKAZÓWKI:
-- Jakie intencje ma klient?
-- Co powinienem teraz powiedzieć/zapytać?
-- Czy są jakieś sygnały kupna lub obiekcje?
-- Jaką strategię zastosować?
+PAMIĘTAJ:
+- Odpowiadaj BARDZO KRÓTKO (max 2-3 wskazówki)
+- Skup się na tym co TERAZ jest ważne
+- Nie powtarzaj wcześniejszych sugestii
+- Reaguj na zmiany w rozmowie
 
-Odpowiedz KRÓTKO i KONKRETNIE (max 3-4 sugestie).`;
+Format odpowiedzi:
+[KTO MÓWI]: handlowiec/klient
+[INTENCJA]: co się dzieje
+[SUGESTIA]: co zrobić TERAZ`;
         
         // Wyślij do AI
         const response = await fetchWithAuth('/api/chat/message', {
@@ -954,18 +935,19 @@ Odpowiedz KRÓTKO i KONKRETNIE (max 3-4 sugestie).`;
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                message: analysisPrompt,
-                systemPrompt: 'Jesteś ekspertem sprzedaży. Analizuj i doradzaj.',
+                message: realtimePrompt,
+                systemPrompt: 'Jesteś ekspertem od sprzedaży słuchającym rozmowy na żywo. Analizuj i doradzaj KRÓTKO.',
                 conversationHistory: []
             })
         });
         
         if (!response || !response.ok) {
             console.error('❌ Błąd analizy AI');
+            isProcessingResponse = false;
             return;
         }
         
-        // Odbierz i wyświetl sugestie
+        // Odbierz sugestie
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let fullResponse = '';
@@ -978,37 +960,75 @@ Odpowiedz KRÓTKO i KONKRETNIE (max 3-4 sugestie).`;
             fullResponse += chunk;
         }
         
-        console.log('💡 Sugestie AI:', fullResponse);
+        console.log('💡 Analiza real-time:', fullResponse);
         
-        // Wyświetl sugestie w panelu
-        displayAISuggestions(fullResponse);
+        // Wyświetl sugestie
+        displayRealtimeSuggestions(fullResponse);
+        
+        // Opóźnienie przed następną analizą (3 sekundy)
+        setTimeout(() => {
+            isProcessingResponse = false;
+        }, 3000);
         
     } catch (error) {
-        console.error('❌ Błąd analizy AI:', error);
+        console.error('❌ Błąd analizy real-time:', error);
+        isProcessingResponse = false;
     }
 }
 
-// Wyświetlanie sugestii AI w panelu
-function displayAISuggestions(suggestions) {
+// Wyświetlanie sugestii real-time
+function displayRealtimeSuggestions(analysis) {
     const suggestionsContent = document.getElementById('suggestionsContent');
     if (!suggestionsContent) return;
     
-    // Usuń stare sugestie
-    suggestionsContent.innerHTML = '';
+    // Parsuj analizę
+    const lines = analysis.split('\n').filter(line => line.trim());
+    let speaker = '';
+    let suggestions = [];
     
-    // Dodaj nowe sugestie
+    lines.forEach(line => {
+        if (line.includes('[KTO MÓWI]:')) {
+            speaker = line.split(':')[1]?.trim();
+        } else if (line.includes('[SUGESTIA]:') || line.includes('[INTENCJA]:')) {
+            suggestions.push(line);
+        }
+    });
+    
+    // Utwórz nową sugestię
     const suggestionDiv = document.createElement('div');
-    suggestionDiv.className = 'suggestion-item ai-analysis';
+    suggestionDiv.className = 'suggestion-item realtime';
+    
+    const timestamp = new Date().toLocaleTimeString('pl-PL', { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        second: '2-digit'
+    });
+    
     suggestionDiv.innerHTML = `
+        <div class="suggestion-header">
+            <span class="suggestion-time">${timestamp}</span>
+            ${speaker ? `<span class="speaker-label">${speaker}</span>` : ''}
+        </div>
         <div class="suggestion-content">
-            ${suggestions.replace(/\n/g, '<br>')}
+            ${suggestions.join('<br>')}
         </div>
     `;
+    
+    // Usuń stare sugestie jeśli jest ich za dużo
+    const allSuggestions = suggestionsContent.querySelectorAll('.suggestion-item');
+    if (allSuggestions.length > 5) {
+        allSuggestions[0].remove();
+    }
     
     suggestionsContent.appendChild(suggestionDiv);
     
     // Auto-scroll
     suggestionsContent.scrollTop = suggestionsContent.scrollHeight;
+    
+    // Animacja
+    setTimeout(() => {
+        suggestionDiv.classList.add('visible');
+    }, 10);
 }
 
 // Zakończenie live chatu
@@ -1095,7 +1115,6 @@ async function endLiveChat() {
         currentSession = null;
         recordingStartTime = null;
         isRecording = false;
-        isContinuousMode = false;
         recognition = null;
         
         // Waliduj formularz
@@ -1136,12 +1155,15 @@ function addMessageToChat(type, message) {
         minute: '2-digit' 
     });
     
+    // Dla typu conversation nie dodajemy prefiksu
+    const displayMessage = type === 'conversation' ? message : message;
+    
     messageDiv.innerHTML = `
         <div class="message-header">
             <span class="message-time">${timestamp}</span>
         </div>
         <div class="message-content">
-            <p>${message}</p>
+            <p>${displayMessage}</p>
         </div>
     `;
     
@@ -1378,8 +1400,6 @@ function sendTextMessage() {
     
     chatTextInput.value = '';
     
-    // Symuluj że to mówi sprzedawca
-    currentSpeaker = 'seller';
+    // Dodaj jako wypowiedź do rozmowy
     processSpeech(message);
-    currentSpeaker = null;
 } 

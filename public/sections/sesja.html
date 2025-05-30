@@ -908,6 +908,15 @@
     margin-left: 60px;
 }
 
+/* Conversation message - dla nieprzypisanych wypowiedzi */
+.conversation-message .message-content {
+    background: #f3f4f6;
+    border: 1px solid #d1d5db;
+    color: #374151;
+    margin: 0 20px;
+    font-style: italic;
+}
+
 /* Panel sugestii - lepszy styl */
 .suggestion-item.ai-analysis {
     background: #fef3c7;
@@ -925,6 +934,62 @@
 
 .suggestion-content strong {
     color: #78350f;
+    font-weight: 600;
+}
+
+/* Real-time suggestions */
+.suggestion-item.realtime {
+    background: white;
+    border: 1px solid #e5e7eb;
+    padding: 12px;
+    margin: 8px;
+    border-radius: 8px;
+    opacity: 0;
+    transform: translateY(-10px);
+    transition: all 0.3s ease;
+}
+
+.suggestion-item.realtime.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.suggestion-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    font-size: 12px;
+    color: #6b7280;
+}
+
+.suggestion-time {
+    font-weight: 500;
+}
+
+.speaker-label {
+    background: #dbeafe;
+    color: #1e40af;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 11px;
+}
+
+.speaker-label:contains("klient") {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.suggestion-content {
+    color: #1f2937;
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+.suggestion-content strong {
+    color: #111827;
     font-weight: 600;
 }
 
