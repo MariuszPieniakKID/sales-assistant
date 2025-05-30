@@ -14,8 +14,35 @@ const startSessionBtn = document.getElementById('startSessionBtn');
 const sessionStatus = document.getElementById('sessionStatus');
 const recentSessionsList = document.getElementById('recentSessionsList');
 
+// Funkcja pomocnicza do fetch z automatycznym sprawdzaniem sesji
+async function fetchWithAuth(url, options = {}) {
+    try {
+        const response = await fetch(url, options);
+        
+        // Sprawdź czy odpowiedź wskazuje na wygasłą sesję
+        if (response.status === 401) {
+            console.log('❌ API zwróciło 401 - sesja wygasła w sesja.js');
+            window.location.href = '/login';
+            return null;
+        }
+        
+        // Dodatkowe sprawdzenie - czy nie dostaliśmy HTML przekierowania
+        if (response.ok && response.url.includes('/login')) {
+            console.log('❌ Otrzymano przekierowanie do /login przez URL w sesja.js');
+            window.location.href = '/login';
+            return null;
+        }
+        
+        return response;
+    } catch (error) {
+        console.error('❌ Błąd fetchWithAuth w sesja.js:', error);
+        throw error;
+    }
+}
+
 // Inicjalizacja
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('🎬 Inicjalizacja sekcji sesja...');
     loadClients();
     loadProducts();
     loadRecentSessions();
@@ -39,17 +66,24 @@ function setupEventListeners() {
 // Ładowanie klientów
 async function loadClients() {
     try {
-        const response = await fetch('/api/clients');
+        console.log('📥 Ładowanie klientów...');
+        const response = await fetchWithAuth('/api/clients');
+        
+        if (!response) {
+            // fetchWithAuth już obsłużył przekierowanie
+            return;
+        }
         
         if (!response.ok) {
             throw new Error('Błąd pobierania klientów');
         }
         
         clients = await response.json();
+        console.log('✅ Załadowano klientów:', clients.length);
         populateClientSelect();
         
     } catch (error) {
-        console.error('Błąd ładowania klientów:', error);
+        console.error('❌ Błąd ładowania klientów:', error);
         showToast('Błąd ładowania klientów', 'error');
     }
 }
@@ -57,17 +91,24 @@ async function loadClients() {
 // Ładowanie produktów
 async function loadProducts() {
     try {
-        const response = await fetch('/api/products');
+        console.log('📥 Ładowanie produktów...');
+        const response = await fetchWithAuth('/api/products');
+        
+        if (!response) {
+            // fetchWithAuth już obsłużył przekierowanie
+            return;
+        }
         
         if (!response.ok) {
             throw new Error('Błąd pobierania produktów');
         }
         
         products = await response.json();
+        console.log('✅ Załadowano produktów:', products.length);
         populateProductSelect();
         
     } catch (error) {
-        console.error('Błąd ładowania produktów:', error);
+        console.error('❌ Błąd ładowania produktów:', error);
         showToast('Błąd ładowania produktów', 'error');
     }
 }

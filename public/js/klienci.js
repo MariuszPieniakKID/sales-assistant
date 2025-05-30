@@ -23,6 +23,30 @@
     const saveBtn = document.getElementById('saveBtn');
     const saveAssignBtn = document.getElementById('saveAssignBtn');
 
+    // Funkcja pomocnicza do fetch z automatycznym sprawdzaniem sesji
+    async function fetchWithAuth(url, options = {}) {
+        try {
+            const response = await fetch(url, options);
+            
+            if (response.status === 401) {
+                console.log('❌ API zwróciło 401 - sesja wygasła w klienci.js');
+                window.location.href = '/login';
+                return null;
+            }
+            
+            if (response.ok && response.url.includes('/login')) {
+                console.log('❌ Otrzymano przekierowanie do /login w klienci.js');
+                window.location.href = '/login';
+                return null;
+            }
+            
+            return response;
+        } catch (error) {
+            console.error('❌ Błąd fetchWithAuth w klienci.js:', error);
+            throw error;
+        }
+    }
+
     // Inicjalizacja
     init();
 
@@ -59,27 +83,43 @@
 
     async function loadClients() {
         try {
-            const response = await fetch('/api/clients');
+            console.log('📥 Ładowanie klientów w klienci.js...');
+            const response = await fetchWithAuth('/api/clients');
+            
+            if (!response) {
+                // fetchWithAuth już obsłużył przekierowanie
+                return;
+            }
+            
             if (response.ok) {
                 clients = await response.json();
+                console.log('✅ Załadowano klientów:', clients.length);
             } else {
-                console.error('Błąd ładowania klientów');
+                console.error('❌ Błąd ładowania klientów - HTTP', response.status);
             }
         } catch (error) {
-            console.error('Błąd ładowania klientów:', error);
+            console.error('❌ Błąd ładowania klientów:', error);
         }
     }
 
     async function loadProducts() {
         try {
-            const response = await fetch('/api/products');
+            console.log('📥 Ładowanie produktów w klienci.js...');
+            const response = await fetchWithAuth('/api/products');
+            
+            if (!response) {
+                // fetchWithAuth już obsłużył przekierowanie
+                return;
+            }
+            
             if (response.ok) {
                 products = await response.json();
+                console.log('✅ Załadowano produktów:', products.length);
             } else {
-                console.error('Błąd ładowania produktów');
+                console.error('❌ Błąd ładowania produktów - HTTP', response.status);
             }
         } catch (error) {
-            console.error('Błąd ładowania produktów:', error);
+            console.error('❌ Błąd ładowania produktów:', error);
         }
     }
 
