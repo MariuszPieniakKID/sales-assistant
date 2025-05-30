@@ -188,6 +188,36 @@ app.get('/api/user', requireAuth, (req, res) => {
   });
 });
 
+// Endpoint diagnostyczny dla Vercel
+app.get('/api/health', async (req, res) => {
+  try {
+    const client = await pool.connect();
+    const result = await client.query('SELECT COUNT(*) as user_count FROM users');
+    await client.release();
+    
+    res.json({
+      status: 'OK',
+      timestamp: new Date().toISOString(),
+      database: 'Connected',
+      userCount: result.rows[0].user_count,
+      environment: process.env.NODE_ENV,
+      hasSessionSecret: !!process.env.SESSION_SECRET,
+      hasDatabaseUrl: !!process.env.DATABASE_URL
+    });
+  } catch (err) {
+    console.error('Health check error:', err);
+    res.status(500).json({
+      status: 'ERROR',
+      timestamp: new Date().toISOString(),
+      database: 'Failed',
+      error: err.message,
+      environment: process.env.NODE_ENV,
+      hasSessionSecret: !!process.env.SESSION_SECRET,
+      hasDatabaseUrl: !!process.env.DATABASE_URL
+    });
+  }
+});
+
 // Wylogowanie
 app.post('/api/logout', (req, res) => {
   req.session.destroy((err) => {
