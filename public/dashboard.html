@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Asystent Sprzedaży - Dashboard</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="css/dashboard.css" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <i class="fas fa-headset"></i>
+                    <span class="logo-text">Asystent Sprzedaży</span>
+                </div>
+                <button class="sidebar-toggle" id="sidebarToggle">
+                    <i class="fas fa-bars"></i>
+                </button>
+            </div>
+            
+            <nav class="sidebar-nav">
+                <ul class="nav-list">
+                    <li class="nav-item">
+                        <a href="#" class="nav-link active" data-section="dashboard">
+                            <i class="fas fa-tachometer-alt"></i>
+                            <span class="nav-text">Dashboard</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="#" class="nav-link" data-section="produkty">
+                            <i class="fas fa-box"></i>
+                            <span class="nav-text">Produkty</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="#" class="nav-link" data-section="klienci">
+                            <i class="fas fa-users"></i>
+                            <span class="nav-text">Klienci</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="#" class="nav-link" data-section="spotkania">
+                            <i class="fas fa-calendar-alt"></i>
+                            <span class="nav-text">Spotkania</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="#" class="nav-link" data-section="profil">
+                            <i class="fas fa-user-cog"></i>
+                            <span class="nav-text">Edytuj Profil</span>
+                        </a>
+                    </li>
+                    <li class="nav-item admin-only" style="display: none;">
+                        <a href="#" class="nav-link" data-section="admin">
+                            <i class="fas fa-shield-alt"></i>
+                            <span class="nav-text">Panel Admina</span>
+                        </a>
+                    </li>
+                </ul>
+                
+                <div class="sidebar-bottom">
+                    <button class="start-session-btn" data-section="sesja">
+                        <i class="fas fa-play"></i>
+                        <span class="nav-text">Rozpocznij sesję</span>
+                    </button>
+                </div>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="app-header">
+                <div class="header-left">
+                    <button class="mobile-menu-toggle" id="mobileMenuToggle">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                    <h1 class="page-title" id="pageTitle">Dashboard</h1>
+                </div>
+                
+                <div class="header-right">
+                    <div class="user-info">
+                        <span class="welcome-text">Witaj <span id="userName">...</span></span>
+                        <button class="logout-btn" id="logoutBtn">
+                            <i class="fas fa-sign-out-alt"></i>
+                            <span class="logout-text">Wyloguj</span>
+                        </button>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Content Area -->
+            <div class="content-area" id="contentArea">
+                <div class="dashboard-overview">
+                    <div class="welcome-card">
+                        <div class="welcome-content">
+                            <h2>Witaj w Asystencie Sprzedaży!</h2>
+                            <p>Inteligentny system wspierający doradców handlowych w czasie rzeczywistym podczas spotkań sprzedażowych.</p>
+                        </div>
+                        <div class="welcome-image">
+                            <i class="fas fa-rocket"></i>
+                        </div>
+                    </div>
+                    
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-box"></i>
+                            </div>
+                            <div class="stat-content">
+                                <div class="stat-number" id="productsCount">0</div>
+                                <div class="stat-label">Produkty</div>
+                            </div>
+                        </div>
+                        
+                        <div class="stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-users"></i>
+                            </div>
+                            <div class="stat-content">
+                                <div class="stat-number" id="clientsCount">0</div>
+                                <div class="stat-label">Klienci</div>
+                            </div>
+                        </div>
+                        
+                        <div class="stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-calendar-alt"></i>
+                            </div>
+                            <div class="stat-content">
+                                <div class="stat-number" id="meetingsCount">0</div>
+                                <div class="stat-label">Spotkania</div>
+                            </div>
+                        </div>
+                        
+                        <div class="stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-chart-line"></i>
+                            </div>
+                            <div class="stat-content">
+                                <div class="stat-number">98%</div>
+                                <div class="stat-label">Skuteczność</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="quick-actions">
+                        <h3>Szybkie akcje</h3>
+                        <div class="action-buttons">
+                            <button class="action-btn" data-section="produkty">
+                                <i class="fas fa-plus"></i>
+                                <span>Dodaj produkt</span>
+                            </button>
+                            <button class="action-btn" data-section="klienci">
+                                <i class="fas fa-user-plus"></i>
+                                <span>Dodaj klienta</span>
+                            </button>
+                            <button class="action-btn start-session" data-section="sesja">
+                                <i class="fas fa-play"></i>
+                                <span>Rozpocznij sesję</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Mobile Overlay -->
+    <div class="mobile-overlay" id="mobileOverlay"></div>
+    
+    <script src="js/dashboard.js"></script>
+</body>
+</html>

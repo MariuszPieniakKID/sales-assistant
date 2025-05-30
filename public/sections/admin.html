@@ -1,0 +1,392 @@
+<div class="admin-panel">
+    <div class="admin-header">
+        <h2><i class="fas fa-shield-alt"></i> Panel Administratora</h2>
+        <p>Zarządzaj użytkownikami i danymi w systemie</p>
+    </div>
+
+    <div class="admin-tabs">
+        <button class="tab-button active" onclick="showTab('users')">
+            <i class="fas fa-users"></i> Użytkownicy
+        </button>
+        <button class="tab-button" onclick="showTab('products')">
+            <i class="fas fa-box"></i> Produkty
+        </button>
+        <button class="tab-button" onclick="showTab('clients')">
+            <i class="fas fa-building"></i> Klienci
+        </button>
+        <button class="tab-button" onclick="showTab('meetings')">
+            <i class="fas fa-calendar-alt"></i> Spotkania
+        </button>
+    </div>
+
+    <!-- Zakładka Użytkownicy -->
+    <div id="users-tab" class="tab-content active">
+        <div class="tab-header">
+            <h3>Zarządzanie użytkownikami</h3>
+            <button class="btn btn-primary" onclick="showAddUserModal()">
+                <i class="fas fa-plus"></i> Dodaj użytkownika
+            </button>
+        </div>
+        
+        <div class="data-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Imię</th>
+                        <th>Nazwisko</th>
+                        <th>Email</th>
+                        <th>Telefon</th>
+                        <th>Data rejestracji</th>
+                        <th>Akcje</th>
+                    </tr>
+                </thead>
+                <tbody id="users-tbody">
+                    <tr>
+                        <td colspan="7" style="text-align: center; padding: 20px;">
+                            Ładowanie użytkowników...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Zakładka Produkty -->
+    <div id="products-tab" class="tab-content">
+        <div class="tab-header">
+            <h3>Wszystkie produkty</h3>
+        </div>
+        
+        <div class="data-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Nazwa</th>
+                        <th>Właściciel</th>
+                        <th>Opis</th>
+                        <th>Data utworzenia</th>
+                    </tr>
+                </thead>
+                <tbody id="products-tbody">
+                    <tr>
+                        <td colspan="5" style="text-align: center; padding: 20px;">
+                            Ładowanie produktów...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Zakładka Klienci -->
+    <div id="clients-tab" class="tab-content">
+        <div class="tab-header">
+            <h3>Wszyscy klienci</h3>
+        </div>
+        
+        <div class="data-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Nazwa</th>
+                        <th>Opis</th>
+                        <th>Notatki AI</th>
+                        <th>Komentarz</th>
+                    </tr>
+                </thead>
+                <tbody id="clients-tbody">
+                    <tr>
+                        <td colspan="5" style="text-align: center; padding: 20px;">
+                            Ładowanie klientów...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Zakładka Spotkania -->
+    <div id="meetings-tab" class="tab-content">
+        <div class="tab-header">
+            <h3>Wszystkie spotkania</h3>
+        </div>
+        
+        <div class="data-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Klient</th>
+                        <th>Produkt</th>
+                        <th>Właściciel</th>
+                        <th>Data spotkania</th>
+                        <th>Akcje</th>
+                    </tr>
+                </thead>
+                <tbody id="meetings-tbody">
+                    <tr>
+                        <td colspan="6" style="text-align: center; padding: 20px;">
+                            Ładowanie spotkań...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal dodawania/edycji użytkownika -->
+<div id="user-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="user-modal-title">Dodaj użytkownika</h3>
+            <button class="modal-close" onclick="closeUserModal()">&times;</button>
+        </div>
+        <form id="user-form">
+            <div class="form-group">
+                <label for="user-firstname">Imię:</label>
+                <input type="text" id="user-firstname" required>
+            </div>
+            <div class="form-group">
+                <label for="user-lastname">Nazwisko:</label>
+                <input type="text" id="user-lastname" required>
+            </div>
+            <div class="form-group">
+                <label for="user-email">Email:</label>
+                <input type="email" id="user-email" required>
+            </div>
+            <div class="form-group">
+                <label for="user-phone">Telefon:</label>
+                <input type="text" id="user-phone">
+            </div>
+            <div class="form-group">
+                <label for="user-password">Hasło:</label>
+                <input type="password" id="user-password">
+                <small id="password-help">Pozostaw puste przy edycji aby nie zmieniać hasła</small>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeUserModal()">Anuluj</button>
+                <button type="submit" class="btn btn-primary">Zapisz</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+.admin-panel {
+    padding: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.admin-header {
+    margin-bottom: 30px;
+    text-align: center;
+}
+
+.admin-header h2 {
+    color: #2563eb;
+    margin-bottom: 10px;
+}
+
+.admin-tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 30px;
+    border-bottom: 2px solid #e5e7eb;
+}
+
+.tab-button {
+    padding: 12px 20px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    transition: all 0.3s ease;
+    font-weight: 500;
+}
+
+.tab-button:hover {
+    background: #f3f4f6;
+}
+
+.tab-button.active {
+    border-bottom-color: #2563eb;
+    color: #2563eb;
+    background: #f3f4f6;
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+.tab-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.data-table {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    overflow: hidden;
+}
+
+.data-table table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.data-table th,
+.data-table td {
+    padding: 12px;
+    text-align: left;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.data-table th {
+    background: #f9fafb;
+    font-weight: 600;
+    color: #374151;
+}
+
+.data-table tr:hover {
+    background: #f9fafb;
+}
+
+.btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s ease;
+}
+
+.btn-primary {
+    background: #2563eb;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #1d4ed8;
+}
+
+.btn-secondary {
+    background: #6b7280;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background: #4b5563;
+}
+
+.btn-danger {
+    background: #dc2626;
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #b91c1c;
+}
+
+.btn-edit {
+    background: #059669;
+    color: white;
+}
+
+.btn-edit:hover {
+    background: #047857;
+}
+
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5);
+}
+
+.modal-content {
+    background: white;
+    margin: 50px auto;
+    padding: 0;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 500px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #6b7280;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 500;
+    color: #374151;
+}
+
+.form-group input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+.form-group input:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.form-group small {
+    color: #6b7280;
+    font-size: 12px;
+}
+
+#user-form {
+    padding: 20px;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 20px;
+}
+</style> 

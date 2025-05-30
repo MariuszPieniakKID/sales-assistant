@@ -1,0 +1,517 @@
+<div class="meetings-section">
+    <div class="section-header">
+        <h2>Historia Spotkań</h2>
+        <div class="header-actions">
+            <div class="search-box">
+                <i class="fas fa-search"></i>
+                <input type="text" id="searchMeetings" placeholder="Szukaj spotkań...">
+            </div>
+        </div>
+    </div>
+
+    <div class="meetings-table-container">
+        <table class="meetings-table" id="meetingsTable">
+            <thead>
+                <tr>
+                    <th>Klient</th>
+                    <th>Produkt</th>
+                    <th>Data spotkania</th>
+                    <th>Status</th>
+                    <th>Akcje</th>
+                </tr>
+            </thead>
+            <tbody id="meetingsTableBody">
+                <!-- Spotkania będą ładowane dynamicznie -->
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal szczegółów spotkania -->
+<div class="modal" id="meetingDetailsModal">
+    <div class="modal-content large">
+        <div class="modal-header">
+            <h3>Szczegóły spotkania</h3>
+            <button class="modal-close" id="closeMeetingModal">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        
+        <div class="modal-body" id="meetingDetails">
+            <!-- Szczegóły będą ładowane dynamicznie -->
+        </div>
+    </div>
+</div>
+
+<style>
+.meetings-section {
+    padding: 0;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 32px;
+    padding-bottom: 16px;
+    border-bottom: 2px solid #e2e8f0;
+}
+
+.section-header h2 {
+    font-size: 28px;
+    font-weight: 600;
+    color: #1e293b;
+    margin: 0;
+}
+
+.header-actions {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+}
+
+.search-box {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.search-box i {
+    position: absolute;
+    left: 12px;
+    color: #64748b;
+    font-size: 16px;
+}
+
+.search-box input {
+    padding: 12px 16px 12px 40px;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    font-size: 14px;
+    width: 300px;
+    transition: all 0.3s ease;
+    background: #f9fafb;
+}
+
+.search-box input:focus {
+    outline: none;
+    border-color: #667eea;
+    background: white;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.meetings-table-container {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    border: 1px solid #e2e8f0;
+    overflow: hidden;
+}
+
+.meetings-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.meetings-table th {
+    background: #f8fafc;
+    padding: 16px 20px;
+    text-align: left;
+    font-weight: 600;
+    color: #374151;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.meetings-table td {
+    padding: 16px 20px;
+    border-bottom: 1px solid #f1f5f9;
+    color: #1e293b;
+}
+
+.meetings-table tbody tr {
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.meetings-table tbody tr:hover {
+    background: #f8fafc;
+}
+
+.meetings-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.client-name {
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.product-name {
+    color: #64748b;
+}
+
+.meeting-date {
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+}
+
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.status-completed {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.status-pending {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.status-cancelled {
+    background: #fecaca;
+    color: #991b1b;
+}
+
+.action-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.btn-icon {
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    font-size: 14px;
+}
+
+.btn-view {
+    background: #f0f9ff;
+    color: #0284c7;
+}
+
+.btn-view:hover {
+    background: #0284c7;
+    color: white;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 60px 20px;
+    color: #64748b;
+}
+
+.empty-state i {
+    font-size: 64px;
+    margin-bottom: 16px;
+    opacity: 0.5;
+}
+
+.empty-state h3 {
+    font-size: 20px;
+    margin-bottom: 8px;
+    color: #1e293b;
+}
+
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 2000;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal.active {
+    display: flex;
+}
+
+.modal-content {
+    background: white;
+    border-radius: 16px;
+    width: 90%;
+    max-width: 600px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.modal-content.large {
+    max-width: 900px;
+}
+
+.modal-header {
+    padding: 24px 24px 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.modal-header h3 {
+    font-size: 24px;
+    font-weight: 600;
+    color: #1e293b;
+    margin: 0;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 20px;
+    color: #64748b;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}
+
+.modal-close:hover {
+    background: #f1f5f9;
+    color: #1e293b;
+}
+
+.modal-body {
+    padding: 24px;
+}
+
+.meeting-info {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 24px;
+    margin-bottom: 32px;
+}
+
+.info-card {
+    background: #f8fafc;
+    padding: 20px;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+}
+
+.info-card h4 {
+    font-size: 14px;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.info-card p {
+    color: #1e293b;
+    font-size: 16px;
+    margin: 0;
+}
+
+.transcription-section {
+    margin-bottom: 32px;
+}
+
+.transcription-section h4 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #1e293b;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.transcription-content {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 20px;
+    max-height: 300px;
+    overflow-y: auto;
+    line-height: 1.6;
+    color: #374151;
+}
+
+.findings-section {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 32px;
+}
+
+.findings-card {
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 20px;
+}
+
+.findings-card.positive {
+    border-left: 4px solid #10b981;
+}
+
+.findings-card.negative {
+    border-left: 4px solid #ef4444;
+}
+
+.findings-card h4 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.findings-card.positive h4 {
+    color: #059669;
+}
+
+.findings-card.negative h4 {
+    color: #dc2626;
+}
+
+.findings-card p {
+    color: #374151;
+    line-height: 1.6;
+    margin: 0;
+}
+
+.recommendations-section {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 24px;
+    border-radius: 12px;
+    margin-bottom: 24px;
+}
+
+.recommendations-section h4 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.recommendations-section p {
+    line-height: 1.6;
+    margin: 0;
+    opacity: 0.95;
+}
+
+.notes-section {
+    background: #fffbeb;
+    border: 1px solid #fbbf24;
+    border-radius: 12px;
+    padding: 20px;
+}
+
+.notes-section h4 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #92400e;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.notes-section textarea {
+    width: 100%;
+    min-height: 100px;
+    padding: 12px;
+    border: 1px solid #fbbf24;
+    border-radius: 8px;
+    font-size: 14px;
+    line-height: 1.5;
+    resize: vertical;
+    background: white;
+}
+
+.notes-section textarea:focus {
+    outline: none;
+    border-color: #f59e0b;
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.1);
+}
+
+.notes-actions {
+    margin-top: 12px;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.btn-primary {
+    background: #667eea;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #5a67d8;
+    transform: translateY(-1px);
+}
+
+@media (max-width: 768px) {
+    .section-header {
+        flex-direction: column;
+        gap: 16px;
+        align-items: stretch;
+    }
+    
+    .search-box input {
+        width: 100%;
+    }
+    
+    .meetings-table-container {
+        overflow-x: auto;
+    }
+    
+    .meetings-table {
+        min-width: 600px;
+    }
+    
+    .modal-content {
+        width: 95%;
+        margin: 20px;
+    }
+    
+    .meeting-info {
+        grid-template-columns: 1fr;
+    }
+    
+    .findings-section {
+        grid-template-columns: 1fr;
+    }
+}
+</style> 

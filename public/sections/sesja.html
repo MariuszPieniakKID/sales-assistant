@@ -1,0 +1,400 @@
+<div class="session-section">
+    <div class="section-header">
+        <h2>Rozpocznij Sesję Sprzedażową</h2>
+        <p class="section-subtitle">Wybierz klienta i produkt aby rozpocząć nowe spotkanie z nagrywaniem</p>
+    </div>
+
+    <div class="session-content">
+        <div class="session-setup">
+            <div class="setup-card">
+                <div class="card-header">
+                    <h3>
+                        <i class="fas fa-play-circle"></i>
+                        Konfiguracja sesji
+                    </h3>
+                </div>
+                
+                <div class="setup-form">
+                    <div class="form-group">
+                        <label for="sessionClient">Wybierz klienta *</label>
+                        <select id="sessionClient" required>
+                            <option value="">-- Wybierz klienta --</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="sessionProduct">Wybierz produkt *</label>
+                        <select id="sessionProduct" required>
+                            <option value="">-- Wybierz produkt --</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="sessionNotes">Notatki wstępne</label>
+                        <textarea id="sessionNotes" placeholder="Dodaj notatki o planowanym spotkaniu..." rows="4"></textarea>
+                    </div>
+                    
+                    <div class="session-actions">
+                        <button type="button" class="btn btn-primary btn-large" id="startSessionBtn" disabled>
+                            <i class="fas fa-microphone"></i>
+                            Rozpocznij nagrywanie
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Status sesji -->
+            <div class="session-status" id="sessionStatus" style="display: none;">
+                <div class="status-card recording">
+                    <div class="status-header">
+                        <h3>
+                            <i class="fas fa-record-vinyl recording-icon"></i>
+                            Sesja w toku
+                        </h3>
+                        <div class="recording-time" id="recordingTime">00:00:00</div>
+                    </div>
+                    
+                    <div class="session-info">
+                        <div class="info-item">
+                            <span class="label">Klient:</span>
+                            <span class="value" id="currentClientName">-</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="label">Produkt:</span>
+                            <span class="value" id="currentProductName">-</span>
+                        </div>
+                    </div>
+                    
+                    <div class="session-controls">
+                        <button type="button" class="btn btn-warning" id="pauseSessionBtn">
+                            <i class="fas fa-pause"></i>
+                            Wstrzymaj
+                        </button>
+                        <button type="button" class="btn btn-danger" id="stopSessionBtn">
+                            <i class="fas fa-stop"></i>
+                            Zakończ sesję
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Ostatnie sesje -->
+            <div class="recent-sessions">
+                <div class="card-header">
+                    <h3>
+                        <i class="fas fa-history"></i>
+                        Ostatnie sesje
+                    </h3>
+                </div>
+                
+                <div class="sessions-list" id="recentSessionsList">
+                    <div class="no-sessions">
+                        <i class="fas fa-microphone-slash"></i>
+                        <p>Brak ostatnich sesji</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.session-section {
+    padding: 0;
+}
+
+.section-header {
+    margin-bottom: 32px;
+    padding-bottom: 16px;
+    border-bottom: 2px solid #e2e8f0;
+}
+
+.section-header h2 {
+    font-size: 28px;
+    font-weight: 600;
+    color: #1e293b;
+    margin: 0 0 8px 0;
+}
+
+.section-subtitle {
+    color: #64748b;
+    font-size: 16px;
+    margin: 0;
+}
+
+.session-content {
+    max-width: 800px;
+}
+
+.session-setup {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.setup-card, .recent-sessions {
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    border: 1px solid #e2e8f0;
+    overflow: hidden;
+}
+
+.card-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 20px 24px;
+}
+
+.card-header h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.setup-form {
+    padding: 24px;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: #374151;
+    font-size: 14px;
+}
+
+.form-group select, .form-group textarea {
+    width: 100%;
+    padding: 12px 16px;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    font-size: 16px;
+    transition: all 0.3s ease;
+    background: #f9fafb;
+}
+
+.form-group select:focus, .form-group textarea:focus {
+    outline: none;
+    border-color: #667eea;
+    background: white;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.form-group textarea {
+    resize: vertical;
+    min-height: 100px;
+}
+
+.session-actions {
+    margin-top: 32px;
+    text-align: center;
+}
+
+.btn {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-large {
+    padding: 16px 32px;
+    font-size: 16px;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
+}
+
+.btn-primary:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(16, 185, 129, 0.3);
+}
+
+.btn-primary:disabled {
+    background: #d1d5db;
+    cursor: not-allowed;
+}
+
+.btn-warning {
+    background: #f59e0b;
+    color: white;
+}
+
+.btn-warning:hover {
+    background: #d97706;
+    transform: translateY(-1px);
+}
+
+.btn-danger {
+    background: #ef4444;
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #dc2626;
+    transform: translateY(-1px);
+}
+
+.session-status {
+    margin-top: 24px;
+}
+
+.status-card {
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    border: 3px solid #10b981;
+    animation: pulse-border 2s infinite;
+}
+
+@keyframes pulse-border {
+    0% { border-color: #10b981; }
+    50% { border-color: #34d399; }
+    100% { border-color: #10b981; }
+}
+
+.status-header {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
+    padding: 20px 24px;
+    display: flex;
+    justify-content: between;
+    align-items: center;
+}
+
+.recording-icon {
+    animation: pulse 1.5s infinite;
+    color: #fef2f2;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+.recording-time {
+    font-size: 24px;
+    font-weight: 700;
+    font-family: 'Courier New', monospace;
+    margin-left: auto;
+}
+
+.session-info {
+    padding: 24px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.info-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.info-item .label {
+    font-size: 12px;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.info-item .value {
+    font-size: 16px;
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.session-controls {
+    padding: 0 24px 24px;
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+}
+
+.sessions-list {
+    padding: 24px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.no-sessions {
+    text-align: center;
+    padding: 40px 20px;
+    color: #64748b;
+}
+
+.no-sessions i {
+    font-size: 48px;
+    margin-bottom: 16px;
+    opacity: 0.5;
+}
+
+.session-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    transition: all 0.3s ease;
+}
+
+.session-item:hover {
+    background: #f8fafc;
+    border-color: #667eea;
+}
+
+.session-details {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.session-title {
+    font-weight: 500;
+    color: #1e293b;
+}
+
+.session-meta {
+    font-size: 12px;
+    color: #64748b;
+}
+
+.session-duration {
+    font-weight: 600;
+    color: #667eea;
+}
+
+@media (max-width: 768px) {
+    .session-info {
+        grid-template-columns: 1fr;
+    }
+    
+    .session-controls {
+        flex-direction: column;
+    }
+    
+    .session-content {
+        max-width: 100%;
+    }
+}
+</style> 

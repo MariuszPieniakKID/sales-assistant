@@ -1,0 +1,343 @@
+<div class="profile-section">
+    <div class="section-header">
+        <h2>Edytuj Profil</h2>
+    </div>
+
+    <div class="profile-content">
+        <div class="profile-cards">
+            <!-- Dane osobowe -->
+            <div class="profile-card">
+                <div class="card-header">
+                    <h3>
+                        <i class="fas fa-user"></i>
+                        Dane osobowe
+                    </h3>
+                </div>
+                
+                <form class="profile-form" id="personalDataForm">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="firstName">Imię *</label>
+                            <input type="text" id="firstName" name="firstName" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="lastName">Nazwisko *</label>
+                            <input type="text" id="lastName" name="lastName" required>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="email">Email *</label>
+                        <input type="email" id="email" name="email" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="phone">Telefon</label>
+                        <input type="tel" id="phone" name="phone">
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary" id="savePersonalDataBtn">
+                            <span class="btn-text">Zapisz zmiany</span>
+                            <div class="spinner" style="display: none;">
+                                <i class="fas fa-spinner fa-spin"></i>
+                            </div>
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Zmiana hasła -->
+            <div class="profile-card">
+                <div class="card-header">
+                    <h3>
+                        <i class="fas fa-lock"></i>
+                        Zmiana hasła
+                    </h3>
+                </div>
+                
+                <form class="profile-form" id="passwordForm">
+                    <div class="form-group">
+                        <label for="currentPassword">Obecne hasło *</label>
+                        <div class="password-input">
+                            <input type="password" id="currentPassword" name="currentPassword" required>
+                            <button type="button" class="toggle-password" onclick="togglePassword('currentPassword')">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="newPassword">Nowe hasło *</label>
+                        <div class="password-input">
+                            <input type="password" id="newPassword" name="newPassword" required minlength="6">
+                            <button type="button" class="toggle-password" onclick="togglePassword('newPassword')">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
+                        <small class="form-help">Minimum 6 znaków</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="confirmPassword">Potwierdź nowe hasło *</label>
+                        <div class="password-input">
+                            <input type="password" id="confirmPassword" name="confirmPassword" required minlength="6">
+                            <button type="button" class="toggle-password" onclick="togglePassword('confirmPassword')">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-danger" id="changePasswordBtn">
+                            <span class="btn-text">Zmień hasło</span>
+                            <div class="spinner" style="display: none;">
+                                <i class="fas fa-spinner fa-spin"></i>
+                            </div>
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Statystyki konta -->
+            <div class="profile-card">
+                <div class="card-header">
+                    <h3>
+                        <i class="fas fa-chart-bar"></i>
+                        Statystyki konta
+                    </h3>
+                </div>
+                
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-value" id="userProductsCount">0</div>
+                        <div class="stat-label">Produktów</div>
+                    </div>
+                    
+                    <div class="stat-item">
+                        <div class="stat-value" id="userMeetingsCount">0</div>
+                        <div class="stat-label">Spotkań</div>
+                    </div>
+                    
+                    <div class="stat-item">
+                        <div class="stat-value" id="accountAge">0</div>
+                        <div class="stat-label">Dni w systemie</div>
+                    </div>
+                    
+                    <div class="stat-item">
+                        <div class="stat-value">Premium</div>
+                        <div class="stat-label">Status konta</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.profile-section {
+    padding: 0;
+}
+
+.section-header {
+    margin-bottom: 32px;
+    padding-bottom: 16px;
+    border-bottom: 2px solid #e2e8f0;
+}
+
+.section-header h2 {
+    font-size: 28px;
+    font-weight: 600;
+    color: #1e293b;
+    margin: 0;
+}
+
+.profile-content {
+    max-width: 800px;
+}
+
+.profile-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.profile-card {
+    background: white;
+    border-radius: 16px;
+    padding: 0;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    border: 1px solid #e2e8f0;
+    overflow: hidden;
+}
+
+.card-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 20px 24px;
+}
+
+.card-header h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.profile-form {
+    padding: 24px;
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 500;
+    color: #374151;
+    font-size: 14px;
+}
+
+.form-group input {
+    width: 100%;
+    padding: 12px 16px;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    font-size: 16px;
+    transition: all 0.3s ease;
+    background: #f9fafb;
+}
+
+.form-group input:focus {
+    outline: none;
+    border-color: #667eea;
+    background: white;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.password-input {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.toggle-password {
+    position: absolute;
+    right: 12px;
+    background: none;
+    border: none;
+    color: #64748b;
+    cursor: pointer;
+    padding: 4px;
+    transition: color 0.3s ease;
+}
+
+.toggle-password:hover {
+    color: #667eea;
+}
+
+.form-help {
+    display: block;
+    margin-top: 4px;
+    font-size: 12px;
+    color: #64748b;
+}
+
+.form-actions {
+    margin-top: 24px;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.btn {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+}
+
+.btn-danger {
+    background: #ef4444;
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #dc2626;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+}
+
+.spinner {
+    display: none;
+}
+
+.stats-grid {
+    padding: 24px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 20px;
+}
+
+.stat-item {
+    text-align: center;
+    padding: 16px;
+    background: #f8fafc;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+}
+
+.stat-value {
+    font-size: 24px;
+    font-weight: 700;
+    color: #1e293b;
+    margin-bottom: 4px;
+}
+
+.stat-label {
+    font-size: 12px;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+@media (max-width: 768px) {
+    .form-row {
+        grid-template-columns: 1fr;
+    }
+    
+    .profile-content {
+        max-width: 100%;
+    }
+    
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+</style> 
