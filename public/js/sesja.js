@@ -94,7 +94,12 @@ function setupEventListeners() {
     sessionProductSelect.addEventListener('change', validateSessionForm);
     
     // Rozpoczęcie sesji
-    startSessionBtn.addEventListener('click', startSession);
+    startSessionBtn.addEventListener('click', function(event) {
+        event.preventDefault(); // Zapobiegaj domyślnej akcji
+        event.stopPropagation(); // Zatrzymaj propagację
+        console.log('🖱️ Kliknięto przycisk Rozpocznij sesję');
+        startSession();
+    });
     
     // Kontrola sesji
     document.getElementById('pauseSessionBtn')?.addEventListener('click', pauseSession);
@@ -268,18 +273,60 @@ async function startSession() {
 
 // Pokazanie interfejsu nagrywania
 function showRecordingInterface() {
-    // Ukryj formularz konfiguracji
-    document.querySelector('.setup-card').style.display = 'none';
+    console.log('🖥️ showRecordingInterface() - start');
     
-    // Pokaż status sesji
-    sessionStatus.style.display = 'block';
-    
-    // Wypełnij informacje o sesji
-    const selectedClient = clients.find(c => c.id == currentSession.clientId);
-    const selectedProduct = products.find(p => p.id == currentSession.productId);
-    
-    document.getElementById('currentClientName').textContent = selectedClient ? selectedClient.name : '-';
-    document.getElementById('currentProductName').textContent = selectedProduct ? selectedProduct.name : '-';
+    try {
+        // Ukryj formularz konfiguracji
+        console.log('🔍 Szukam .setup-card...');
+        const setupCard = document.querySelector('.setup-card');
+        if (setupCard) {
+            console.log('✅ Znaleziono .setup-card, ukrywam...');
+            setupCard.style.display = 'none';
+        } else {
+            console.error('❌ NIE znaleziono .setup-card!');
+        }
+        
+        // Pokaż status sesji
+        console.log('🔍 Sprawdzam sessionStatus element...');
+        if (sessionStatus) {
+            console.log('✅ sessionStatus istnieje, pokazuję...');
+            sessionStatus.style.display = 'block';
+        } else {
+            console.error('❌ sessionStatus NIE istnieje!');
+        }
+        
+        // Wypełnij informacje o sesji
+        console.log('🔍 Szukam klienta i produktu...');
+        const selectedClient = clients.find(c => c.id == currentSession.clientId);
+        const selectedProduct = products.find(p => p.id == currentSession.productId);
+        
+        console.log('👤 Znaleziony klient:', selectedClient);
+        console.log('📦 Znaleziony produkt:', selectedProduct);
+        
+        console.log('🔍 Aktualizuję nazwy w interfejsie...');
+        const clientNameEl = document.getElementById('currentClientName');
+        const productNameEl = document.getElementById('currentProductName');
+        
+        if (clientNameEl) {
+            clientNameEl.textContent = selectedClient ? selectedClient.name : '-';
+            console.log('✅ Zaktualizowano currentClientName');
+        } else {
+            console.error('❌ NIE znaleziono currentClientName!');
+        }
+        
+        if (productNameEl) {
+            productNameEl.textContent = selectedProduct ? selectedProduct.name : '-';
+            console.log('✅ Zaktualizowano currentProductName');
+        } else {
+            console.error('❌ NIE znaleziono currentProductName!');
+        }
+        
+        console.log('✅ showRecordingInterface() - zakończone pomyślnie');
+        
+    } catch (error) {
+        console.error('❌ BŁĄD w showRecordingInterface():', error);
+        throw error; // Re-throw aby zobaczyć czy to powoduje przekierowanie
+    }
 }
 
 // Rozpoczęcie timera nagrywania
