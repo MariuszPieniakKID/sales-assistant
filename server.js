@@ -7,9 +7,6 @@ require('dotenv').config();
 const { Pool } = require('pg');
 const crypto = require('crypto');
 
-// Importuj konfigurację Neon
-const neonConfig = require('./config/neon');
-
 const app = express();
 const PORT = process.env.PORT || 3000;
 
