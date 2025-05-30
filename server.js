@@ -15,6 +15,15 @@ const PORT = process.env.PORT || 3000;
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Debug middleware dla Vercel
+if (process.env.NODE_ENV === 'production') {
+  app.use((req, res, next) => {
+    console.log(`📍 Request: ${req.method} ${req.url}`);
+    next();
+  });
+}
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Konfiguracja sesji
@@ -820,6 +829,9 @@ if (process.env.NODE_ENV !== 'production') {
 } else {
   // Produkcja - Vercel
   console.log('🚀 Sales Assistant App initialized for Vercel');
+  console.log('📁 __dirname:', __dirname);
+  console.log('📂 Public path:', path.join(__dirname, 'public'));
+  console.log('🌐 NODE_ENV:', process.env.NODE_ENV);
   testNeonConnection().catch(console.error);
 }
 
