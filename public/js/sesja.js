@@ -596,7 +596,21 @@ function showLiveChatInterface() {
                     <div class="chat-messages" id="chatMessages">
                         <div class="system-message">
                             <i class="fas fa-robot"></i>
-                            <p>Witaj! Jestem Twoim asystentem sprzedażowym. Gotowy do rozmowy z klientem <strong>${selectedClient ? selectedClient.name : 'Nieznany'}</strong> na temat produktu <strong>${selectedProduct ? selectedProduct.name : 'Nieznany'}</strong>. Jak mogę Ci pomóc?</p>
+                            <p>Witaj! Jestem Twoim asystentem sprzedażowym. Będę podpowiadać Ci w czasie rzeczywistym podczas rozmowy z klientem <strong>${selectedClient ? selectedClient.name : 'Nieznany'}</strong> na temat produktu <strong>${selectedProduct ? selectedProduct.name : 'Nieznany'}</strong>. Zacznij rozmowę!</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Panel sugestii asystenta -->
+                    <div class="suggestions-panel" id="suggestionsPanel">
+                        <div class="suggestions-header">
+                            <i class="fas fa-lightbulb"></i>
+                            <span>Sugestie asystenta</span>
+                        </div>
+                        <div class="suggestions-content" id="suggestionsContent">
+                            <div class="suggestion-item initial">
+                                <i class="fas fa-info-circle"></i>
+                                <span>Zacznij od poznania potrzeb klienta...</span>
+                            </div>
                         </div>
                     </div>
                     
@@ -935,7 +949,7 @@ async function sendMessageToChatGPT(message) {
         );
         
         // Odczytaj odpowiedź głosowo (NATYCHMIAST po otrzymaniu)
-        speakText(fullResponse);
+        updateSuggestions(fullResponse);
         
         console.log('🎉 Streaming message zakończony:', fullResponse);
         
@@ -1038,43 +1052,113 @@ function hideChatLoader() {
     }
 }
 
-// Odczytywanie tekstu głosowo (OPTIMIZED)
-function speakText(text) {
-    if (!speechSynthesis) {
-        console.warn('⚠️ Speech synthesis nie jest obsługiwane');
-        return;
+// Aktualizacja sugestii asystenta na podstawie odpowiedzi AI
+function updateSuggestions(aiResponse) {
+    console.log('💡 Aktualizuję sugestie na podstawie:', aiResponse);
+    
+    const suggestionsContent = document.getElementById('suggestionsContent');
+    if (!suggestionsContent) return;
+    
+    // Usuń poprzednie sugestie (oprócz initial)
+    const existingSuggestions = suggestionsContent.querySelectorAll('.suggestion-item:not(.initial)');
+    existingSuggestions.forEach(item => item.remove());
+    
+    // Parsuj sugestie z odpowiedzi AI (assume że AI wypowiada sugestie)
+    const suggestions = parseSuggestionsFromResponse(aiResponse);
+    
+    suggestions.forEach((suggestion, index) => {
+        setTimeout(() => {
+            addSuggestionToPanel(suggestion);
+        }, index * 500); // Animacyjne dodawanie
+    });
+}
+
+// Parsowanie sugestii z odpowiedzi AI
+function parseSuggestionsFromResponse(response) {
+    // Domyślne sugestie oparte na kontekście odpowiedzi
+    const suggestions = [];
+    
+    const lowerResponse = response.toLowerCase();
+    
+    if (lowerResponse.includes('pytanie') || lowerResponse.includes('zapytaj')) {
+        suggestions.push({
+            type: 'question',
+            text: 'Zadaj pytanie o konkretne potrzeby klienta'
+        });
     }
     
-    // Zatrzymaj poprzednie odczytywanie NATYCHMIAST
-    speechSynthesis.cancel();
-    
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'pl-PL';
-    utterance.rate = 1.2; // SZYBSZE tempo
-    utterance.pitch = 1.0;
-    utterance.volume = 0.9;
-    
-    // Znajdź polski głos jeśli dostępny (cache voices)
-    const voices = speechSynthesis.getVoices();
-    const polishVoice = voices.find(voice => voice.lang.startsWith('pl'));
-    if (polishVoice) {
-        utterance.voice = polishVoice;
+    if (lowerResponse.includes('korzyść') || lowerResponse.includes('przewaga')) {
+        suggestions.push({
+            type: 'benefit',
+            text: 'Podkreśl główne korzyści produktu'
+        });
     }
     
-    utterance.onstart = function() {
-        console.log('🔊 Rozpoczęto szybkie odczytywanie');
-    };
+    if (lowerResponse.includes('cena') || lowerResponse.includes('koszt')) {
+        suggestions.push({
+            type: 'price',
+            text: 'Przedstaw wartość produktu przed ceną'
+        });
+    }
     
-    utterance.onend = function() {
-        console.log('🔊 Zakończono odczytywanie');
-    };
+    if (lowerResponse.includes('zdecydować') || lowerResponse.includes('pomyśleć')) {
+        suggestions.push({
+            type: 'urgency',
+            text: 'Stwórz delikatną presję czasową'
+        });
+    }
     
-    utterance.onerror = function(event) {
-        console.error('❌ Błąd odczytywania:', event.error);
-    };
+    // Jeśli brak konkretnych sugestii, dodaj ogólne
+    if (suggestions.length === 0) {
+        suggestions.push({
+            type: 'general',
+            text: 'Kontynuuj budowanie relacji z klientem'
+        });
+    }
     
-    // Rozpocznij NATYCHMIAST
-    speechSynthesis.speak(utterance);
+    return suggestions;
+}
+
+// Dodawanie sugestii do panelu
+function addSuggestionToPanel(suggestion) {
+    const suggestionsContent = document.getElementById('suggestionsContent');
+    if (!suggestionsContent) return;
+    
+    const suggestionDiv = document.createElement('div');
+    suggestionDiv.className = 'suggestion-item new';
+    
+    let icon = '';
+    switch (suggestion.type) {
+        case 'question':
+            icon = 'fas fa-question-circle';
+            break;
+        case 'benefit':
+            icon = 'fas fa-star';
+            break;
+        case 'price':
+            icon = 'fas fa-dollar-sign';
+            break;
+        case 'urgency':
+            icon = 'fas fa-clock';
+            break;
+        default:
+            icon = 'fas fa-lightbulb';
+    }
+    
+    suggestionDiv.innerHTML = `
+        <i class="${icon}"></i>
+        <span>${suggestion.text}</span>
+    `;
+    
+    suggestionsContent.appendChild(suggestionDiv);
+    
+    // Animacja wejścia
+    setTimeout(() => {
+        suggestionDiv.classList.remove('new');
+    }, 100);
+    
+    // Auto-scroll
+    suggestionsContent.scrollTop = suggestionsContent.scrollHeight;
 }
 
 // Zakończenie live chatu
@@ -1093,9 +1177,45 @@ async function endLiveChat() {
             recognition.stop();
         }
         
-        // Zatrzymaj syntezę mowy
-        if (speechSynthesis) {
+        // Zatrzymaj syntezę mowy (jeśli jeszcze istnieje)
+        if (typeof speechSynthesis !== 'undefined') {
             speechSynthesis.cancel();
+        }
+        
+        // Zapisz sesję do bazy danych
+        if (currentSession && currentSession.conversationHistory.length > 0) {
+            console.log('💾 Zapisuję sesję do bazy danych...');
+            
+            try {
+                const response = await fetchWithAuth('/api/chat/save-session', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        clientId: currentSession.clientId,
+                        productId: currentSession.productId,
+                        conversationHistory: currentSession.conversationHistory,
+                        notes: currentSession.notes,
+                        startTime: currentSession.startTime
+                    })
+                });
+                
+                if (response && response.ok) {
+                    const sessionData = await response.json();
+                    console.log('✅ Sesja zapisana:', sessionData.session.id);
+                    
+                    // Pokaż podsumowanie sesji
+                    showSessionSummary(sessionData.session);
+                } else {
+                    console.error('❌ Błąd zapisywania sesji');
+                    showToast('Błąd zapisywania sesji', 'error');
+                }
+                
+            } catch (saveError) {
+                console.error('❌ Błąd podczas zapisywania sesji:', saveError);
+                showToast('Nie udało się zapisać sesji', 'error');
+            }
         }
         
         // Usuń interfejs live chatu
@@ -1125,6 +1245,7 @@ async function endLiveChat() {
         currentSession = null;
         recordingStartTime = null;
         isRecording = false;
+        isContinuousMode = false;
         recognition = null;
         
         // Waliduj formularz
@@ -1264,6 +1385,225 @@ function removeStreamingMessage(messageId) {
     if (messageDiv) {
         messageDiv.remove();
     }
+}
+
+// Pokazanie podsumowania sesji po zakończeniu
+function showSessionSummary(sessionData) {
+    console.log('📊 Pokazuję podsumowanie sesji:', sessionData);
+    
+    // Utwórz modal z podsumowaniem
+    const modal = document.createElement('div');
+    modal.className = 'session-summary-modal';
+    modal.id = 'sessionSummaryModal';
+    
+    const formatText = (text) => {
+        return text.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    };
+    
+    modal.innerHTML = `
+        <div class="modal-backdrop" onclick="closeSessionSummary()"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>
+                    <i class="fas fa-chart-line"></i>
+                    Podsumowanie sesji
+                </h3>
+                <button type="button" class="close-btn" onclick="closeSessionSummary()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div class="modal-body">
+                <div class="summary-section">
+                    <h4><i class="fas fa-thumbs-up"></i> Pozytywne wnioski</h4>
+                    <div class="summary-content positive">
+                        ${formatText(sessionData.positiveFindings)}
+                    </div>
+                </div>
+                
+                <div class="summary-section">
+                    <h4><i class="fas fa-thumbs-down"></i> Obszary do poprawy</h4>
+                    <div class="summary-content negative">
+                        ${formatText(sessionData.negativeFindings)}
+                    </div>
+                </div>
+                
+                <div class="summary-section">
+                    <h4><i class="fas fa-lightbulb"></i> Rekomendacje na przyszłość</h4>
+                    <div class="summary-content recommendations">
+                        ${formatText(sessionData.recommendations)}
+                    </div>
+                </div>
+                
+                <div class="summary-meta">
+                    <p><strong>Data sesji:</strong> ${new Date(sessionData.meetingDatetime).toLocaleString('pl-PL')}</p>
+                    <p><strong>ID sesji:</strong> #${sessionData.id}</p>
+                </div>
+            </div>
+            
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeSessionSummary()">
+                    <i class="fas fa-check"></i>
+                    Rozumiem
+                </button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    // Animacja wejścia
+    setTimeout(() => {
+        modal.classList.add('show');
+    }, 100);
+}
+
+// Zamknięcie podsumowania sesji
+function closeSessionSummary() {
+    const modal = document.getElementById('sessionSummaryModal');
+    if (modal) {
+        modal.classList.remove('show');
+        setTimeout(() => {
+            modal.remove();
+        }, 300);
+    }
+}
+
+// Dodaj style do window (fallback jeśli nie ma globalnych stylów)
+if (!document.getElementById('sessionSummaryStyles')) {
+    const styles = document.createElement('style');
+    styles.id = 'sessionSummaryStyles';
+    styles.textContent = `
+        .session-summary-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10000;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        
+        .session-summary-modal.show {
+            opacity: 1;
+        }
+        
+        .modal-backdrop {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+        }
+        
+        .modal-content {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            border-radius: 16px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+        }
+        
+        .modal-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 16px 16px 0 0;
+        }
+        
+        .modal-header h3 {
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .close-btn {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 18px;
+            cursor: pointer;
+            opacity: 0.8;
+            transition: opacity 0.3s;
+        }
+        
+        .close-btn:hover {
+            opacity: 1;
+        }
+        
+        .modal-body {
+            padding: 24px;
+        }
+        
+        .summary-section {
+            margin-bottom: 24px;
+        }
+        
+        .summary-section h4 {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 0 0 12px 0;
+            color: #1e293b;
+            font-size: 16px;
+        }
+        
+        .summary-content {
+            padding: 16px;
+            border-radius: 8px;
+            line-height: 1.6;
+        }
+        
+        .summary-content.positive {
+            background: #f0fdf4;
+            border: 1px solid #10b981;
+            color: #065f46;
+        }
+        
+        .summary-content.negative {
+            background: #fef2f2;
+            border: 1px solid #ef4444;
+            color: #991b1b;
+        }
+        
+        .summary-content.recommendations {
+            background: #fef3c7;
+            border: 1px solid #f59e0b;
+            color: #92400e;
+        }
+        
+        .summary-meta {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #e2e8f0;
+            font-size: 14px;
+            color: #64748b;
+        }
+        
+        .summary-meta p {
+            margin: 4px 0;
+        }
+        
+        .modal-footer {
+            padding: 16px 24px;
+            border-top: 1px solid #e2e8f0;
+            text-align: center;
+        }
+    `;
+    document.head.appendChild(styles);
 }
 
 // ... existing code ... 

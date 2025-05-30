@@ -502,30 +502,69 @@ app.post('/api/chat/start', requireAuth, async (req, res) => {
         const client = clientResult.rows[0];
         const product = productResult.rows[0];
         
-        // Utwórz kontekst dla ChatGPT
-        const systemPrompt = `Jesteś doradcą handlowym prowadzącym rozmowę sprzedażową. 
+        // Pobierz 3 ostatnie rozmowy z tym klientem
+        const historyResult = await safeQuery(`
+            SELECT transcription, positive_findings, negative_findings, recommendations, meeting_datetime
+            FROM sales 
+            WHERE client_id = $1 
+            AND product_id IN (SELECT id FROM products WHERE user_id = $2)
+            ORDER BY meeting_datetime DESC 
+            LIMIT 3
+        `, [clientId, req.session.userId]);
+        
+        const previousMeetings = historyResult.rows;
+        
+        // Utwórz rozszerzony kontekst dla ChatGPT
+        let historySection = '';
+        if (previousMeetings.length > 0) {
+            historySection = `\n\nHISTORIA 3 OSTATNICH ROZMÓW Z KLIENTEM:`;
+            previousMeetings.forEach((meeting, index) => {
+                historySection += `\n--- ROZMOWA ${index + 1} (${new Date(meeting.meeting_datetime).toLocaleDateString('pl-PL')}) ---`;
+                if (meeting.transcription) {
+                    historySection += `\nTranskrypcja: ${meeting.transcription.substring(0, 500)}...`;
+                }
+                if (meeting.positive_findings) {
+                    historySection += `\nPozytywne wnioski: ${meeting.positive_findings}`;
+                }
+                if (meeting.negative_findings) {
+                    historySection += `\nNegatywne wnioski: ${meeting.negative_findings}`;
+                }
+                if (meeting.recommendations) {
+                    historySection += `\nRekomendacje: ${meeting.recommendations}`;
+                }
+            });
+        } else {
+            historySection = '\n\nHISTORIA ROZMÓW: To pierwsza rozmowa z tym klientem.';
+        }
+        
+        const systemPrompt = `Jesteś moim asystentem sprzedażowym. Pomagasz mi sprzedać mój produkt. 
+
+TWOJA ROLA:
+- Informuj mnie na bieżąco w trakcie rozmowy co mogę poprawić
+- Podpowiadaj pytania oraz sugestje co mogę jeszcze dodać aby domknąć sprzedaż
+- Wyczuwaj intencje klienta i informuj mnie o nich
+- Odpowiadaj KRÓTKO i KONKRETNIE (max 2 zdania)
+- Koncentruj się na praktycznych poradach sprzedażowych
 
 INFORMACJE O KLIENCIE:
 - Nazwa: ${client.name}
-- Opis: ${client.description}
-- Komentarz: ${client.comment || 'Brak'}
-- AI Notes: ${client.ai_notes || 'Brak'}
+- Opis: ${client.description || 'Brak opisu'}
+- Komentarz: ${client.comment || 'Brak komentarza'}
+- AI Notes: ${client.ai_notes || 'Brak notatek AI'}
 
 INFORMACJE O PRODUKCIE:
 - Nazwa: ${product.name}
-- Opis: ${product.description}
-- Komentarz: ${product.comment || 'Brak'}
+- Opis: ${product.description || 'Brak opisu'}
+- Komentarz: ${product.comment || 'Brak komentarza'}
 
-NOTATKI WSTĘPNE: ${notes || 'Brak'}
+NOTATKI WSTĘPNE: ${notes || 'Brak notatek'}${historySection}
 
-INSTRUKCJE:
-- Prowadź profesjonalną rozmowę sprzedażową
-- Odpowiadaj po polsku
-- Bądź pomocny i przekonujący
-- Zadawaj pytania o potrzeby klienta
-- Przedstawiaj korzyści produktu
-- Odpowiadaj krótko i naturalnie (maksymalnie 2-3 zdania)
-- Zachowuj przyjazny ton`;
+INSTRUKCJE ODPOWIEDZI:
+- Dawaj mi konkretne sugestie co powiedzieć
+- Ostrzegaj przed błędami
+- Wskazuj kiedy klient jest gotowy na ofertę
+- Podpowiadaj pytania otwarte
+- Informuj o emocjach i intencjach klienta`;
         
         res.json({
             success: true,
@@ -533,7 +572,9 @@ INSTRUKCJE:
             chatContext: {
                 clientName: client.name,
                 productName: product.name,
-                systemPrompt: systemPrompt
+                systemPrompt: systemPrompt,
+                hasHistory: previousMeetings.length > 0,
+                historyCount: previousMeetings.length
             }
         });
         
@@ -543,6 +584,116 @@ INSTRUKCJE:
             success: false, 
             message: 'Błąd serwera podczas rozpoczynania chatu',
             error: error.message 
+        });
+    }
+});
+
+// Endpoint do zapisywania sesji po zakończeniu rozmowy
+app.post('/api/chat/save-session', requireAuth, async (req, res) => {
+    console.log('📍 Request: POST /api/chat/save-session');
+    
+    const { clientId, productId, conversationHistory, notes, startTime } = req.body;
+    
+    if (!clientId || !productId || !conversationHistory) {
+        return res.status(400).json({ 
+            success: false, 
+            message: 'Dane sesji są niekompletne' 
+        });
+    }
+    
+    try {
+        // Stwórz transkrypcję z historii rozmowy
+        const transcription = conversationHistory
+            .filter(msg => msg.role !== 'system')
+            .map(msg => {
+                const role = msg.role === 'user' ? 'SPRZEDAWCA' : 'ASYSTENT';
+                return `${role}: ${msg.content}`;
+            })
+            .join('\n\n');
+        
+        console.log('📝 Transkrypcja utworzona, długość:', transcription.length);
+        
+        // Wyślij całą rozmowę do ChatGPT dla analizy
+        console.log('🤖 Wysyłam rozmowę do analizy ChatGPT...');
+        
+        const openai = new OpenAI({
+            apiKey: process.env.OPENAI_API_KEY
+        });
+        
+        const analysisPrompt = `Przeanalizuj poniższą rozmowę sprzedażową i podaj:
+
+1. POZYTYWNE WNIOSKI: Co poszło dobrze w tej rozmowie? (maksymalnie 200 słów)
+2. NEGATYWNE WNIOSKI: Co można było zrobić lepiej? (maksymalnie 200 słów)  
+3. REKOMENDACJE: Konkretne sugestie na następną rozmowę z tym klientem (maksymalnie 200 słów)
+
+TRANSKRYPCJA ROZMOWY:
+${transcription}
+
+Odpowiedz w formacie:
+POZYTYWNE:
+[twoja analiza]
+
+NEGATYWNE:
+[twoja analiza]
+
+REKOMENDACJE:
+[twoje rekomendacje]`;
+
+        const analysisResponse = await openai.chat.completions.create({
+            model: 'gpt-3.5-turbo',
+            messages: [{ role: 'user', content: analysisPrompt }],
+            max_tokens: 800,
+            temperature: 0.3
+        });
+        
+        const analysis = analysisResponse.choices[0].message.content;
+        console.log('✅ Analiza otrzymana:', analysis.substring(0, 100) + '...');
+        
+        // Parsuj analizę
+        const sections = analysis.split(/POZYTYWNE:|NEGATYWNE:|REKOMENDACJE:/);
+        const positiveFindings = sections[1]?.trim() || 'Brak analizy pozytywnej';
+        const negativeFindings = sections[2]?.trim() || 'Brak analizy negatywnej';
+        const recommendations = sections[3]?.trim() || 'Brak rekomendacji';
+        
+        // Zapisz sesję do bazy danych
+        const sessionResult = await safeQuery(`
+            INSERT INTO sales (
+                product_id, client_id, recording_path, transcription, meeting_datetime,
+                positive_findings, negative_findings, recommendations, own_notes
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *
+        `, [
+            productId,
+            clientId,
+            'live_chat_session', // Placeholder dla recording_path
+            transcription,
+            startTime || new Date(),
+            positiveFindings,
+            negativeFindings,
+            recommendations,
+            notes || ''
+        ]);
+        
+        const savedSession = sessionResult.rows[0];
+        console.log('✅ Sesja zapisana z ID:', savedSession.id);
+        
+        res.json({
+            success: true,
+            message: 'Sesja zapisana pomyślnie',
+            session: {
+                id: savedSession.id,
+                transcription: transcription,
+                positiveFindings: positiveFindings,
+                negativeFindings: negativeFindings,
+                recommendations: recommendations,
+                meetingDatetime: savedSession.meeting_datetime
+            }
+        });
+        
+    } catch (error) {
+        console.error('❌ Błąd zapisywania sesji:', error.message);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Błąd zapisywania sesji: ' + error.message 
         });
     }
 });
