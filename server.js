@@ -84,10 +84,12 @@ app.use(session({
     saveUninitialized: false,
     name: 'sales.sid', // Custom name
     cookie: {
-        secure: process.env.NODE_ENV === 'production', // HTTPS w produkcji
+        secure: false, // WYŁĄCZAM SECURE dla debugowania
         httpOnly: true,
         maxAge: 30 * 60 * 1000, // 30 minut
-        sameSite: 'lax' // Ważne dla Vercel
+        sameSite: 'lax', // Ważne dla Vercel
+        domain: undefined, // Pozwól na wszystkie domeny
+        path: '/' // Explicit path
     }
 }));
 
@@ -221,15 +223,17 @@ if (process.env.NODE_ENV !== 'production') {
     });
 }
 
-// Session debugging middleware
+// Session debugging middleware z cookie info
 app.use((req, res, next) => {
-    if (req.url.includes('/api/') && req.session) {
+    if (req.url.includes('/api/') || req.url.includes('/dashboard')) {
         console.log(`🔍 Session Debug [${req.method} ${req.url}]:`, {
-            sessionID: req.sessionID?.substring(0, 8),
-            userId: req.session.userId,  // małe d
-            userFirstName: req.session.userFirstName,
-            userLastName: req.session.userLastName,
-            hasUser: !!req.session.userId  // małe d
+            sessionID: req.sessionID?.substring(0, 8) + '...',
+            userId: req.session?.userId,
+            userFirstName: req.session?.userFirstName,
+            userLastName: req.session?.userLastName,
+            hasUser: !!req.session?.userId,
+            cookieHeader: req.headers.cookie,
+            hasSessionCookie: req.headers.cookie?.includes('sales.sid')
         });
     }
     next();
