@@ -363,7 +363,17 @@ function updateRecordingTime() {
         String(minutes).padStart(2, '0') + ':' +
         String(seconds).padStart(2, '0');
     
-    document.getElementById('recordingTime').textContent = timeString;
+    // Aktualizuj timer w live chat interface
+    const liveChatTimer = document.getElementById('liveChatTimer');
+    if (liveChatTimer) {
+        liveChatTimer.textContent = timeString;
+    }
+    
+    // Fallback na stary timer
+    const recordingTime = document.getElementById('recordingTime');
+    if (recordingTime) {
+        recordingTime.textContent = timeString;
+    }
 }
 
 // Wstrzymanie sesji
@@ -621,12 +631,18 @@ function showLiveChatInterface() {
                     
                     <div class="chat-input-section">
                         <div class="voice-controls">
-                            <button type="button" class="btn btn-primary voice-btn" id="toggleVoiceBtn">
-                                <i class="fas fa-microphone"></i>
-                                Rozpocznij rozmowę
-                            </button>
+                            <div class="speaker-buttons">
+                                <button type="button" class="btn btn-client voice-btn" id="clientVoiceBtn">
+                                    <i class="fas fa-user"></i>
+                                    Słucham klienta
+                                </button>
+                                <button type="button" class="btn btn-seller voice-btn" id="sellerVoiceBtn">
+                                    <i class="fas fa-headset"></i>
+                                    Mówię ja
+                                </button>
+                            </div>
                             <div class="voice-status" id="voiceStatus">
-                                <span class="status-text">Kliknij aby rozpocząć rozmowę</span>
+                                <span class="status-text">Wybierz kto mówi</span>
                                 <div class="voice-wave" id="voiceWave" style="display: none;">
                                     <div class="wave-bar"></div>
                                     <div class="wave-bar"></div>
@@ -637,8 +653,8 @@ function showLiveChatInterface() {
                             </div>
                         </div>
                         
-                        <div class="text-input-section">
-                            <input type="text" id="chatTextInput" placeholder="Lub napisz wiadomość..." />
+                        <div class="text-input-section" style="display: none;">
+                            <input type="text" id="chatTextInput" placeholder="Testowa wiadomość..." />
                             <button type="button" class="btn btn-secondary" id="sendTextBtn">
                                 <i class="fas fa-paper-plane"></i>
                             </button>
@@ -675,13 +691,23 @@ function setupLiveChatEventListeners() {
         endChatBtn.addEventListener('click', endLiveChat);
     }
     
-    // Przycisk głosowy
-    const toggleVoiceBtn = document.getElementById('toggleVoiceBtn');
-    if (toggleVoiceBtn) {
-        toggleVoiceBtn.addEventListener('click', toggleVoiceRecording);
+    // Przyciski głosowe - NOWA LOGIKA
+    const clientVoiceBtn = document.getElementById('clientVoiceBtn');
+    const sellerVoiceBtn = document.getElementById('sellerVoiceBtn');
+    
+    if (clientVoiceBtn) {
+        clientVoiceBtn.addEventListener('click', () => {
+            startListening('client');
+        });
     }
     
-    // Input tekstowy
+    if (sellerVoiceBtn) {
+        sellerVoiceBtn.addEventListener('click', () => {
+            startListening('seller');
+        });
+    }
+    
+    // Input tekstowy (ukryty, tylko do testów)
     const chatTextInput = document.getElementById('chatTextInput');
     const sendTextBtn = document.getElementById('sendTextBtn');
     
@@ -706,101 +732,153 @@ let isContinuousMode = false;
 let silenceTimer = null;
 let lastSpeechTime = 0;
 let isProcessingResponse = false;
+let currentSpeaker = null; // 'client' lub 'seller' - KTO TERAZ MÓWI
 
-// Inicjalizacja rozpoznawania mowy dla trybu ciągłego
-function initSpeechRecognition() {
+// Nowa funkcja - rozpoczęcie słuchania z określeniem kto mówi
+function startListening(speaker) {
+    console.log(`🎤 Rozpoczynam słuchanie: ${speaker}`);
+    
+    // Jeśli już nagrywamy, zatrzymaj
+    if (isRecording && currentSpeaker !== speaker) {
+        stopListening();
+    }
+    
+    currentSpeaker = speaker;
+    
+    // Zaktualizuj UI
+    updateVoiceUIForSpeaker(speaker);
+    
+    // Rozpocznij nagrywanie
+    if (!isRecording) {
+        initSpeechRecognitionForSpeaker();
+        startRecordingForSpeaker();
+    } else {
+        // Zatrzymaj jeśli ten sam przycisk
+        stopListening();
+    }
+}
+
+// Zatrzymanie słuchania
+function stopListening() {
+    console.log('🛑 Zatrzymuję słuchanie');
+    
+    if (recognition) {
+        recognition.stop();
+    }
+    
+    isRecording = false;
+    currentSpeaker = null;
+    
+    // Reset UI
+    updateVoiceUIForSpeaker(null);
+}
+
+// Aktualizacja UI dla konkretnego mówcy
+function updateVoiceUIForSpeaker(speaker) {
+    const clientBtn = document.getElementById('clientVoiceBtn');
+    const sellerBtn = document.getElementById('sellerVoiceBtn');
+    const voiceStatus = document.getElementById('voiceStatus');
+    const statusText = voiceStatus?.querySelector('.status-text');
+    const voiceWave = document.getElementById('voiceWave');
+    
+    // Reset wszystkich przycisków
+    clientBtn?.classList.remove('recording');
+    sellerBtn?.classList.remove('recording');
+    
+    if (speaker === 'client') {
+        clientBtn?.classList.add('recording');
+        if (statusText) statusText.textContent = '🎤 Słucham klienta...';
+        if (voiceWave) voiceWave.style.display = 'flex';
+    } else if (speaker === 'seller') {
+        sellerBtn?.classList.add('recording');
+        if (statusText) statusText.textContent = '🎤 Nagrywam Ciebie...';
+        if (voiceWave) voiceWave.style.display = 'flex';
+    } else {
+        if (statusText) statusText.textContent = 'Wybierz kto mówi';
+        if (voiceWave) voiceWave.style.display = 'none';
+    }
+}
+
+// Inicjalizacja rozpoznawania mowy z obsługą mówcy
+function initSpeechRecognitionForSpeaker() {
     if ('webkitSpeechRecognition' in window) {
         recognition = new webkitSpeechRecognition();
     } else if ('SpeechRecognition' in window) {
         recognition = new SpeechRecognition();
     } else {
-        console.warn('⚠️ Rozpoznawanie mowy nie jest obsługiwane w tej przeglądarce');
+        console.warn('⚠️ Rozpoznawanie mowy nie jest obsługiwane');
         return false;
     }
     
-    // Konfiguracja dla trybu ciągłego
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = 'pl-PL';
     recognition.maxAlternatives = 1;
     
-    let finalTranscript = '';
-    let interimTranscript = '';
+    let currentTranscript = '';
     
     recognition.onstart = function() {
-        console.log('🎤 Rozpoczęto ciągłe rozpoznawanie mowy');
+        console.log(`🎤 Rozpoczęto nagrywanie (${currentSpeaker})`);
         isRecording = true;
-        isContinuousMode = true;
-        updateVoiceUI(true);
     };
     
     recognition.onresult = function(event) {
-        finalTranscript = '';
-        interimTranscript = '';
+        let interimTranscript = '';
+        currentTranscript = '';
         
         for (let i = event.resultIndex; i < event.results.length; i++) {
             const transcript = event.results[i][0].transcript;
             
             if (event.results[i].isFinal) {
-                finalTranscript += transcript;
-                lastSpeechTime = Date.now();
+                currentTranscript += transcript + ' ';
                 
                 // Resetuj timer ciszy
                 clearTimeout(silenceTimer);
                 
-                // Ustaw nowy timer ciszy (1 sekunda zamiast 2 dla szybkości)
+                // Ustaw timer ciszy (1.5 sekundy)
                 silenceTimer = setTimeout(() => {
-                    if (finalTranscript.trim() && !isProcessingResponse) {
-                        console.log('🗣️ Wykryto ciszę - wysyłam: ', finalTranscript.trim());
-                        sendMessageToChatGPT(finalTranscript.trim());
-                        finalTranscript = '';
+                    if (currentTranscript.trim()) {
+                        processSpeech(currentTranscript.trim());
+                        currentTranscript = '';
                     }
-                }, 1000);
+                }, 1500);
                 
             } else {
                 interimTranscript += transcript;
-                updateInterimTranscript(interimTranscript);
             }
+        }
+        
+        // Aktualizuj tymczasowy tekst
+        if (interimTranscript || currentTranscript) {
+            updateInterimTranscript(interimTranscript || currentTranscript);
         }
     };
     
     recognition.onerror = function(event) {
-        console.error('❌ Błąd rozpoznawania mowy:', event.error);
-        
-        // Automatycznie restart w trybie ciągłym (chyba że użytkownik zatrzymał)
-        if (isContinuousMode && event.error !== 'aborted') {
-            setTimeout(() => {
-                if (isContinuousMode) {
-                    console.log('🔄 Automatyczny restart rozpoznawania...');
-                    startContinuousRecording();
-                }
-            }, 1000);
+        console.error('❌ Błąd rozpoznawania:', event.error);
+        if (event.error !== 'aborted') {
+            stopListening();
         }
     };
     
     recognition.onend = function() {
-        console.log('🎤 Zakończono rozpoznawanie mowy');
-        
-        // Automatycznie restart w trybie ciągłym
-        if (isContinuousMode) {
+        console.log('🎤 Zakończono rozpoznawanie');
+        if (isRecording && currentSpeaker) {
+            // Restart jeśli nadal słuchamy
             setTimeout(() => {
-                if (isContinuousMode) {
-                    console.log('🔄 Restart ciągłego rozpoznawania...');
-                    startContinuousRecording();
+                if (isRecording && currentSpeaker) {
+                    recognition.start();
                 }
             }, 100);
-        } else {
-            isRecording = false;
-            updateVoiceUI(false);
         }
     };
     
     return true;
 }
 
-// Rozpoczęcie ciągłego nagrywania
-function startContinuousRecording() {
-    if (!recognition && !initSpeechRecognition()) {
+// Rozpoczęcie nagrywania dla mówcy
+function startRecordingForSpeaker() {
+    if (!recognition && !initSpeechRecognitionForSpeaker()) {
         showToast('Rozpoznawanie mowy nie jest obsługiwane', 'error');
         return;
     }
@@ -808,354 +886,126 @@ function startContinuousRecording() {
     try {
         recognition.start();
     } catch (error) {
-        console.error('❌ Błąd rozpoczynania ciągłego nagrywania:', error);
-        // Spróbuj ponownie po krótkiej przerwie
-        setTimeout(() => {
-            if (isContinuousMode) {
-                startContinuousRecording();
-            }
-        }, 500);
+        console.error('❌ Błąd rozpoczynania nagrywania:', error);
     }
 }
 
-// Zatrzymanie ciągłego nagrywania
-function stopContinuousRecording() {
-    console.log('🛑 Zatrzymuję ciągłe nagrywanie...');
-    isContinuousMode = false;
-    clearTimeout(silenceTimer);
+// Przetwarzanie wypowiedzi w zależności od mówcy
+function processSpeech(transcript) {
+    console.log(`💬 ${currentSpeaker}: ${transcript}`);
     
-    if (recognition) {
-        recognition.stop();
+    // Dodaj do historii konwersacji
+    const speaker = currentSpeaker === 'client' ? 'KLIENT' : 'JA';
+    const message = `${speaker}: ${transcript}`;
+    
+    // Dodaj do UI
+    addMessageToChat(currentSpeaker, message);
+    
+    // Dodaj do historii sesji
+    if (currentSession) {
+        currentSession.conversationHistory.push({
+            role: currentSpeaker,
+            content: transcript
+        });
     }
     
-    isRecording = false;
-    updateVoiceUI(false);
-}
-
-// Aktualizacja tymczasowego tekstu
-function updateInterimTranscript(transcript) {
-    const interimDiv = document.getElementById('interimTranscript');
-    if (interimDiv && transcript.trim()) {
-        interimDiv.textContent = transcript;
-        interimDiv.style.display = 'block';
-    } else if (interimDiv) {
-        interimDiv.style.display = 'none';
+    // Jeśli mówi KLIENT - wyślij do AI na analizę
+    if (currentSpeaker === 'client') {
+        analyzeClientSpeech(transcript);
     }
 }
 
-// Aktualizacja UI dla trybu ciągłego
-function updateVoiceUI(recording) {
-    const voiceBtn = document.getElementById('toggleVoiceBtn');
-    const voiceStatus = document.getElementById('voiceStatus');
-    const voiceWave = document.getElementById('voiceWave');
-    const statusText = voiceStatus?.querySelector('.status-text');
-    
-    if (recording && isContinuousMode) {
-        voiceBtn.classList.add('recording');
-        voiceBtn.innerHTML = '<i class="fas fa-microphone-slash"></i> Zatrzymaj rozmowę';
-        if (statusText) statusText.textContent = 'Słucham... mów normalnie';
-        if (voiceWave) voiceWave.style.display = 'flex';
-    } else {
-        voiceBtn.classList.remove('recording');
-        voiceBtn.innerHTML = '<i class="fas fa-microphone"></i> Rozpocznij rozmowę';
-        if (statusText) statusText.textContent = 'Kliknij aby rozpocząć rozmowę';
-        if (voiceWave) voiceWave.style.display = 'none';
-    }
-}
-
-// Główna funkcja wysyłania wiadomości do ChatGPT (STREAMING)
-async function sendMessageToChatGPT(message) {
-    console.log('🤖 Wysyłam wiadomość do ChatGPT (STREAMING):', message);
+// Analiza wypowiedzi klienta przez AI
+async function analyzeClientSpeech(clientTranscript) {
+    console.log('🤖 Analizuję wypowiedź klienta:', clientTranscript);
     
     if (!currentSession || !currentSession.chatContext) {
-        showToast('Brak aktywnej sesji chatu', 'error');
         return;
     }
     
     try {
-        // Oznacz że przetwarzamy odpowiedź
-        isProcessingResponse = true;
+        // Przygotuj kontekst ostatnich wypowiedzi
+        const recentContext = currentSession.conversationHistory
+            .slice(-6)
+            .map(msg => `${msg.role === 'client' ? 'KLIENT' : 'SPRZEDAWCA'}: ${msg.content}`)
+            .join('\n');
         
-        // Dodaj wiadomość użytkownika do UI
-        addMessageToChat('user', message);
+        // Specjalny prompt dla analizy
+        const analysisPrompt = `${currentSession.chatContext.systemPrompt}
+
+OSTATNI KONTEKST ROZMOWY:
+${recentContext}
+
+AKTUALNA WYPOWIEDŹ KLIENTA:
+"${clientTranscript}"
+
+ANALIZUJ WYPOWIEDŹ I DAJ MI KONKRETNE WSKAZÓWKI:
+- Jakie intencje ma klient?
+- Co powinienem teraz powiedzieć/zapytać?
+- Czy są jakieś sygnały kupna lub obiekcje?
+- Jaką strategię zastosować?
+
+Odpowiedz KRÓTKO i KONKRETNIE (max 3-4 sugestie).`;
         
-        // Ukryj tymczasowy transkrypt
-        updateInterimTranscript('');
-        
-        // Dodaj pustą wiadomość AI dla streaming
-        const aiMessageId = addStreamingMessageToChat();
-        
-        // Skrócona historia dla szybkości (ostatnie 4 wiadomości)
-        const recentHistory = currentSession.conversationHistory.slice(-4);
-        
-        console.log('📡 Rozpoczynam streaming request...');
-        
-        // Wyślij streaming request
+        // Wyślij do AI
         const response = await fetchWithAuth('/api/chat/message', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                message: message,
-                systemPrompt: currentSession.chatContext.systemPrompt,
-                conversationHistory: recentHistory
+                message: analysisPrompt,
+                systemPrompt: 'Jesteś ekspertem sprzedaży. Analizuj i doradzaj.',
+                conversationHistory: []
             })
         });
         
-        if (!response) {
-            removeStreamingMessage(aiMessageId);
-            isProcessingResponse = false;
-            return; // fetchWithAuth już obsłużył przekierowanie
+        if (!response || !response.ok) {
+            console.error('❌ Błąd analizy AI');
+            return;
         }
         
-        if (!response.ok) {
-            throw new Error('Błąd komunikacji z ChatGPT');
-        }
-        
-        console.log('📡 Odbieram streaming odpowiedź...');
-        
+        // Odbierz i wyświetl sugestie
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let fullResponse = '';
         
         while (true) {
             const { done, value } = await reader.read();
-            
-            if (done) {
-                console.log('✅ Streaming zakończony');
-                break;
-            }
+            if (done) break;
             
             const chunk = decoder.decode(value, { stream: true });
             fullResponse += chunk;
-            
-            // Aktualizuj wiadomość w real-time
-            updateStreamingMessage(aiMessageId, fullResponse);
-            
-            console.log('📤 Otrzymano chunk:', chunk);
         }
         
-        // Finalizuj wiadomość
-        finalizeStreamingMessage(aiMessageId, fullResponse);
+        console.log('💡 Sugestie AI:', fullResponse);
         
-        // Oznacz że skończyliśmy przetwarzać odpowiedź
-        isProcessingResponse = false;
-        
-        // Zaktualizuj historię konwersacji
-        currentSession.conversationHistory.push(
-            { role: 'user', content: message },
-            { role: 'assistant', content: fullResponse }
-        );
-        
-        // Odczytaj odpowiedź głosowo (NATYCHMIAST po otrzymaniu)
-        updateSuggestions(fullResponse);
-        
-        console.log('🎉 Streaming message zakończony:', fullResponse);
+        // Wyświetl sugestie w panelu
+        displayAISuggestions(fullResponse);
         
     } catch (error) {
-        console.error('❌ Błąd streaming wysyłania wiadomości:', error);
-        
-        // Usuń niepełną wiadomość
-        if (typeof aiMessageId !== 'undefined') {
-            removeStreamingMessage(aiMessageId);
-        }
-        
-        // Oznacz że skończyliśmy przetwarzać odpowiedź
-        isProcessingResponse = false;
-        
-        showToast('Błąd komunikacji z ChatGPT', 'error');
+        console.error('❌ Błąd analizy AI:', error);
     }
 }
 
-// Dodawanie wiadomości do chatu
-function addMessageToChat(type, message) {
-    const chatMessages = document.getElementById('chatMessages');
-    if (!chatMessages) return;
-    
-    const messageDiv = document.createElement('div');
-    messageDiv.className = `chat-message ${type}-message`;
-    
-    const timestamp = new Date().toLocaleTimeString('pl-PL', { 
-        hour: '2-digit', 
-        minute: '2-digit' 
-    });
-    
-    let icon = '';
-    let senderName = '';
-    
-    switch (type) {
-        case 'user':
-            icon = '<i class="fas fa-user"></i>';
-            senderName = 'Ty';
-            break;
-        case 'ai':
-            icon = '<i class="fas fa-robot"></i>';
-            senderName = 'ChatGPT';
-            break;
-        case 'error':
-            icon = '<i class="fas fa-exclamation-triangle"></i>';
-            senderName = 'System';
-            messageDiv.className += ' error-message';
-            break;
-    }
-    
-    messageDiv.innerHTML = `
-        <div class="message-header">
-            ${icon}
-            <span class="sender-name">${senderName}</span>
-            <span class="message-time">${timestamp}</span>
-        </div>
-        <div class="message-content">
-            <p>${message}</p>
-        </div>
-    `;
-    
-    chatMessages.appendChild(messageDiv);
-    
-    // Scroll do dołu
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-}
-
-// Pokazanie loadera w chacie
-function showChatLoader() {
-    const chatMessages = document.getElementById('chatMessages');
-    if (!chatMessages) return;
-    
-    const loaderDiv = document.createElement('div');
-    loaderDiv.className = 'chat-message ai-message loading-message';
-    loaderDiv.id = 'chatLoader';
-    
-    loaderDiv.innerHTML = `
-        <div class="message-header">
-            <i class="fas fa-robot"></i>
-            <span class="sender-name">ChatGPT</span>
-        </div>
-        <div class="message-content">
-            <div class="typing-indicator">
-                <span></span>
-                <span></span>
-                <span></span>
-            </div>
-        </div>
-    `;
-    
-    chatMessages.appendChild(loaderDiv);
-    chatMessages.scrollTop = chatMessages.scrollHeight;
-}
-
-// Ukrycie loadera w chacie
-function hideChatLoader() {
-    const loader = document.getElementById('chatLoader');
-    if (loader) {
-        loader.remove();
-    }
-}
-
-// Aktualizacja sugestii asystenta na podstawie odpowiedzi AI
-function updateSuggestions(aiResponse) {
-    console.log('💡 Aktualizuję sugestie na podstawie:', aiResponse);
-    
+// Wyświetlanie sugestii AI w panelu
+function displayAISuggestions(suggestions) {
     const suggestionsContent = document.getElementById('suggestionsContent');
     if (!suggestionsContent) return;
     
-    // Usuń poprzednie sugestie (oprócz initial)
-    const existingSuggestions = suggestionsContent.querySelectorAll('.suggestion-item:not(.initial)');
-    existingSuggestions.forEach(item => item.remove());
+    // Usuń stare sugestie
+    suggestionsContent.innerHTML = '';
     
-    // Parsuj sugestie z odpowiedzi AI (assume że AI wypowiada sugestie)
-    const suggestions = parseSuggestionsFromResponse(aiResponse);
-    
-    suggestions.forEach((suggestion, index) => {
-        setTimeout(() => {
-            addSuggestionToPanel(suggestion);
-        }, index * 500); // Animacyjne dodawanie
-    });
-}
-
-// Parsowanie sugestii z odpowiedzi AI
-function parseSuggestionsFromResponse(response) {
-    // Domyślne sugestie oparte na kontekście odpowiedzi
-    const suggestions = [];
-    
-    const lowerResponse = response.toLowerCase();
-    
-    if (lowerResponse.includes('pytanie') || lowerResponse.includes('zapytaj')) {
-        suggestions.push({
-            type: 'question',
-            text: 'Zadaj pytanie o konkretne potrzeby klienta'
-        });
-    }
-    
-    if (lowerResponse.includes('korzyść') || lowerResponse.includes('przewaga')) {
-        suggestions.push({
-            type: 'benefit',
-            text: 'Podkreśl główne korzyści produktu'
-        });
-    }
-    
-    if (lowerResponse.includes('cena') || lowerResponse.includes('koszt')) {
-        suggestions.push({
-            type: 'price',
-            text: 'Przedstaw wartość produktu przed ceną'
-        });
-    }
-    
-    if (lowerResponse.includes('zdecydować') || lowerResponse.includes('pomyśleć')) {
-        suggestions.push({
-            type: 'urgency',
-            text: 'Stwórz delikatną presję czasową'
-        });
-    }
-    
-    // Jeśli brak konkretnych sugestii, dodaj ogólne
-    if (suggestions.length === 0) {
-        suggestions.push({
-            type: 'general',
-            text: 'Kontynuuj budowanie relacji z klientem'
-        });
-    }
-    
-    return suggestions;
-}
-
-// Dodawanie sugestii do panelu
-function addSuggestionToPanel(suggestion) {
-    const suggestionsContent = document.getElementById('suggestionsContent');
-    if (!suggestionsContent) return;
-    
+    // Dodaj nowe sugestie
     const suggestionDiv = document.createElement('div');
-    suggestionDiv.className = 'suggestion-item new';
-    
-    let icon = '';
-    switch (suggestion.type) {
-        case 'question':
-            icon = 'fas fa-question-circle';
-            break;
-        case 'benefit':
-            icon = 'fas fa-star';
-            break;
-        case 'price':
-            icon = 'fas fa-dollar-sign';
-            break;
-        case 'urgency':
-            icon = 'fas fa-clock';
-            break;
-        default:
-            icon = 'fas fa-lightbulb';
-    }
-    
+    suggestionDiv.className = 'suggestion-item ai-analysis';
     suggestionDiv.innerHTML = `
-        <i class="${icon}"></i>
-        <span>${suggestion.text}</span>
+        <div class="suggestion-content">
+            ${suggestions.replace(/\n/g, '<br>')}
+        </div>
     `;
     
     suggestionsContent.appendChild(suggestionDiv);
-    
-    // Animacja wejścia
-    setTimeout(() => {
-        suggestionDiv.classList.remove('new');
-    }, 100);
     
     // Auto-scroll
     suggestionsContent.scrollTop = suggestionsContent.scrollHeight;
@@ -1262,63 +1112,24 @@ async function endLiveChat() {
     }
 }
 
-// Aktualizacja timera live chatu
-function updateRecordingTime() {
-    if (!recordingStartTime) return;
-    
-    const elapsed = Date.now() - recordingStartTime;
-    const hours = Math.floor(elapsed / 3600000);
-    const minutes = Math.floor((elapsed % 3600000) / 60000);
-    const seconds = Math.floor((elapsed % 60000) / 1000);
-    
-    const timeString = 
-        String(hours).padStart(2, '0') + ':' +
-        String(minutes).padStart(2, '0') + ':' +
-        String(seconds).padStart(2, '0');
-    
-    // Aktualizuj timer w live chat interface
-    const liveChatTimer = document.getElementById('liveChatTimer');
-    if (liveChatTimer) {
-        liveChatTimer.textContent = timeString;
-    }
-    
-    // Fallback na stary timer
-    const recordingTime = document.getElementById('recordingTime');
-    if (recordingTime) {
-        recordingTime.textContent = timeString;
+// Aktualizacja tymczasowego tekstu
+function updateInterimTranscript(transcript) {
+    const interimDiv = document.getElementById('interimTranscript');
+    if (interimDiv && transcript.trim()) {
+        interimDiv.textContent = transcript;
+        interimDiv.style.display = 'block';
+    } else if (interimDiv) {
+        interimDiv.style.display = 'none';
     }
 }
 
-// Przełączanie trybu głosowego
-function toggleVoiceRecording() {
-    if (isContinuousMode) {
-        stopContinuousRecording();
-    } else {
-        startContinuousRecording();
-    }
-}
-
-// Wysyłanie wiadomości tekstowej
-function sendTextMessage() {
-    const chatTextInput = document.getElementById('chatTextInput');
-    const message = chatTextInput.value.trim();
-    if (!message) return;
-    
-    chatTextInput.value = '';
-    // Ukryj tymczasowy transkrypt
-    updateInterimTranscript('');
-    sendMessageToChatGPT(message);
-}
-
-// Dodawanie pustej wiadomości AI dla streaming
-function addStreamingMessageToChat() {
+// Dodawanie wiadomości do chatu
+function addMessageToChat(type, message) {
     const chatMessages = document.getElementById('chatMessages');
-    if (!chatMessages) return null;
+    if (!chatMessages) return;
     
     const messageDiv = document.createElement('div');
-    const messageId = 'streaming-' + Date.now();
-    messageDiv.id = messageId;
-    messageDiv.className = 'chat-message ai-message streaming-message';
+    messageDiv.className = `chat-message ${type}-message`;
     
     const timestamp = new Date().toLocaleTimeString('pl-PL', { 
         hour: '2-digit', 
@@ -1327,64 +1138,17 @@ function addStreamingMessageToChat() {
     
     messageDiv.innerHTML = `
         <div class="message-header">
-            <i class="fas fa-robot"></i>
-            <span class="sender-name">ChatGPT</span>
             <span class="message-time">${timestamp}</span>
         </div>
         <div class="message-content">
-            <p class="streaming-text"><span class="cursor">|</span></p>
+            <p>${message}</p>
         </div>
     `;
     
     chatMessages.appendChild(messageDiv);
+    
+    // Scroll do dołu
     chatMessages.scrollTop = chatMessages.scrollHeight;
-    
-    return messageId;
-}
-
-// Aktualizacja streaming wiadomości
-function updateStreamingMessage(messageId, text) {
-    if (!messageId) return;
-    
-    const messageDiv = document.getElementById(messageId);
-    if (!messageDiv) return;
-    
-    const textElement = messageDiv.querySelector('.streaming-text');
-    if (textElement) {
-        textElement.innerHTML = text + '<span class="cursor">|</span>';
-    }
-    
-    // Auto-scroll
-    const chatMessages = document.getElementById('chatMessages');
-    if (chatMessages) {
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-    }
-}
-
-// Finalizacja streaming wiadomości
-function finalizeStreamingMessage(messageId, finalText) {
-    if (!messageId) return;
-    
-    const messageDiv = document.getElementById(messageId);
-    if (!messageDiv) return;
-    
-    const textElement = messageDiv.querySelector('.streaming-text');
-    if (textElement) {
-        textElement.innerHTML = finalText; // Usuń cursor
-    }
-    
-    // Usuń klasę streaming
-    messageDiv.classList.remove('streaming-message');
-}
-
-// Usuwanie streaming wiadomości (w przypadku błędu)
-function removeStreamingMessage(messageId) {
-    if (!messageId) return;
-    
-    const messageDiv = document.getElementById(messageId);
-    if (messageDiv) {
-        messageDiv.remove();
-    }
 }
 
 // Pokazanie podsumowania sesji po zakończeniu
@@ -1606,4 +1370,16 @@ if (!document.getElementById('sessionSummaryStyles')) {
     document.head.appendChild(styles);
 }
 
-// ... existing code ... 
+// Wysyłanie wiadomości tekstowej (tylko do testów)
+function sendTextMessage() {
+    const chatTextInput = document.getElementById('chatTextInput');
+    const message = chatTextInput.value.trim();
+    if (!message) return;
+    
+    chatTextInput.value = '';
+    
+    // Symuluj że to mówi sprzedawca
+    currentSpeaker = 'seller';
+    processSpeech(message);
+    currentSpeaker = null;
+} 

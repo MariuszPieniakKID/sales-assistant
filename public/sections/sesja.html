@@ -851,6 +851,83 @@
     box-shadow: 0 2px 8px rgba(14, 165, 233, 0.15);
 }
 
+/* === NOWE STYLE DLA DWÓCH PRZYCISKÓW === */
+
+.speaker-buttons {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.btn-client {
+    background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+    color: white;
+    flex: 1;
+}
+
+.btn-client:hover:not(.recording) {
+    background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(14, 165, 233, 0.3);
+}
+
+.btn-client.recording {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    animation: pulse 1.5s infinite;
+}
+
+.btn-seller {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
+    flex: 1;
+}
+
+.btn-seller:hover:not(.recording) {
+    background: linear-gradient(135deg, #059669 0%, #047857 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(16, 185, 129, 0.3);
+}
+
+.btn-seller.recording {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    animation: pulse 1.5s infinite;
+}
+
+/* Wiadomości w chacie */
+.client-message .message-content {
+    background: #e0f2fe;
+    border: 1px solid #0ea5e9;
+    color: #075985;
+    margin-right: 60px;
+}
+
+.seller-message .message-content {
+    background: #f0fdf4;
+    border: 1px solid #10b981;
+    color: #065f46;
+    margin-left: 60px;
+}
+
+/* Panel sugestii - lepszy styl */
+.suggestion-item.ai-analysis {
+    background: #fef3c7;
+    border: 1px solid #f59e0b;
+    padding: 16px;
+    margin: 8px;
+    border-radius: 8px;
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+.suggestion-content {
+    color: #92400e;
+}
+
+.suggestion-content strong {
+    color: #78350f;
+    font-weight: 600;
+}
+
 /* Typing indicator */
 </style> 
 
