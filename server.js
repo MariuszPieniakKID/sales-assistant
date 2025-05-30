@@ -1,5 +1,6 @@
 const express = require('express');
 const session = require('express-session');
+const pgSession = require('connect-pg-simple')(session);
 const path = require('path');
 const multer = require('multer');
 const fs = require('fs');
@@ -10,55 +11,6 @@ const bcrypt = require('bcryptjs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
-// Middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-// Debug middleware dla Vercel
-if (process.env.NODE_ENV === 'production') {
-  app.use((req, res, next) => {
-    console.log(`📍 Request: ${req.method} ${req.url}`);
-    next();
-  });
-}
-
-app.use(express.static(path.join(__dirname, 'public')));
-
-// Konfiguracja sesji dla Vercel serverless
-app.use(session({
-    secret: process.env.SESSION_SECRET || 'sales-assistant-secret-key-2023',
-    resave: true, // Kluczowe dla Vercel
-    rolling: true, // Odnawianie sesji
-    saveUninitialized: false,
-    name: 'sales.sid', // Custom name
-    cookie: {
-        secure: process.env.NODE_ENV === 'production', // HTTPS w produkcji
-        httpOnly: true,
-        maxAge: 30 * 60 * 1000, // 30 minut
-        sameSite: 'lax' // Ważne dla Vercel
-    },
-    // Dodatkowa konfiguracja dla serverless
-    genid: function(req) {
-        return require('crypto').randomBytes(16).toString('hex');
-    }
-}));
-
-// Konfiguracja multer dla uploadów
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const uploadPath = 'uploads/';
-    if (!fs.existsSync(uploadPath)) {
-      fs.mkdirSync(uploadPath, { recursive: true });
-    }
-    cb(null, uploadPath);
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
-  }
-});
-const upload = multer({ storage: storage });
 
 // Globalna konfiguracja pool dla Neon (serverless optimized)
 let pool;
@@ -101,6 +53,59 @@ function getNeonPool() {
     }
     return pool;
 }
+
+// Middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Debug middleware dla Vercel
+if (process.env.NODE_ENV === 'production') {
+  app.use((req, res, next) => {
+    console.log(`📍 Request: ${req.method} ${req.url}`);
+    next();
+  });
+}
+
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Konfiguracja sesji dla Vercel serverless z BAZĄ DANYCH
+app.use(session({
+    store: new pgSession({
+        pool: getNeonPool(),                   // Używaj tego samego pool
+        tableName: 'user_sessions',           // Nazwa tabeli sesji
+        createTableIfMissing: true,           // Utwórz tabelę automatycznie
+        errorLog: console.error,              // Logowanie błędów
+        ttl: 30 * 60,                        // TTL w sekundach (30 min)
+        pruneSessionInterval: 60 * 15        // Czyszczenie co 15 min
+    }),
+    secret: process.env.SESSION_SECRET || 'sales-assistant-secret-key-2023',
+    resave: false, // FALSE dla pg-simple
+    rolling: true, // Odnawianie sesji
+    saveUninitialized: false,
+    name: 'sales.sid', // Custom name
+    cookie: {
+        secure: process.env.NODE_ENV === 'production', // HTTPS w produkcji
+        httpOnly: true,
+        maxAge: 30 * 60 * 1000, // 30 minut
+        sameSite: 'lax' // Ważne dla Vercel
+    }
+}));
+
+// Konfiguracja multer dla uploadów
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const uploadPath = 'uploads/';
+    if (!fs.existsSync(uploadPath)) {
+      fs.mkdirSync(uploadPath, { recursive: true });
+    }
+    cb(null, uploadPath);
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+const upload = multer({ storage: storage });
 
 // Testowanie połączenia z Neon (z retry logic)
 async function testNeonConnection(retries = 3) {
