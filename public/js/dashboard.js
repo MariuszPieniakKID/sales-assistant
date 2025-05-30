@@ -16,6 +16,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Flaga do sprawdzenia czy nawigacja jest już skonfigurowana
     let navigationSetup = false;
     let isAdmin = false;
+    let sessionCheckInterval = null;
 
     // Inicjalizacja
     init();
@@ -41,12 +42,17 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Obsługa wylogowania
         setupLogout();
+        
+        // Uruchom sprawdzanie sesji co 2 minuty
+        startSessionCheck();
     }
 
     // Załaduj dane użytkownika
     async function loadUserData() {
         try {
-            const response = await fetch('/api/user');
+            const response = await fetchWithAuth('/api/user');
+            if (!response) return; // fetchWithAuth already handled redirect
+            
             if (response.ok) {
                 const userData = await response.json();
                 userName.textContent = userData.firstName;
@@ -65,7 +71,9 @@ document.addEventListener('DOMContentLoaded', function() {
     async function checkAdminStatus() {
         try {
             // Pobierz dane użytkownika z session
-            const response = await fetch('/api/user');
+            const response = await fetchWithAuth('/api/user');
+            if (!response) return; // fetchWithAuth already handled redirect
+            
             if (response.ok) {
                 const userData = await response.json();
                 
@@ -101,22 +109,22 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log('📊 Ładowanie statystyk...');
             
             // Załaduj produkty
-            const productsResponse = await fetch('/api/products');
-            if (productsResponse.ok) {
+            const productsResponse = await fetchWithAuth('/api/products');
+            if (productsResponse && productsResponse.ok) {
                 const products = await productsResponse.json();
                 productsCount.textContent = products.length;
             }
 
             // Załaduj klientów
-            const clientsResponse = await fetch('/api/clients');
-            if (clientsResponse.ok) {
+            const clientsResponse = await fetchWithAuth('/api/clients');
+            if (clientsResponse && clientsResponse.ok) {
                 const clients = await clientsResponse.json();
                 clientsCount.textContent = clients.length;
             }
 
             // Załaduj spotkania
-            const salesResponse = await fetch('/api/sales');
-            if (salesResponse.ok) {
+            const salesResponse = await fetchWithAuth('/api/sales');
+            if (salesResponse && salesResponse.ok) {
                 const sales = await salesResponse.json();
                 meetingsCount.textContent = sales.length;
             }
@@ -379,6 +387,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (confirm('Czy na pewno chcesz się wylogować?')) {
                     try {
                         console.log('🚪 Wylogowywanie...');
+                        
+                        // Wyczyść interval sprawdzania sesji
+                        if (sessionCheckInterval) {
+                            clearInterval(sessionCheckInterval);
+                        }
+                        
                         const response = await fetch('/api/logout', { method: 'POST' });
                         if (response.ok) {
                             console.log('✅ Wylogowano pomyślnie');
@@ -434,6 +448,83 @@ document.addEventListener('DOMContentLoaded', function() {
     window.addEventListener('unhandledrejection', function(e) {
         console.error('🚨 Unhandled Promise Rejection:', e.reason);
     });
+    
+    // Cleanup przy zamykaniu strony
+    window.addEventListener('beforeunload', function() {
+        if (sessionCheckInterval) {
+            clearInterval(sessionCheckInterval);
+        }
+    });
+    
+    // Sprawdzanie sesji co 2 minuty
+    function startSessionCheck() {
+        console.log('⏰ Uruchamiam sprawdzanie sesji co 2 minuty');
+        
+        sessionCheckInterval = setInterval(async () => {
+            console.log('🔍 Sprawdzam sesję...');
+            await checkSession();
+        }, 2 * 60 * 1000); // 2 minuty
+    }
+
+    // Sprawdź czy sesja jest aktywna
+    async function checkSession() {
+        try {
+            // Użyj zwykłego fetch aby uniknąć nieskończonej pętli
+            const response = await fetch('/api/user');
+            
+            if (!response.ok) {
+                console.log('❌ Sesja wygasła - przekierowanie do logowania');
+                
+                // Wyczyść interval
+                if (sessionCheckInterval) {
+                    clearInterval(sessionCheckInterval);
+                }
+                
+                // Przekieruj do logowania
+                window.location.href = '/login';
+                return false;
+            }
+            
+            console.log('✅ Sesja aktywna');
+            return true;
+        } catch (error) {
+            console.error('❌ Błąd sprawdzania sesji:', error);
+            
+            // W przypadku błędu też przekieruj
+            if (sessionCheckInterval) {
+                clearInterval(sessionCheckInterval);
+            }
+            
+            window.location.href = '/login';
+            return false;
+        }
+    }
+    
+    // Funkcja pomocnicza do fetch z automatycznym sprawdzaniem sesji
+    async function fetchWithAuth(url, options = {}) {
+        try {
+            const response = await fetch(url, options);
+            
+            // Sprawdź czy odpowiedź wskazuje na wygasłą sesję
+            if (response.status === 401) {
+                console.log('❌ API zwróciło 401 - sesja wygasła');
+                
+                // Wyczyść interval sprawdzania sesji
+                if (sessionCheckInterval) {
+                    clearInterval(sessionCheckInterval);
+                }
+                
+                // Przekieruj do logowania
+                window.location.href = '/login';
+                return null;
+            }
+            
+            return response;
+        } catch (error) {
+            console.error('❌ Błąd fetchWithAuth:', error);
+            throw error;
+        }
+    }
     
     console.log('🎉 Dashboard.js załadowany i skonfigurowany pomyślnie!');
 }); 

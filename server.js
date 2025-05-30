@@ -29,12 +29,15 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Konfiguracja sesji
 app.use(session({
   secret: process.env.SESSION_SECRET || 'your-secret-key',
-  resave: false,
+  resave: true,
   saveUninitialized: false,
+  rolling: true,
   cookie: { 
     secure: false, // set to true if using HTTPS
-    maxAge: 24 * 60 * 60 * 1000 // 24 godziny
-  }
+    maxAge: 30 * 60 * 1000, // 30 minut zamiast 24 godzin
+    httpOnly: true
+  },
+  name: 'sales-assistant-session'
 }));
 
 // Konfiguracja multer dla uploadów
@@ -80,9 +83,30 @@ async function testNeonConnection() {
 
 // Middleware sprawdzający uwierzytelnienie
 function requireAuth(req, res, next) {
+  console.log('🔐 [AUTH] Sprawdzanie autoryzacji:', {
+    hasSession: !!req.session,
+    hasUserId: !!req.session?.userId,
+    userId: req.session?.userId,
+    sessionID: req.sessionID?.substring(0, 8),
+    url: req.url
+  });
+  
   if (req.session && req.session.userId) {
+    console.log('✅ [AUTH] Autoryzacja udana');
     next();
   } else {
+    console.log('❌ [AUTH] Brak autoryzacji - przekierowanie do logowania');
+    
+    // Jeśli to żądanie API, zwróć JSON
+    if (req.url.startsWith('/api/')) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Sesja wygasła',
+        redirect: '/login'
+      });
+    }
+    
+    // Jeśli to żądanie strony, przekieruj
     res.redirect('/login');
   }
 }
