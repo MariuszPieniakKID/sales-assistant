@@ -209,49 +209,60 @@ function validateSessionForm() {
 
 // Rozpoczęcie sesji
 async function startSession() {
+    console.log('🎙️ startSession() - rozpoczynam sesję...');
+    
     const clientId = sessionClientSelect.value;
     const productId = sessionProductSelect.value;
     const notes = sessionNotesTextarea.value;
     
+    console.log('📋 Dane sesji:', { clientId, productId, notes });
+    
     if (!clientId || !productId) {
+        console.log('❌ Brak klienta lub produktu');
         showToast('Proszę wybierz klienta i produkt', 'error');
         return;
     }
     
     try {
+        console.log('🔍 Sprawdzam dostępność nagrywania...');
+        
         // Sprawdź czy przeglądarka obsługuje nagrywanie
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            console.log('❌ Przeglądarka nie obsługuje nagrywania');
             showToast('Twoja przeglądarka nie obsługuje nagrywania audio', 'error');
             return;
         }
         
-        // Poproś o dostęp do mikrofonu
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        console.log('✅ Przeglądarka obsługuje nagrywanie');
         
-        // Utwórz sesję
+        // TYMCZASOWO WYŁĄCZAM DOSTĘP DO MIKROFONU
+        console.log('⚠️ TYMCZASOWO: Pomijam dostęp do mikrofonu');
+        
+        // Utwórz sesję BEZ strumienia audio
         currentSession = {
             clientId: clientId,
             productId: productId,
             notes: notes,
-            stream: stream,
+            stream: null, // TYMCZASOWO null
             startTime: new Date()
         };
         
+        console.log('✅ Sesja utworzona:', currentSession);
+        
         // Pokaż interfejs nagrywania
+        console.log('🖥️ Pokazuję interfejs nagrywania...');
         showRecordingInterface();
         
         // Rozpocznij timer
+        console.log('⏰ Rozpoczynam timer...');
         startRecordingTimer();
         
-        showToast('Sesja rozpoczęta - nagrywanie w toku', 'success');
+        console.log('🎉 Sesja rozpoczęta pomyślnie!');
+        showToast('Sesja rozpoczęta - nagrywanie symulowane', 'success');
         
     } catch (error) {
-        console.error('Błąd rozpoczynania sesji:', error);
-        if (error.name === 'NotAllowedError') {
-            showToast('Dostęp do mikrofonu został odrzucony', 'error');
-        } else {
-            showToast('Błąd rozpoczynania sesji: ' + error.message, 'error');
-        }
+        console.error('❌ Błąd rozpoczynania sesji:', error);
+        showToast('Błąd rozpoczynania sesji: ' + error.message, 'error');
     }
 }
 
