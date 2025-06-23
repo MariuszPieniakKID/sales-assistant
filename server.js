@@ -9,9 +9,24 @@ const { Pool } = require('pg');
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const { OpenAI } = require('openai');
+const WebSocket = require('ws');
+const http = require('http');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Create HTTP server for WebSocket support
+const server = http.createServer(app);
+
+// WebSocket Server for Real-time AI Assistant
+const wss = new WebSocket.Server({ server });
+
+// AssemblyAI Configuration
+const ASSEMBLYAI_API_KEY = process.env.ASSEMBLYAI_API_KEY;
+const ASSEMBLYAI_SAMPLE_RATE = 16000;
+
+// Real-time sessions storage
+const activeSessions = new Map();
 
 // Globalna konfiguracja pool dla Neon (serverless optimized)
 let pool;
@@ -1423,24 +1438,450 @@ app.get('/api/admin/all-meetings', requireAuth, requireAdmin, async (req, res) =
   }
 });
 
-// Start serwera
+// WebSocket Connection Handler
+wss.on('connection', (ws, req) => {
+    console.log('🔌 New WebSocket connection established');
+    
+    ws.on('message', async (message) => {
+        try {
+            const data = JSON.parse(message);
+            console.log('📨 WebSocket message received:', data.type);
+            
+            switch (data.type) {
+                case 'START_REALTIME_SESSION':
+                    await startRealtimeSession(ws, data);
+                    break;
+                    
+                case 'AUDIO_CHUNK':
+                    await processAudioChunk(ws, data);
+                    break;
+                    
+                case 'END_REALTIME_SESSION':
+                    await endRealtimeSession(ws, data);
+                    break;
+                    
+                default:
+                    console.log('❓ Unknown message type:', data.type);
+            }
+        } catch (error) {
+            console.error('❌ WebSocket message error:', error);
+            ws.send(JSON.stringify({
+                type: 'ERROR',
+                message: error.message
+            }));
+        }
+    });
+    
+    ws.on('close', () => {
+        console.log('🔌 WebSocket connection closed');
+        // Clean up any active sessions for this connection
+        for (const [sessionId, session] of activeSessions.entries()) {
+            if (session.websocket === ws) {
+                cleanupRealtimeSession(sessionId);
+            }
+        }
+    });
+    
+    ws.on('error', (error) => {
+        console.error('❌ WebSocket error:', error);
+    });
+});
+
+// Start Real-time AI Assistant Session
+async function startRealtimeSession(ws, data) {
+    const { sessionId, clientId, productId, notes, userId } = data;
+    
+    console.log('🚀 Starting real-time session:', sessionId);
+    
+    try {
+        // Get client and product info from database
+        const clientResult = await safeQuery(
+            'SELECT * FROM clients WHERE id = $1 AND user_id = $2',
+            [clientId, userId]
+        );
+        
+        const productResult = await safeQuery(
+            'SELECT * FROM products WHERE id = $1 AND user_id = $2',
+            [productId, userId]
+        );
+        
+        if (clientResult.rows.length === 0 || productResult.rows.length === 0) {
+            throw new Error('Client or product not found');
+        }
+        
+        const client = clientResult.rows[0];
+        const product = productResult.rows[0];
+        
+        // Create AssemblyAI real-time session
+        const assemblyAISession = await createAssemblyAISession();
+        
+        // Initialize GPT context
+        const gptContext = createGPTContext(client, product, notes);
+        
+        // Store session
+        activeSessions.set(sessionId, {
+            websocket: ws,
+            userId,
+            clientId,
+            productId,
+            client,
+            product,
+            notes,
+            assemblyAISession,
+            gptContext,
+            conversationHistory: [],
+            lastAnalysis: Date.now(),
+            startTime: new Date()
+        });
+        
+        // Send success response
+        ws.send(JSON.stringify({
+            type: 'SESSION_STARTED',
+            sessionId,
+            message: 'Real-time AI assistant started successfully'
+        }));
+        
+        console.log('✅ Real-time session started:', sessionId);
+        
+    } catch (error) {
+        console.error('❌ Error starting real-time session:', error);
+        ws.send(JSON.stringify({
+            type: 'SESSION_ERROR',
+            message: 'Failed to start real-time session: ' + error.message
+        }));
+    }
+}
+
+// Create AssemblyAI Real-time Session
+async function createAssemblyAISession() {
+    const response = await fetch('https://api.assemblyai.com/v2/realtime/token', {
+        method: 'POST',
+        headers: {
+            'authorization': ASSEMBLYAI_API_KEY,
+            'content-type': 'application/json'
+        },
+        body: JSON.stringify({
+            expires_in: 3600, // 1 hour
+            sample_rate: ASSEMBLYAI_SAMPLE_RATE
+        })
+    });
+    
+    if (!response.ok) {
+        throw new Error('Failed to create AssemblyAI session');
+    }
+    
+    const data = await response.json();
+    
+    // Create WebSocket connection to AssemblyAI
+    const assemblyWS = new WebSocket(`wss://api.assemblyai.com/v2/realtime/ws?token=${data.token}`);
+    
+    return {
+        token: data.token,
+        websocket: assemblyWS,
+        isConnected: false
+    };
+}
+
+// Process Audio Chunk
+async function processAudioChunk(ws, data) {
+    const { sessionId, audioData } = data;
+    
+    const session = activeSessions.get(sessionId);
+    if (!session) {
+        console.error('❌ Session not found:', sessionId);
+        return;
+    }
+    
+    try {
+        // Send audio to AssemblyAI
+        if (session.assemblyAISession.websocket.readyState === WebSocket.OPEN) {
+            session.assemblyAISession.websocket.send(JSON.stringify({
+                audio_data: audioData
+            }));
+        }
+        
+        // Setup AssemblyAI message handler if not already done
+        if (!session.assemblyAISession.isConnected) {
+            setupAssemblyAIHandler(sessionId, session);
+            session.assemblyAISession.isConnected = true;
+        }
+        
+    } catch (error) {
+        console.error('❌ Error processing audio chunk:', error);
+    }
+}
+
+// Setup AssemblyAI Real-time Handler
+function setupAssemblyAIHandler(sessionId, session) {
+    const assemblyWS = session.assemblyAISession.websocket;
+    
+    assemblyWS.onopen = () => {
+        console.log('🔌 AssemblyAI WebSocket connected for session:', sessionId);
+    };
+    
+    assemblyWS.onmessage = async (event) => {
+        try {
+            const data = JSON.parse(event.data);
+            
+            if (data.message_type === 'FinalTranscript') {
+                console.log('📝 Final transcript received:', data.text);
+                
+                // Process transcript with speaker detection and sentiment
+                await processTranscript(sessionId, {
+                    text: data.text,
+                    confidence: data.confidence,
+                    speaker: data.speaker_label || 'unknown',
+                    sentiment: data.sentiment || 'neutral',
+                    timestamp: Date.now()
+                });
+            }
+            
+            if (data.message_type === 'PartialTranscript') {
+                // Send partial transcript for immediate feedback
+                session.websocket.send(JSON.stringify({
+                    type: 'PARTIAL_TRANSCRIPT',
+                    sessionId,
+                    text: data.text,
+                    speaker: data.speaker_label || 'unknown'
+                }));
+            }
+            
+        } catch (error) {
+            console.error('❌ AssemblyAI message processing error:', error);
+        }
+    };
+    
+    assemblyWS.onerror = (error) => {
+        console.error('❌ AssemblyAI WebSocket error:', error);
+    };
+    
+    assemblyWS.onclose = () => {
+        console.log('🔌 AssemblyAI WebSocket closed for session:', sessionId);
+    };
+}
+
+// Process Transcript and Generate AI Suggestions
+async function processTranscript(sessionId, transcript) {
+    const session = activeSessions.get(sessionId);
+    if (!session) return;
+    
+    try {
+        // Add to conversation history
+        session.conversationHistory.push(transcript);
+        
+        // Send transcript to client
+        session.websocket.send(JSON.stringify({
+            type: 'FINAL_TRANSCRIPT',
+            sessionId,
+            transcript
+        }));
+        
+        // Analyze with GPT if enough time has passed (avoid spam)
+        const now = Date.now();
+        if (now - session.lastAnalysis > 2000) { // 2 second throttle
+            session.lastAnalysis = now;
+            
+            // Generate AI suggestions
+            const suggestions = await generateAISuggestions(session, transcript);
+            
+            // Send suggestions to client
+            session.websocket.send(JSON.stringify({
+                type: 'AI_SUGGESTIONS',
+                sessionId,
+                suggestions
+            }));
+        }
+        
+    } catch (error) {
+        console.error('❌ Error processing transcript:', error);
+    }
+}
+
+// Generate AI Suggestions using GPT
+async function generateAISuggestions(session, newTranscript) {
+    try {
+        const openai = new OpenAI({
+            apiKey: process.env.OPENAI_API_KEY
+        });
+        
+        // Get recent conversation context (last 10 messages)
+        const recentContext = session.conversationHistory
+            .slice(-10)
+            .map(t => `[${t.speaker.toUpperCase()}] ${t.text} (sentiment: ${t.sentiment})`)
+            .join('\n');
+        
+        const prompt = `${session.gptContext}
+
+AKTUALNY FRAGMENT ROZMOWY:
+${recentContext}
+
+NAJNOWSZA WYPOWIEDŹ:
+[${newTranscript.speaker.toUpperCase()}] ${newTranscript.text} (sentiment: ${newTranscript.sentiment})
+
+ZADANIE:
+1. Określ kto mówi (sprzedawca/klient)
+2. Przeanalizuj intencje i emocje
+3. Podaj 1-2 konkretne sugestie co zrobić TERAZ
+4. Wskaż kluczowe sygnały kupna/oporu
+
+Format odpowiedzi (JSON):
+{
+    "speaker_analysis": "sprzedawca/klient",
+    "intent": "krótki opis intencji",
+    "emotion": "emocja klienta",
+    "suggestions": ["sugestia 1", "sugestia 2"],
+    "signals": ["sygnał kupna/oporu"]
+}`;
+
+        const response = await openai.chat.completions.create({
+            model: 'gpt-3.5-turbo',
+            messages: [{ role: 'user', content: prompt }],
+            max_tokens: 300,
+            temperature: 0.3
+        });
+        
+        const result = JSON.parse(response.choices[0].message.content);
+        console.log('💡 AI Suggestions generated:', result);
+        
+        return result;
+        
+    } catch (error) {
+        console.error('❌ Error generating AI suggestions:', error);
+        return {
+            speaker_analysis: "unknown",
+            intent: "Could not analyze",
+            emotion: "unknown",
+            suggestions: ["Continue the conversation naturally"],
+            signals: []
+        };
+    }
+}
+
+// Create GPT Context
+function createGPTContext(client, product, notes) {
+    return `Jesteś zaawansowanym asystentem sprzedażowym AI słuchającym rozmowy w CZASIE RZECZYWISTYM.
+
+TWOJA ROLA:
+- Analizujesz każdą wypowiedź natychmiastowo
+- Rozpoznajesz intencje i emocje
+- Podpowiadasz konkretne akcje
+- Wykrywasz sygnały kupna/oporu
+- Odpowiadasz w formacie JSON
+
+INFORMACJE O KLIENCIE:
+- Nazwa: ${client.name}
+- Opis: ${client.description || 'Brak'}
+- Notatki: ${client.comment || 'Brak'}
+
+INFORMACJE O PRODUKCIE:
+- Nazwa: ${product.name}
+- Opis: ${product.description || 'Brak'}
+- Notatki: ${product.comment || 'Brak'}
+
+NOTATKI SESJI: ${notes || 'Brak'}
+
+WSKAZÓWKI:
+- Speaker "unknown" = automatycznie określ na podstawie kontekstu
+- Sentiment z AssemblyAI: positive/negative/neutral
+- Dawaj praktyczne, natychmiastowe sugestie
+- Wykrywaj momenty na zamknięcie sprzedaży`;
+}
+
+// End Real-time Session
+async function endRealtimeSession(ws, data) {
+    const { sessionId } = data;
+    
+    try {
+        await cleanupRealtimeSession(sessionId);
+        
+        ws.send(JSON.stringify({
+            type: 'SESSION_ENDED',
+            sessionId,
+            message: 'Real-time session ended successfully'
+        }));
+        
+    } catch (error) {
+        console.error('❌ Error ending real-time session:', error);
+    }
+}
+
+// Cleanup Real-time Session
+async function cleanupRealtimeSession(sessionId) {
+    const session = activeSessions.get(sessionId);
+    if (!session) return;
+    
+    try {
+        // Close AssemblyAI connection
+        if (session.assemblyAISession && session.assemblyAISession.websocket) {
+            session.assemblyAISession.websocket.close();
+        }
+        
+        // Save session to database (optional)
+        if (session.conversationHistory.length > 0) {
+            await saveRealtimeSession(session);
+        }
+        
+        // Remove from active sessions
+        activeSessions.delete(sessionId);
+        
+        console.log('🧹 Real-time session cleaned up:', sessionId);
+        
+    } catch (error) {
+        console.error('❌ Error cleaning up session:', error);
+    }
+}
+
+// Save completed real-time session to database
+async function saveRealtimeSession(session) {
+    try {
+        const transcription = session.conversationHistory
+            .map(t => `[${t.speaker}] ${t.text}`)
+            .join('\n\n');
+        
+        await safeQuery(`
+            INSERT INTO sales (
+                product_id, client_id, recording_path, transcription, meeting_datetime,
+                positive_findings, negative_findings, recommendations, own_notes
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        `, [
+            session.productId,
+            session.clientId,
+            'realtime_ai_session',
+            transcription,
+            session.startTime,
+            'Real-time AI session completed',
+            'See conversation analysis',
+            'Follow up based on AI suggestions',
+            session.notes || ''
+        ]);
+        
+        console.log('💾 Real-time session saved to database');
+        
+    } catch (error) {
+        console.error('❌ Error saving real-time session:', error);
+    }
+}
+
+// Start serwera z WebSocket support
 if (process.env.NODE_ENV !== 'production') {
-  // Tryb rozwojowy - uruchom normalnie
-  app.listen(PORT, async () => {
+  // Tryb rozwojowy - uruchom normalnie z WebSocket
+  server.listen(PORT, async () => {
     console.log(`🚀 Serwer aplikacji doradców handlowych działa na porcie ${PORT}`);
     console.log(`🌐 Otwórz http://localhost:${PORT} w przeglądarce`);
+    console.log(`🔌 WebSocket server ready for real-time AI assistant`);
     
     // Test połączenia z bazą danych Neon
     await testNeonConnection();
   });
 } else {
   // Produkcja - Vercel
-  console.log('🚀 Sales Assistant App initialized for Vercel');
+  console.log('🚀 Sales Assistant App initialized for Vercel with WebSocket support');
   console.log('📁 __dirname:', __dirname);
   console.log('📂 Public path:', path.join(__dirname, 'public'));
   console.log('🌐 NODE_ENV:', process.env.NODE_ENV);
+  console.log('🔌 WebSocket server ready for real-time AI assistant');
   testNeonConnection().catch(console.error);
 }
 
 // Export dla Vercel
-module.exports = app; 
+module.exports = server; 

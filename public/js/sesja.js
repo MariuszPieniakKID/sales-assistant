@@ -1,88 +1,115 @@
-// sesja.js - Zarządzanie sesjami sprzedażowymi
+// 🚀 REAL-TIME AI ASSISTANT - AssemblyAI + ChatGPT Integration
+// Nowa wersja z prawdziwym real-time processing
 
-// PIERWSZY TEST - czy skrypt się wykonuje
-console.log('🚀 START - sesja.js');
+console.log('🚀 START - Real-time AI Assistant v2.0');
 
-console.log('🎬 sesja.js - Start ładowania skryptu');
-
+// Global variables
 let clients = [];
 let products = [];
 let currentSession = null;
-let recordingTimer = null;
-let recordingStartTime = null;
+let websocket = null;
+let mediaRecorder = null;
+let audioStream = null;
+let sessionTimer = null;
+let sessionStartTime = null;
 let isRecording = false;
-let recognition = null;
-let isProcessingResponse = false;
+let realtimeTranscript = '';
+let aiSuggestions = [];
 
-// Elementy DOM
-console.log('🔍 Szukanie elementów DOM...');
+// DOM Elements
 const sessionClientSelect = document.getElementById('sessionClient');
-const sessionProductSelect = document.getElementById('sessionProduct');
+const sessionProductSelect = document.getElementById('sessionProductSelect');
 const sessionNotesTextarea = document.getElementById('sessionNotes');
 const startSessionBtn = document.getElementById('startSessionBtn');
 const sessionStatus = document.getElementById('sessionStatus');
 const recentSessionsList = document.getElementById('recentSessionsList');
 
-// NATYCHMIASTOWY TEST DOM
-console.log('🔍 TEST IMMEDIATE DOM:', {
-    sessionClientSelect: !!sessionClientSelect ? 'FOUND' : 'NOT FOUND',
-    sessionProductSelect: !!sessionProductSelect ? 'FOUND' : 'NOT FOUND',
-    sessionNotesTextarea: !!sessionNotesTextarea ? 'FOUND' : 'NOT FOUND',
-});
+// Initialize when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initRealtimeAssistant);
+} else {
+    initRealtimeAssistant();
+}
 
-console.log('🔍 Znalezione elementy DOM:', {
-    sessionClientSelect: !!sessionClientSelect,
-    sessionProductSelect: !!sessionProductSelect,
-    sessionNotesTextarea: !!sessionNotesTextarea,
-    startSessionBtn: !!startSessionBtn,
-    sessionStatus: !!sessionStatus,
-    recentSessionsList: !!recentSessionsList
-});
-
-// Funkcja pomocnicza do fetch z automatycznym sprawdzaniem sesji
-async function fetchWithAuth(url, options = {}) {
+// Initialize Real-time AI Assistant
+async function initRealtimeAssistant() {
+    console.log('🎬 Initializing Real-time AI Assistant...');
+    
     try {
-        const response = await fetch(url, options);
+        await loadClients();
+        await loadProducts();
+        await loadRecentSessions();
+        setupEventListeners();
+        setupWebSocket();
         
-        // Sprawdź czy odpowiedź wskazuje na wygasłą sesję
-        if (response.status === 401) {
-            console.log('❌ API zwróciło 401 - sesja wygasła w sesja.js');
-            window.location.href = '/login';
-            return null;
-        }
-        
-        // Dodatkowe sprawdzenie - czy nie dostaliśmy HTML przekierowania
-        if (response.ok && response.url.includes('/login')) {
-            console.log('❌ Otrzymano przekierowanie do /login przez URL w sesja.js');
-            window.location.href = '/login';
-            return null;
-        }
-        
-        return response;
+        console.log('✅ Real-time AI Assistant initialized successfully');
     } catch (error) {
-        console.error('❌ Błąd fetchWithAuth w sesja.js:', error);
-        throw error;
+        console.error('❌ Failed to initialize AI Assistant:', error);
+        showToast('Błąd inicjalizacji asystenta AI', 'error');
     }
 }
 
-// Inicjalizacja
-function initSesjaSection() {
-    console.log('🎬 Inicjalizacja sekcji sesja...');
-    loadClients();
-    loadProducts();
-    loadRecentSessions();
-    setupEventListeners();
+// Setup WebSocket Connection
+function setupWebSocket() {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}`;
+    
+    console.log('🔌 Connecting to WebSocket:', wsUrl);
+    
+    websocket = new WebSocket(wsUrl);
+    
+    websocket.onopen = () => {
+        console.log('✅ WebSocket connected successfully');
+    };
+    
+    websocket.onmessage = (event) => {
+        try {
+            const data = JSON.parse(event.data);
+            handleWebSocketMessage(data);
+        } catch (error) {
+            console.error('❌ WebSocket message error:', error);
+        }
+    };
+    
+    websocket.onclose = () => {
+        console.log('🔌 WebSocket connection closed');
+        setTimeout(setupWebSocket, 3000);
+    };
+    
+    websocket.onerror = (error) => {
+        console.error('❌ WebSocket error:', error);
+    };
 }
 
-// Sprawdź czy DOM jest gotowy lub czekaj na DOMContentLoaded
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initSesjaSection);
-} else {
-    // DOM już gotowy - wykonaj natychmiast
-    initSesjaSection();
+// Handle WebSocket Messages
+function handleWebSocketMessage(data) {
+    console.log('📨 WebSocket message received:', data.type);
+    
+    switch (data.type) {
+        case 'SESSION_STARTED':
+            onSessionStarted(data);
+            break;
+        case 'PARTIAL_TRANSCRIPT':
+            onPartialTranscript(data);
+            break;
+        case 'FINAL_TRANSCRIPT':
+            onFinalTranscript(data);
+            break;
+        case 'AI_SUGGESTIONS':
+            onAISuggestions(data);
+            break;
+        case 'SESSION_ENDED':
+            onSessionEnded(data);
+            break;
+        case 'SESSION_ERROR':
+            onSessionError(data);
+            break;
+        default:
+            console.log('❓ Unknown WebSocket message type:', data.type);
+    }
 }
 
-// Konfiguracja event listenerów
+// Setup Event Listeners
 function setupEventListeners() {
     console.log('🔧 Konfiguracja event listenerów...');
     
@@ -97,21 +124,16 @@ function setupEventListeners() {
     sessionProductSelect.addEventListener('change', validateSessionForm);
     
     // Rozpoczęcie sesji
-    startSessionBtn.addEventListener('click', function(event) {
-        event.preventDefault(); // Zapobiegaj domyślnej akcji
-        event.stopPropagation(); // Zatrzymaj propagację
-        console.log('🖱️ Kliknięto przycisk Rozpocznij sesję');
-        startSession();
-    });
+    startSessionBtn.addEventListener('click', startRealtimeSession);
     
     // Kontrola sesji
     document.getElementById('pauseSessionBtn')?.addEventListener('click', pauseSession);
-    document.getElementById('stopSessionBtn')?.addEventListener('click', stopSession);
+    document.getElementById('stopSessionBtn')?.addEventListener('click', stopRealtimeSession);
     
     console.log('✅ Event listenery skonfigurowane');
 }
 
-// Ładowanie klientów
+// Load Clients
 async function loadClients() {
     try {
         console.log('📥 Ładowanie klientów...');
@@ -136,7 +158,7 @@ async function loadClients() {
     }
 }
 
-// Ładowanie produktów
+// Load Products
 async function loadProducts() {
     try {
         console.log('📥 Ładowanie produktów...');
@@ -161,7 +183,7 @@ async function loadProducts() {
     }
 }
 
-// Wypełnienie listy klientów
+// Populate Client Select
 function populateClientSelect() {
     console.log('🏢 populateClientSelect - start, klienci:', clients.length);
     console.log('🔍 Element sessionClientSelect:', !!sessionClientSelect);
@@ -184,7 +206,7 @@ function populateClientSelect() {
     console.log('✅ populateClientSelect - zakończone, opcje:', sessionClientSelect.children.length);
 }
 
-// Wypełnienie listy produktów
+// Populate Product Select
 function populateProductSelect() {
     console.log('📦 populateProductSelect - start, produkty:', products.length);
     console.log('🔍 Element sessionProductSelect:', !!sessionProductSelect);
@@ -207,7 +229,7 @@ function populateProductSelect() {
     console.log('✅ populateProductSelect - zakończone, opcje:', sessionProductSelect.children.length);
 }
 
-// Walidacja formularza sesji
+// Validate Session Form
 function validateSessionForm() {
     const clientSelected = sessionClientSelect.value !== '';
     const productSelected = sessionProductSelect.value !== '';
@@ -215,159 +237,240 @@ function validateSessionForm() {
     startSessionBtn.disabled = !(clientSelected && productSelected);
 }
 
-// Rozpoczęcie sesji
-async function startSession() {
-    console.log('🎙️ startSession() - rozpoczynam live chat sesję...');
+// Start Real-time AI Assistant Session
+async function startRealtimeSession() {
+    console.log('🚀 Starting real-time AI assistant session...');
+    
+    if (!sessionClientSelect || !sessionProductSelect) {
+        showToast('Elementy formularza nie zostały znalezione', 'error');
+        return;
+    }
     
     const clientId = sessionClientSelect.value;
     const productId = sessionProductSelect.value;
-    const notes = sessionNotesTextarea.value;
-    
-    console.log('📋 Dane sesji:', { clientId, productId, notes });
+    const notes = sessionNotesTextarea ? sessionNotesTextarea.value : '';
     
     if (!clientId || !productId) {
-        console.log('❌ Brak klienta lub produktu');
         showToast('Proszę wybierz klienta i produkt', 'error');
         return;
     }
     
     try {
-        console.log('🤖 Rozpoczynam live chat z ChatGPT...');
+        // Get user info from current session
+        const userResponse = await fetchWithAuth('/api/user');
+        if (!userResponse || !userResponse.ok) {
+            throw new Error('Failed to get user info');
+        }
+        const user = await userResponse.json();
         
-        // Rozpocznij chat z OpenAI
-        const response = await fetchWithAuth('/api/chat/start', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                clientId: clientId,
-                productId: productId,
-                notes: notes
-            })
+        // Request microphone access
+        audioStream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+                sampleRate: 16000,
+                channelCount: 1,
+                echoCancellation: true,
+                noiseSuppression: true
+            }
         });
         
-        if (!response) {
-            return; // fetchWithAuth już obsłużył przekierowanie
-        }
+        console.log('🎤 Microphone access granted');
         
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.message || 'Błąd rozpoczynania chatu');
-        }
+        // Generate session ID
+        const sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
         
-        const chatData = await response.json();
-        console.log('✅ Chat rozpoczęty:', chatData);
-        
-        // Utwórz sesję
+        // Initialize session
         currentSession = {
-            clientId: clientId,
-            productId: productId,
-            notes: notes,
-            chatContext: chatData.chatContext,
-            conversationHistory: [],
-            startTime: new Date()
+            sessionId,
+            clientId,
+            productId,
+            notes,
+            userId: user.user.id,
+            startTime: new Date(),
+            transcript: '',
+            suggestions: []
         };
         
-        console.log('✅ Sesja utworzona:', currentSession);
+        // Send session start message to WebSocket
+        websocket.send(JSON.stringify({
+            type: 'START_REALTIME_SESSION',
+            sessionId,
+            clientId,
+            productId,
+            notes,
+            userId: user.user.id
+        }));
         
-        // Pokaż interfejs live chatu
-        console.log('🖥️ Pokazuję interfejs live chatu...');
-        showLiveChatInterface();
+        // Setup audio recording
+        setupAudioRecording();
         
-        // Wyczyść panel sugestii
-        const suggestionsContent = document.getElementById('suggestionsContent');
-        if (suggestionsContent) {
-            suggestionsContent.innerHTML = `
-                <div class="suggestion-item initial">
-                    <i class="fas fa-info-circle"></i>
-                    <span>Rozpocznij rozmowę z klientem. AI będzie analizował i podpowiadał w czasie rzeczywistym.</span>
-                </div>
-            `;
-        }
-        
-        // Rozpocznij timer
-        console.log('⏰ Rozpoczynam timer...');
-        startRecordingTimer();
-        
-        console.log('🎉 Live chat sesja rozpoczęta pomyślnie!');
-        showToast('Live chat z ChatGPT rozpoczęty!', 'success');
+        console.log('✅ Session start request sent');
         
     } catch (error) {
-        console.error('❌ Błąd rozpoczynania live chat sesji:', error);
-        showToast('Błąd rozpoczynania sesji: ' + error.message, 'error');
+        console.error('❌ Error starting real-time session:', error);
+        if (error.name === 'NotAllowedError') {
+            showToast('Dostęp do mikrofonu został odrzucony. Włącz mikrofon w ustawieniach przeglądarki.', 'error');
+        } else {
+            showToast('Błąd rozpoczynania sesji: ' + error.message, 'error');
+        }
     }
 }
 
-// Pokazanie interfejsu nagrywania
-function showRecordingInterface() {
-    console.log('🖥️ showRecordingInterface() - start');
-    
+// Setup Audio Recording with Real-time Processing
+function setupAudioRecording() {
     try {
-        // Ukryj formularz konfiguracji
-        console.log('🔍 Szukam .setup-card...');
-        const setupCard = document.querySelector('.setup-card');
-        if (setupCard) {
-            console.log('✅ Znaleziono .setup-card, ukrywam...');
-            setupCard.style.display = 'none';
-        } else {
-            console.error('❌ NIE znaleziono .setup-card!');
-        }
+        // Create MediaRecorder for audio streaming
+        mediaRecorder = new MediaRecorder(audioStream, {
+            mimeType: 'audio/webm;codecs=opus',
+            audioBitsPerSecond: 128000
+        });
         
-        // Pokaż status sesji
-        console.log('🔍 Sprawdzam sessionStatus element...');
-        if (sessionStatus) {
-            console.log('✅ sessionStatus istnieje, pokazuję...');
-            sessionStatus.style.display = 'block';
-        } else {
-            console.error('❌ sessionStatus NIE istnieje!');
-        }
+        mediaRecorder.ondataavailable = (event) => {
+            if (event.data.size > 0 && websocket && websocket.readyState === WebSocket.OPEN) {
+                // Convert audio data to base64 for transmission
+                const reader = new FileReader();
+                reader.onload = () => {
+                    const audioData = reader.result.split(',')[1]; // Remove data:audio/webm;base64,
+                    
+                    websocket.send(JSON.stringify({
+                        type: 'AUDIO_CHUNK',
+                        sessionId: currentSession.sessionId,
+                        audioData: audioData
+                    }));
+                };
+                reader.readAsDataURL(event.data);
+            }
+        };
         
-        // Wypełnij informacje o sesji
-        console.log('🔍 Szukam klienta i produktu...');
-        const selectedClient = clients.find(c => c.id == currentSession.clientId);
-        const selectedProduct = products.find(p => p.id == currentSession.productId);
+        mediaRecorder.onerror = (error) => {
+            console.error('❌ MediaRecorder error:', error);
+        };
         
-        console.log('👤 Znaleziony klient:', selectedClient);
-        console.log('📦 Znaleziony produkt:', selectedProduct);
+        // Start recording with 250ms intervals for real-time processing
+        mediaRecorder.start(250);
+        isRecording = true;
         
-        console.log('🔍 Aktualizuję nazwy w interfejsie...');
-        const clientNameEl = document.getElementById('currentClientName');
-        const productNameEl = document.getElementById('currentProductName');
-        
-        if (clientNameEl) {
-            clientNameEl.textContent = selectedClient ? selectedClient.name : '-';
-            console.log('✅ Zaktualizowano currentClientName');
-        } else {
-            console.error('❌ NIE znaleziono currentClientName!');
-        }
-        
-        if (productNameEl) {
-            productNameEl.textContent = selectedProduct ? selectedProduct.name : '-';
-            console.log('✅ Zaktualizowano currentProductName');
-        } else {
-            console.error('❌ NIE znaleziono currentProductName!');
-        }
-        
-        console.log('✅ showRecordingInterface() - zakończone pomyślnie');
+        console.log('🎤 Audio recording started');
         
     } catch (error) {
-        console.error('❌ BŁĄD w showRecordingInterface():', error);
-        throw error; // Re-throw aby zobaczyć czy to powoduje przekierowanie
+        console.error('❌ Error setting up audio recording:', error);
+        showToast('Błąd konfiguracji nagrywania audio', 'error');
     }
 }
 
-// Rozpoczęcie timera nagrywania
-function startRecordingTimer() {
-    recordingStartTime = Date.now();
-    recordingTimer = setInterval(updateRecordingTime, 1000);
+// Session Started Handler
+function onSessionStarted(data) {
+    console.log('✅ Real-time session started:', data.sessionId);
+    
+    // Show real-time interface
+    showRealtimeInterface();
+    
+    // Start session timer
+    startSessionTimer();
+    
+    showToast('🤖 Asystent AI rozpoczął nasłuchiwanie!', 'success');
 }
 
-// Aktualizacja czasu nagrywania
-function updateRecordingTime() {
-    if (!recordingStartTime) return;
+// Show Real-time Interface
+function showRealtimeInterface() {
+    // Hide setup form
+    const setupCard = document.querySelector('.setup-card');
+    if (setupCard) {
+        setupCard.style.display = 'none';
+    }
     
-    const elapsed = Date.now() - recordingStartTime;
+    // Create and show real-time interface
+    const realtimeInterface = createRealtimeInterface();
+    const container = document.querySelector('.session-container') || document.body;
+    container.appendChild(realtimeInterface);
+}
+
+// Create Real-time Interface
+function createRealtimeInterface() {
+    const interface = document.createElement('div');
+    interface.className = 'realtime-interface';
+    interface.id = 'realtimeInterface';
+    
+    const selectedClient = clients.find(c => c.id == currentSession.clientId);
+    const selectedProduct = products.find(p => p.id == currentSession.productId);
+    
+    interface.innerHTML = `
+        <div class="realtime-header">
+            <div class="session-info">
+                <h3>🤖 Asystent AI - Sesja na żywo</h3>
+                <div class="session-details">
+                    <span><strong>Klient:</strong> ${selectedClient ? selectedClient.name : 'Unknown'}</span>
+                    <span><strong>Produkt:</strong> ${selectedProduct ? selectedProduct.name : 'Unknown'}</span>
+                    <span><strong>Czas:</strong> <span id="sessionTimer">00:00:00</span></span>
+                </div>
+            </div>
+            <div class="session-controls">
+                <button id="pauseBtn" class="btn btn-warning">
+                    <i class="fas fa-pause"></i> Wstrzymaj
+                </button>
+                <button id="stopBtn" class="btn btn-danger">
+                    <i class="fas fa-stop"></i> Zakończ
+                </button>
+            </div>
+        </div>
+        
+        <div class="realtime-content">
+            <div class="transcript-panel">
+                <h4><i class="fas fa-microphone"></i> Transkrypcja na żywo</h4>
+                <div class="transcript-content" id="transcriptContent">
+                    <div class="transcript-placeholder">
+                        <i class="fas fa-ear-listen"></i>
+                        <span>Rozpocznij rozmowę - asystent AI nasłuchuje...</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="suggestions-panel">
+                <h4><i class="fas fa-brain"></i> Sugestie AI</h4>
+                <div class="suggestions-content" id="suggestionsContent">
+                    <div class="suggestion-placeholder">
+                        <i class="fas fa-robot"></i>
+                        <span>Sugestie pojawią się podczas rozmowy...</span>
+                    </div>
+                </div>
+                
+                <div class="ai-status" id="aiStatus">
+                    <div class="status-indicator">
+                        <div class="status-dot active"></div>
+                        <span>AI Assistant aktywny</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Add event listeners
+    setTimeout(() => {
+        const pauseBtn = document.getElementById('pauseBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        
+        if (pauseBtn) {
+            pauseBtn.addEventListener('click', pauseSession);
+        }
+        
+        if (stopBtn) {
+            stopBtn.addEventListener('click', stopRealtimeSession);
+        }
+    }, 100);
+    
+    return interface;
+}
+
+// Start Session Timer
+function startSessionTimer() {
+    sessionStartTime = Date.now();
+    sessionTimer = setInterval(updateSessionTimer, 1000);
+}
+
+// Update Session Timer
+function updateSessionTimer() {
+    if (!sessionStartTime) return;
+    
+    const elapsed = Date.now() - sessionStartTime;
     const hours = Math.floor(elapsed / 3600000);
     const minutes = Math.floor((elapsed % 3600000) / 60000);
     const seconds = Math.floor((elapsed % 60000) / 1000);
@@ -377,113 +480,298 @@ function updateRecordingTime() {
         String(minutes).padStart(2, '0') + ':' +
         String(seconds).padStart(2, '0');
     
-    // Aktualizuj timer w nowym interfejsie
-    const sessionTimer = document.getElementById('sessionTimer');
-    if (sessionTimer) {
-        sessionTimer.textContent = timeString;
-    }
-    
-    // Aktualizuj timer w live chat interface (fallback)
-    const liveChatTimer = document.getElementById('liveChatTimer');
-    if (liveChatTimer) {
-        liveChatTimer.textContent = timeString;
-    }
-    
-    // Fallback na stary timer
-    const recordingTime = document.getElementById('recordingTime');
-    if (recordingTime) {
-        recordingTime.textContent = timeString;
+    const timerElement = document.getElementById('sessionTimer');
+    if (timerElement) {
+        timerElement.textContent = timeString;
     }
 }
 
-// Wstrzymanie sesji
-function pauseSession() {
-    if (recordingTimer) {
-        clearInterval(recordingTimer);
-        recordingTimer = null;
+// Partial Transcript Handler
+function onPartialTranscript(data) {
+    const transcriptContent = document.getElementById('transcriptContent');
+    if (!transcriptContent) return;
+    
+    // Update live transcript with partial results
+    const partialElement = transcriptContent.querySelector('.partial-transcript');
+    
+    if (partialElement) {
+        partialElement.innerHTML = `
+            <div class="transcript-line partial">
+                <span class="speaker">[${data.transcript.speaker}]</span>
+                <span class="text">${data.transcript.text}</span>
+                <span class="partial-indicator">...</span>
+            </div>
+        `;
+    } else {
+        const newPartial = document.createElement('div');
+        newPartial.className = 'partial-transcript';
+        newPartial.innerHTML = `
+            <div class="transcript-line partial">
+                <span class="speaker">[${data.transcript.speaker}]</span>
+                <span class="text">${data.transcript.text}</span>
+                <span class="partial-indicator">...</span>
+            </div>
+        `;
+        transcriptContent.appendChild(newPartial);
     }
     
-    const pauseBtn = document.getElementById('pauseSessionBtn');
-    pauseBtn.innerHTML = '<i class="fas fa-play"></i> Wznów';
-    pauseBtn.onclick = resumeSession;
+    // Remove placeholder
+    const placeholder = transcriptContent.querySelector('.transcript-placeholder');
+    if (placeholder) {
+        placeholder.remove();
+    }
+}
+
+// Final Transcript Handler
+function onFinalTranscript(data) {
+    const transcriptContent = document.getElementById('transcriptContent');
+    if (!transcriptContent) return;
+    
+    // Remove partial transcript
+    const partialElement = transcriptContent.querySelector('.partial-transcript');
+    if (partialElement) {
+        partialElement.remove();
+    }
+    
+    // Add final transcript
+    const finalElement = document.createElement('div');
+    finalElement.className = 'transcript-entry';
+    
+    const timestamp = new Date().toLocaleTimeString('pl-PL');
+    const sentiment = data.transcript.sentiment || 'neutral';
+    const sentimentIcon = sentiment === 'positive' ? '😊' : sentiment === 'negative' ? '😐' : '😌';
+    
+    finalElement.innerHTML = `
+        <div class="transcript-line final">
+            <div class="transcript-meta">
+                <span class="timestamp">${timestamp}</span>
+                <span class="speaker ${data.transcript.speaker}">[${data.transcript.speaker.toUpperCase()}]</span>
+                <span class="sentiment" title="Sentiment: ${sentiment}">${sentimentIcon}</span>
+            </div>
+            <div class="transcript-text">
+                ${data.transcript.text}
+            </div>
+        </div>
+    `;
+    
+    transcriptContent.appendChild(finalElement);
+    
+    // Auto-scroll to bottom
+    transcriptContent.scrollTop = transcriptContent.scrollHeight;
+    
+    // Update session transcript
+    if (currentSession) {
+        currentSession.transcript += `[${data.transcript.speaker}] ${data.transcript.text}\n`;
+    }
+}
+
+// AI Suggestions Handler
+function onAISuggestions(data) {
+    console.log('💡 AI Suggestions received:', data.suggestions);
+    
+    const suggestionsContent = document.getElementById('suggestionsContent');
+    if (!suggestionsContent) return;
+    
+    // Remove placeholder
+    const placeholder = suggestionsContent.querySelector('.suggestion-placeholder');
+    if (placeholder) {
+        placeholder.remove();
+    }
+    
+    // Clear old suggestions
+    suggestionsContent.innerHTML = '';
+    
+    const suggestions = data.suggestions;
+    
+    // Speaker Analysis
+    const speakerElement = document.createElement('div');
+    speakerElement.className = 'suggestion-item speaker-analysis';
+    speakerElement.innerHTML = `
+        <div class="suggestion-header">
+            <i class="fas fa-user-check"></i>
+            <span>Analiza mówcy</span>
+        </div>
+        <div class="suggestion-content">
+            <strong>Mówi:</strong> ${suggestions.speaker_analysis || 'unknown'}
+        </div>
+    `;
+    suggestionsContent.appendChild(speakerElement);
+    
+    // Intent & Emotion
+    const intentElement = document.createElement('div');
+    intentElement.className = 'suggestion-item intent-analysis';
+    intentElement.innerHTML = `
+        <div class="suggestion-header">
+            <i class="fas fa-brain"></i>
+            <span>Intencje i emocje</span>
+        </div>
+        <div class="suggestion-content">
+            <div><strong>Intencja:</strong> ${suggestions.intent || 'nieznana'}</div>
+            <div><strong>Emocja:</strong> ${suggestions.emotion || 'neutralna'}</div>
+        </div>
+    `;
+    suggestionsContent.appendChild(intentElement);
+    
+    // Suggestions
+    if (suggestions.suggestions && suggestions.suggestions.length > 0) {
+        suggestions.suggestions.forEach((suggestion, index) => {
+            const suggestionElement = document.createElement('div');
+            suggestionElement.className = 'suggestion-item action-suggestion';
+            suggestionElement.innerHTML = `
+                <div class="suggestion-header">
+                    <i class="fas fa-lightbulb"></i>
+                    <span>Sugestia ${index + 1}</span>
+                </div>
+                <div class="suggestion-content">
+                    ${suggestion}
+                </div>
+            `;
+            suggestionsContent.appendChild(suggestionElement);
+        });
+    }
+    
+    // Signals
+    if (suggestions.signals && suggestions.signals.length > 0) {
+        const signalsElement = document.createElement('div');
+        signalsElement.className = 'suggestion-item signals';
+        signalsElement.innerHTML = `
+            <div class="suggestion-header">
+                <i class="fas fa-exclamation-triangle"></i>
+                <span>Sygnały</span>
+            </div>
+            <div class="suggestion-content">
+                ${suggestions.signals.map(signal => `<div>• ${signal}</div>`).join('')}
+            </div>
+        `;
+        suggestionsContent.appendChild(signalsElement);
+    }
+    
+    // Add animation
+    suggestionsContent.classList.add('updated');
+    setTimeout(() => {
+        suggestionsContent.classList.remove('updated');
+    }, 1000);
+}
+
+// Pause Session
+function pauseSession() {
+    if (!mediaRecorder || !isRecording) return;
+    
+    mediaRecorder.pause();
+    isRecording = false;
+    
+    if (sessionTimer) {
+        clearInterval(sessionTimer);
+        sessionTimer = null;
+    }
+    
+    const pauseBtn = document.getElementById('pauseBtn');
+    if (pauseBtn) {
+        pauseBtn.innerHTML = '<i class="fas fa-play"></i> Wznów';
+        pauseBtn.onclick = resumeSession;
+    }
     
     showToast('Sesja wstrzymana', 'info');
 }
 
-// Wznowienie sesji
+// Resume Session
 function resumeSession() {
-    startRecordingTimer();
+    if (!mediaRecorder || isRecording) return;
     
-    const pauseBtn = document.getElementById('pauseSessionBtn');
-    pauseBtn.innerHTML = '<i class="fas fa-pause"></i> Wstrzymaj';
-    pauseBtn.onclick = pauseSession;
+    mediaRecorder.resume();
+    isRecording = true;
+    
+    startSessionTimer();
+    
+    const pauseBtn = document.getElementById('pauseBtn');
+    if (pauseBtn) {
+        pauseBtn.innerHTML = '<i class="fas fa-pause"></i> Wstrzymaj';
+        pauseBtn.onclick = pauseSession;
+    }
     
     showToast('Sesja wznowiona', 'info');
 }
 
-// Zakończenie sesji
-async function stopSession() {
-    if (!currentSession) return;
+// Stop Real-time Session
+async function stopRealtimeSession() {
+    console.log('🛑 Stopping real-time session...');
     
     try {
-        // Zatrzymaj timer
-        if (recordingTimer) {
-            clearInterval(recordingTimer);
-            recordingTimer = null;
+        // Stop recording
+        if (mediaRecorder && isRecording) {
+            mediaRecorder.stop();
+            isRecording = false;
         }
         
-        // Zatrzymaj strumień audio
-        if (currentSession.stream) {
-            currentSession.stream.getTracks().forEach(track => track.stop());
+        // Stop audio stream
+        if (audioStream) {
+            audioStream.getTracks().forEach(track => track.stop());
+            audioStream = null;
         }
         
-        // Zapisz sesję (symulacja - w rzeczywistości wysłałbyś nagranie do serwera)
-        const sessionData = {
-            clientId: currentSession.clientId,
-            productId: currentSession.productId,
-            notes: currentSession.notes,
-            duration: Date.now() - recordingStartTime,
-            endTime: new Date()
-        };
+        // Stop timer
+        if (sessionTimer) {
+            clearInterval(sessionTimer);
+            sessionTimer = null;
+        }
         
-        console.log('Sesja zakończona:', sessionData);
+        // Send end session message
+        if (websocket && currentSession) {
+            websocket.send(JSON.stringify({
+                type: 'END_REALTIME_SESSION',
+                sessionId: currentSession.sessionId
+            }));
+        }
         
-        // Reset interfejsu
-        resetSessionInterface();
-        
-        // Odśwież ostatnie sesje
-        loadRecentSessions();
-        
-        showToast('Sesja zakończona i zapisana', 'success');
+        showToast('Sesja zakończona - zapisywanie...', 'info');
         
     } catch (error) {
-        console.error('Błąd kończenia sesji:', error);
+        console.error('❌ Error stopping session:', error);
         showToast('Błąd kończenia sesji', 'error');
     }
 }
 
-// Reset interfejsu sesji
-function resetSessionInterface() {
-    // Pokaż formularz konfiguracji
-    document.querySelector('.setup-card').style.display = 'block';
+// Session Ended Handler
+function onSessionEnded(data) {
+    console.log('✅ Session ended successfully');
     
-    // Ukryj status sesji
-    sessionStatus.style.display = 'none';
+    // Remove real-time interface
+    const realtimeInterface = document.getElementById('realtimeInterface');
+    if (realtimeInterface) {
+        realtimeInterface.remove();
+    }
     
-    // Wyczyść formularz
-    sessionClientSelect.value = '';
-    sessionProductSelect.value = '';
-    sessionNotesTextarea.value = '';
+    // Show setup form again
+    const setupCard = document.querySelector('.setup-card');
+    if (setupCard) {
+        setupCard.style.display = 'block';
+    }
     
-    // Reset zmiennych
+    // Reset form
+    if (sessionClientSelect) sessionClientSelect.value = '';
+    if (sessionProductSelect) sessionProductSelect.value = '';
+    if (sessionNotesTextarea) sessionNotesTextarea.value = '';
+    
+    // Reset variables
     currentSession = null;
-    recordingStartTime = null;
+    sessionStartTime = null;
     
-    // Waliduj formularz
     validateSessionForm();
+    loadRecentSessions();
+    
+    showToast('Sesja została zapisana pomyślnie!', 'success');
 }
 
-// Ładowanie ostatnich sesji
+// Session Error Handler
+function onSessionError(data) {
+    console.error('❌ Session error:', data.message);
+    showToast('Błąd sesji: ' + data.message, 'error');
+    
+    // Reset state
+    stopRealtimeSession();
+}
+
+// Load Recent Sessions
 async function loadRecentSessions() {
     try {
         console.log('📅 Ładowanie ostatnich sesji...');
@@ -509,7 +797,7 @@ async function loadRecentSessions() {
     }
 }
 
-// Wyświetlenie ostatnich sesji
+// Display Recent Sessions
 function displayRecentSessions(sessions) {
     if (sessions.length === 0) {
         recentSessionsList.innerHTML = `
@@ -523,872 +811,67 @@ function displayRecentSessions(sessions) {
     
     recentSessionsList.innerHTML = sessions.map(session => `
         <div class="session-item">
-            <div class="session-details">
-                <div class="session-title">${session.client_name} - ${session.product_name}</div>
-                <div class="session-meta">${new Date(session.meeting_datetime).toLocaleString('pl-PL')}</div>
+            <div class="session-info">
+                <h4>${session.client_name || 'Nieznany klient'}</h4>
+                <p>${session.product_name || 'Nieznany produkt'}</p>
+                <span class="session-date">${new Date(session.meeting_datetime).toLocaleDateString('pl-PL')}</span>
             </div>
-            <div class="session-duration">
-                <i class="fas fa-clock"></i>
-                ${formatDuration(session.created_at)}
+            <div class="session-type">
+                <i class="fas fa-robot"></i>
+                <span>AI Session</span>
             </div>
         </div>
     `).join('');
 }
 
-// Formatowanie czasu trwania
-function formatDuration(timestamp) {
-    // Placeholder - w rzeczywistości obliczałbyś rzeczywisty czas trwania
-    return '15:30';
-}
-
-// Funkcja toast (fallback jeśli nie istnieje globalnie)
-function showToast(message, type = 'info') {
-    if (typeof window.showToast === 'function') {
-        window.showToast(message, type);
-        return;
-    }
-    
-    // Fallback
-    if (type === 'error') {
-        alert('Błąd: ' + message);
-    } else {
-        alert(message);
-    }
-}
-
-// Funkcja testowa - sprawdź czy skrypt się załadował
-window.testSesjaScript = function() {
-    console.log('✅ sesja.js ZAŁADOWANY!');
-    console.log('🔍 Elementy DOM:', {
-        sessionClientSelect: !!sessionClientSelect,
-        sessionProductSelect: !!sessionProductSelect
-    });
-    
-    // Przetestuj ładowanie danych ręcznie
-    console.log('🧪 Testuje ładowanie klientów...');
-    loadClients();
-    
-    console.log('🧪 Testuje ładowanie produktów...');
-    loadProducts();
-};
-
-// Pokazanie interfejsu live chatu z ChatGPT
-function showLiveChatInterface() {
-    console.log('🖥️ showLiveChatInterface() - start');
-    
+// Fetch with Auth wrapper
+async function fetchWithAuth(url, options = {}) {
     try {
-        // Ukryj formularz konfiguracji
-        const setupCard = document.querySelector('.setup-card');
-        if (setupCard) {
-            setupCard.style.display = 'none';
+        const response = await fetch(url, options);
+        
+        if (response.status === 401) {
+            console.log('❌ API zwróciło 401 - sesja wygasła w sesja.js');
+            window.location.href = '/login';
+            return null;
         }
         
-        // Ukryj stary status sesji
-        const sessionStatus = document.getElementById('sessionStatus');
-        if (sessionStatus) {
-            sessionStatus.style.display = 'none';
+        if (response.ok && response.url.includes('/login')) {
+            console.log('❌ Otrzymano przekierowanie do /login przez URL w sesja.js');
+            window.location.href = '/login';
+            return null;
         }
         
-        // Ukryj recent sessions
-        const recentSessions = document.querySelector('.recent-sessions');
-        if (recentSessions) {
-            recentSessions.style.display = 'none';
-        }
-        
-        // Znajdź informacje o kliencie i produkcie
-        const selectedClient = clients.find(c => c.id == currentSession.clientId);
-        const selectedProduct = products.find(p => p.id == currentSession.productId);
-        
-        // NOWY PROSTY INTERFEJS - TYLKO SUGESTIE AI
-        const liveChatHTML = `
-            <div class="ai-suggestions-interface">
-                <!-- Kompaktowy header -->
-                <div class="compact-header">
-                    <div class="session-info">
-                        <h1>🤖 AI Asystent Sprzedażowy</h1>
-                        <p>Klient: <strong>${selectedClient ? selectedClient.name : 'Nieznany'}</strong> | 
-                           Produkt: <strong>${selectedProduct ? selectedProduct.name : 'Nieznany'}</strong> | 
-                           Czas: <span id="sessionTimer">00:00:00</span></p>
-                    </div>
-                    <button class="end-session-btn" id="endSessionBtn">
-                        Zakończ sesję
-                    </button>
-                </div>
-                
-                <!-- GŁÓWNY PANEL SUGESTII -->
-                <div class="ai-suggestions-panel">
-                    <div class="suggestions-title">
-                        <h2>💡 Sugestie AI w czasie rzeczywistym</h2>
-                        <div class="ai-status" id="aiStatus">
-                            <span class="status-dot"></span>
-                            <span>Oczekuje na rozpoczęcie</span>
-                        </div>
-                    </div>
-                    
-                    <div class="suggestions-area" id="suggestionsArea">
-                        <!-- Wiadomość startowa -->
-                        <div class="start-message">
-                            <div class="start-icon">🎯</div>
-                            <h3>Gotowy do pomocy!</h3>
-                            <p>Kliknij przycisk poniżej aby rozpocząć analizę rozmowy.<br>
-                               AI będzie podpowiadać Ci najlepsze strategie sprzedażowe.</p>
-                            
-                            <div class="quick-tips">
-                                <div class="tip">
-                                    <span class="tip-icon">🤝</span>
-                                    <span>Buduj relację z klientem</span>
-                                </div>
-                                <div class="tip">
-                                    <span class="tip-icon">🔍</span>
-                                    <span>Odkryj prawdziwe potrzeby</span>
-                                </div>
-                                <div class="tip">
-                                    <span class="tip-icon">💎</span>
-                                    <span>Dopasuj rozwiązanie</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- DUŻY PRZYCISK START -->
-                <div class="start-control">
-                    <button class="start-ai-btn" id="startAiBtn">
-                        <span class="btn-icon">🎤</span>
-                        <div class="btn-text">
-                            <div class="btn-title">Rozpocznij analizę AI</div>
-                            <div class="btn-subtitle">Kliknij aby AI zaczął słuchać i doradzać</div>
-                        </div>
-                    </button>
-                    
-                    <div class="listening-indicator" id="listeningIndicator" style="display: none;">
-                        <div class="sound-waves">
-                            <span class="wave"></span>
-                            <span class="wave"></span>
-                            <span class="wave"></span>
-                        </div>
-                        <span class="listening-text">AI słucha i analizuje rozmowę...</span>
-                    </div>
-                </div>
-            </div>
-        `;
-        
-        // Dodaj interfejs do session-content
-        const sessionContent = document.querySelector('.session-content');
-        if (sessionContent) {
-            sessionContent.insertAdjacentHTML('beforeend', liveChatHTML);
-        }
-        
-        // Konfiguruj event listenery
-        setupSimpleEventListeners();
-        
-        console.log('✅ showLiveChatInterface() - zakończone pomyślnie');
-        
+        return response;
     } catch (error) {
-        console.error('❌ BŁĄD w showLiveChatInterface():', error);
+        console.error('❌ Błąd fetchWithAuth w sesja.js:', error);
         throw error;
     }
 }
 
-// Proste event listenery
-function setupSimpleEventListeners() {
-    console.log('🔧 Konfiguracja prostych event listenerów...');
+// Show Toast Notification
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
     
-    // Przycisk zakończ sesję
-    const endSessionBtn = document.getElementById('endSessionBtn');
-    if (endSessionBtn) {
-        endSessionBtn.addEventListener('click', endLiveChat);
-    }
+    const icon = type === 'success' ? 'check-circle' : 
+                 type === 'error' ? 'exclamation-circle' : 
+                 type === 'warning' ? 'exclamation-triangle' : 'info-circle';
     
-    // Przycisk start AI
-    const startAiBtn = document.getElementById('startAiBtn');
-    if (startAiBtn) {
-        startAiBtn.addEventListener('click', toggleAIListening);
-    }
-    
-    console.log('✅ Proste event listenery skonfigurowane');
-}
-
-// Toggle AI słuchania
-function toggleAIListening() {
-    if (isRecording) {
-        stopAIListening();
-    } else {
-        startAIListening();
-    }
-}
-
-// Start AI słuchania
-function startAIListening() {
-    console.log('🎤 Rozpoczynam AI słuchanie...');
-    
-    if (!recognition && !initSpeechRecognition()) {
-        showToast('Rozpoznawanie mowy nie jest obsługiwane', 'error');
-        return;
-    }
-    
-    try {
-        recognition.start();
-        isRecording = true;
-        updateAIUI(true);
-    } catch (error) {
-        console.error('❌ Błąd rozpoczynania AI słuchania:', error);
-    }
-}
-
-// Stop AI słuchania
-function stopAIListening() {
-    console.log('🛑 Zatrzymuję AI słuchanie');
-    
-    if (recognition) {
-        recognition.stop();
-    }
-    
-    isRecording = false;
-    updateAIUI(false);
-}
-
-// Update AI UI
-function updateAIUI(listening) {
-    const startBtn = document.getElementById('startAiBtn');
-    const listeningIndicator = document.getElementById('listeningIndicator');
-    const aiStatus = document.getElementById('aiStatus');
-    const statusDot = aiStatus?.querySelector('.status-dot');
-    
-    if (listening) {
-        // Przycisk
-        if (startBtn) {
-            startBtn.classList.add('recording');
-            const btnTitle = startBtn.querySelector('.btn-title');
-            const btnSubtitle = startBtn.querySelector('.btn-subtitle');
-            if (btnTitle) btnTitle.textContent = 'Zatrzymaj analizę AI';
-            if (btnSubtitle) btnSubtitle.textContent = 'AI aktywnie analizuje rozmowę';
-        }
-        
-        // Indicator
-        if (listeningIndicator) {
-            listeningIndicator.style.display = 'flex';
-        }
-        
-        // Status
-        if (aiStatus) {
-            aiStatus.classList.add('active');
-            const statusText = aiStatus.querySelector('span:last-child');
-            if (statusText) statusText.textContent = 'AI aktywny - analizuje';
-        }
-        
-        // Usuń start message
-        const startMessage = document.querySelector('.start-message');
-        if (startMessage) {
-            startMessage.style.display = 'none';
-        }
-        
-    } else {
-        // Przycisk
-        if (startBtn) {
-            startBtn.classList.remove('recording');
-            const btnTitle = startBtn.querySelector('.btn-title');
-            const btnSubtitle = startBtn.querySelector('.btn-subtitle');
-            if (btnTitle) btnTitle.textContent = 'Rozpocznij analizę AI';
-            if (btnSubtitle) btnSubtitle.textContent = 'Kliknij aby AI zaczął słuchać i doradzać';
-        }
-        
-        // Indicator
-        if (listeningIndicator) {
-            listeningIndicator.style.display = 'none';
-        }
-        
-        // Status
-        if (aiStatus) {
-            aiStatus.classList.remove('active');
-            const statusText = aiStatus.querySelector('span:last-child');
-            if (statusText) statusText.textContent = 'Oczekuje na rozpoczęcie';
-        }
-    }
-}
-
-// Wyświetlanie sugestii AI - NOWA FUNKCJA
-function displayAISuggestions(analysis) {
-    const suggestionsArea = document.getElementById('suggestionsArea');
-    if (!suggestionsArea) return;
-    
-    // Parsuj analizę
-    const lines = analysis.split('\n').filter(line => line.trim());
-    let speaker = '';
-    let suggestions = [];
-    
-    lines.forEach(line => {
-        if (line.includes('[KTO MÓWI]:')) {
-            speaker = line.split(':')[1]?.trim();
-        } else if (line.includes('[SUGESTIA')) {
-            suggestions.push(line.split(':')[1]?.trim());
-        }
-    });
-    
-    // Utwórz kartę sugestii
-    const suggestionCard = document.createElement('div');
-    suggestionCard.className = 'suggestion-card';
-    
-    const timestamp = new Date().toLocaleTimeString('pl-PL', { 
-        hour: '2-digit', 
-        minute: '2-digit',
-        second: '2-digit'
-    });
-    
-    const speakerIcon = speaker === 'klient' ? '👤' : '🎯';
-    const speakerText = speaker === 'klient' ? 'Klient mówi' : 'Twoja kolej';
-    const cardClass = speaker === 'klient' ? 'client-turn' : 'seller-turn';
-    
-    suggestionCard.innerHTML = `
-        <div class="card-header ${cardClass}">
-            <div class="speaker-badge">
-                <span class="speaker-icon">${speakerIcon}</span>
-                <span class="speaker-text">${speakerText}</span>
-            </div>
-            <div class="card-time">${timestamp}</div>
-        </div>
-        
-        <div class="suggestions-list">
-            ${suggestions.map(suggestion => `
-                <div class="suggestion-item">
-                    <span class="suggestion-icon">💡</span>
-                    <span class="suggestion-text">${suggestion}</span>
-                </div>
-            `).join('')}
-        </div>
+    toast.innerHTML = `
+        <i class="fas fa-${icon}"></i>
+        <span>${message}</span>
     `;
     
-    // Usuń stare karty jeśli jest ich za dużo
-    const allCards = suggestionsArea.querySelectorAll('.suggestion-card');
-    if (allCards.length >= 6) {
-        for (let i = 0; i < allCards.length - 5; i++) {
-            allCards[i].remove();
-        }
-    }
+    document.body.appendChild(toast);
     
-    suggestionsArea.appendChild(suggestionCard);
+    // Show animation
+    setTimeout(() => toast.classList.add('show'), 100);
     
-    // Auto-scroll
-    suggestionsArea.scrollTop = suggestionsArea.scrollHeight;
-    
-    // Animacja wejścia
+    // Auto remove
     setTimeout(() => {
-        suggestionCard.classList.add('visible');
-    }, 100);
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+    }, 4000);
 }
 
-// Zakończenie live chatu
-async function endLiveChat() {
-    console.log('🔚 Zakończenie live chatu...');
-    
-    try {
-        // Zatrzymaj timer
-        if (recordingTimer) {
-            clearInterval(recordingTimer);
-            recordingTimer = null;
-        }
-        
-        // Zatrzymaj rozpoznawanie mowy
-        if (recognition && isRecording) {
-            recognition.stop();
-        }
-        
-        // Zatrzymaj syntezę mowy (jeśli jeszcze istnieje)
-        if (typeof speechSynthesis !== 'undefined') {
-            speechSynthesis.cancel();
-        }
-        
-        // Zapisz sesję do bazy danych
-        if (currentSession && currentSession.conversationHistory.length > 0) {
-            console.log('💾 Zapisuję sesję do bazy danych...');
-            
-            try {
-                const response = await fetchWithAuth('/api/chat/save-session', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        clientId: currentSession.clientId,
-                        productId: currentSession.productId,
-                        conversationHistory: currentSession.conversationHistory,
-                        notes: currentSession.notes,
-                        startTime: currentSession.startTime
-                    })
-                });
-                
-                if (response && response.ok) {
-                    const sessionData = await response.json();
-                    console.log('✅ Sesja zapisana:', sessionData.session.id);
-                    
-                    // Pokaż podsumowanie sesji
-                    showSessionSummary(sessionData.session);
-                } else {
-                    console.error('❌ Błąd zapisywania sesji');
-                    showToast('Błąd zapisywania sesji', 'error');
-                }
-                
-            } catch (saveError) {
-                console.error('❌ Błąd podczas zapisywania sesji:', saveError);
-                showToast('Nie udało się zapisać sesji', 'error');
-            }
-        }
-        
-        // Usuń interfejs live chatu
-        const liveChatInterface = document.getElementById('liveChatInterface');
-        if (liveChatInterface) {
-            liveChatInterface.remove();
-        }
-        
-        // Przywróć oryginalny interfejs
-        const setupCard = document.querySelector('.setup-card');
-        const recentSessions = document.querySelector('.recent-sessions');
-        
-        if (setupCard) {
-            setupCard.style.display = 'block';
-        }
-        
-        if (recentSessions) {
-            recentSessions.style.display = 'block';
-        }
-        
-        // Wyczyść formularz
-        if (sessionClientSelect) sessionClientSelect.value = '';
-        if (sessionProductSelect) sessionProductSelect.value = '';
-        if (sessionNotesTextarea) sessionNotesTextarea.value = '';
-        
-        // Reset zmiennych
-        currentSession = null;
-        recordingStartTime = null;
-        isRecording = false;
-        recognition = null;
-        
-        // Waliduj formularz
-        validateSessionForm();
-        
-        // Odśwież ostatnie sesje
-        loadRecentSessions();
-        
-        showToast('Live chat zakończony', 'success');
-        
-    } catch (error) {
-        console.error('❌ Błąd kończenia live chatu:', error);
-        showToast('Błąd kończenia sesji', 'error');
-    }
-}
-
-// Pokazanie podsumowania sesji po zakończeniu
-function showSessionSummary(sessionData) {
-    console.log('📊 Pokazuję podsumowanie sesji:', sessionData);
-    
-    // Utwórz modal z podsumowaniem
-    const modal = document.createElement('div');
-    modal.className = 'session-summary-modal';
-    modal.id = 'sessionSummaryModal';
-    
-    const formatText = (text) => {
-        return text.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    };
-    
-    modal.innerHTML = `
-        <div class="modal-backdrop" onclick="closeSessionSummary()"></div>
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>
-                    <i class="fas fa-chart-line"></i>
-                    Podsumowanie sesji
-                </h3>
-                <button type="button" class="close-btn" onclick="closeSessionSummary()">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-            
-            <div class="modal-body">
-                <div class="summary-section">
-                    <h4><i class="fas fa-thumbs-up"></i> Pozytywne wnioski</h4>
-                    <div class="summary-content positive">
-                        ${formatText(sessionData.positiveFindings)}
-                    </div>
-                </div>
-                
-                <div class="summary-section">
-                    <h4><i class="fas fa-thumbs-down"></i> Obszary do poprawy</h4>
-                    <div class="summary-content negative">
-                        ${formatText(sessionData.negativeFindings)}
-                    </div>
-                </div>
-                
-                <div class="summary-section">
-                    <h4><i class="fas fa-lightbulb"></i> Rekomendacje na przyszłość</h4>
-                    <div class="summary-content recommendations">
-                        ${formatText(sessionData.recommendations)}
-                    </div>
-                </div>
-                
-                <div class="summary-meta">
-                    <p><strong>Data sesji:</strong> ${new Date(sessionData.meetingDatetime).toLocaleString('pl-PL')}</p>
-                    <p><strong>ID sesji:</strong> #${sessionData.id}</p>
-                </div>
-            </div>
-            
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" onclick="closeSessionSummary()">
-                    <i class="fas fa-check"></i>
-                    Rozumiem
-                </button>
-            </div>
-        </div>
-    `;
-    
-    document.body.appendChild(modal);
-    
-    // Animacja wejścia
-    setTimeout(() => {
-        modal.classList.add('show');
-    }, 100);
-}
-
-// Zamknięcie podsumowania sesji
-function closeSessionSummary() {
-    const modal = document.getElementById('sessionSummaryModal');
-    if (modal) {
-        modal.classList.remove('show');
-        setTimeout(() => {
-            modal.remove();
-        }, 300);
-    }
-}
-
-// Dodaj style do window (fallback jeśli nie ma globalnych stylów)
-if (!document.getElementById('sessionSummaryStyles')) {
-    const styles = document.createElement('style');
-    styles.id = 'sessionSummaryStyles';
-    styles.textContent = `
-        .session-summary-modal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 10000;
-            opacity: 0;
-            transition: opacity 0.3s ease;
-        }
-        
-        .session-summary-modal.show {
-            opacity: 1;
-        }
-        
-        .modal-backdrop {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.5);
-        }
-        
-        .modal-content {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: white;
-            border-radius: 16px;
-            max-width: 600px;
-            width: 90%;
-            max-height: 80vh;
-            overflow-y: auto;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
-        }
-        
-        .modal-header {
-            padding: 20px 24px;
-            border-bottom: 1px solid #e2e8f0;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-radius: 16px 16px 0 0;
-        }
-        
-        .modal-header h3 {
-            margin: 0;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-        
-        .close-btn {
-            background: none;
-            border: none;
-            color: white;
-            font-size: 18px;
-            cursor: pointer;
-            opacity: 0.8;
-            transition: opacity 0.3s;
-        }
-        
-        .close-btn:hover {
-            opacity: 1;
-        }
-        
-        .modal-body {
-            padding: 24px;
-        }
-        
-        .summary-section {
-            margin-bottom: 24px;
-        }
-        
-        .summary-section h4 {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin: 0 0 12px 0;
-            color: #1e293b;
-            font-size: 16px;
-        }
-        
-        .summary-content {
-            padding: 16px;
-            border-radius: 8px;
-            line-height: 1.6;
-        }
-        
-        .summary-content.positive {
-            background: #f0fdf4;
-            border: 1px solid #10b981;
-            color: #065f46;
-        }
-        
-        .summary-content.negative {
-            background: #fef2f2;
-            border: 1px solid #ef4444;
-            color: #991b1b;
-        }
-        
-        .summary-content.recommendations {
-            background: #fef3c7;
-            border: 1px solid #f59e0b;
-            color: #92400e;
-        }
-        
-        .summary-meta {
-            margin-top: 20px;
-            padding-top: 20px;
-            border-top: 1px solid #e2e8f0;
-            font-size: 14px;
-            color: #64748b;
-        }
-        
-        .summary-meta p {
-            margin: 4px 0;
-        }
-        
-        .modal-footer {
-            padding: 16px 24px;
-            border-top: 1px solid #e2e8f0;
-            text-align: center;
-        }
-    `;
-    document.head.appendChild(styles);
-}
-
-// Wysyłanie wiadomości tekstowej (tylko do testów)
-function sendTextMessage() {
-    const chatTextInput = document.getElementById('chatTextInput');
-    const message = chatTextInput.value.trim();
-    if (!message) return;
-    
-    chatTextInput.value = '';
-    
-    // Dodaj jako wypowiedź do rozmowy
-    processSpeech(message);
-}
-
-// Analiza rozmowy w czasie rzeczywistym
-async function analyzeConversationInRealTime() {
-    console.log('🤖 Analizuję rozmowę w czasie rzeczywistym...');
-    
-    if (!currentSession || !currentSession.chatContext) {
-        return;
-    }
-    
-    // Nie analizuj jeśli już przetwarzamy
-    if (isProcessingResponse) {
-        console.log('⏳ Już analizuję, pomijam...');
-        return;
-    }
-    
-    try {
-        isProcessingResponse = true;
-        
-        // Przygotuj kontekst z ostatnich wypowiedzi
-        const recentTranscripts = currentSession.conversationHistory
-            .slice(-15)
-            .filter(msg => msg.role === 'speech')
-            .map(msg => msg.content)
-            .join(' ');
-        
-        // Specjalny prompt dla analizy real-time
-        const realtimePrompt = `${currentSession.chatContext.systemPrompt}
-
-TRANSKRYPCJA ROZMOWY W TOKU:
-"${recentTranscripts}"
-
-TWOJE ZADANIE:
-1. Rozpoznaj kto mówi (handlowiec vs klient) na podstawie kontekstu
-2. Zidentyfikuj najważniejsze elementy rozmowy
-3. Daj mi NATYCHMIASTOWE wskazówki co powinienem teraz zrobić/powiedzieć
-
-PAMIĘTAJ:
-- Odpowiadaj BARDZO KRÓTKO (max 2-3 wskazówki)
-- Skup się na tym co TERAZ jest ważne
-- Nie powtarzaj wcześniejszych sugestii
-- Reaguj na zmiany w rozmowie
-- ZAWSZE dawaj konkretne sugestie
-
-Format odpowiedzi:
-[KTO MÓWI]: handlowiec/klient
-[SUGESTIA]: co zrobić TERAZ
-[SUGESTIA 2]: dodatkowa wskazówka (opcjonalnie)`;
-        
-        // Wyślij do AI
-        const response = await fetchWithAuth('/api/chat/message', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                message: realtimePrompt,
-                systemPrompt: 'Jesteś ekspertem od sprzedaży słuchającym rozmowy na żywo. Analizuj i doradzaj KRÓTKO.',
-                conversationHistory: []
-            })
-        });
-        
-        if (!response || !response.ok) {
-            console.error('❌ Błąd analizy AI');
-            isProcessingResponse = false;
-            return;
-        }
-        
-        // Odbierz sugestie
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let fullResponse = '';
-        
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            
-            const chunk = decoder.decode(value, { stream: true });
-            fullResponse += chunk;
-        }
-        
-        console.log('💡 Analiza real-time:', fullResponse);
-        
-        // Wyświetl sugestie używając nowej funkcji
-        displayAISuggestions(fullResponse);
-        
-        // Opóźnienie przed następną analizą
-        setTimeout(() => {
-            isProcessingResponse = false;
-        }, 1000);
-        
-    } catch (error) {
-        console.error('❌ Błąd analizy real-time:', error);
-        isProcessingResponse = false;
-    }
-}
-
-// Inicjalizacja rozpoznawania mowy
-function initSpeechRecognition() {
-    if ('webkitSpeechRecognition' in window) {
-        recognition = new webkitSpeechRecognition();
-    } else if ('SpeechRecognition' in window) {
-        recognition = new SpeechRecognition();
-    } else {
-        console.warn('⚠️ Rozpoznawanie mowy nie jest obsługiwane');
-        return false;
-    }
-    
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = 'pl-PL';
-    recognition.maxAlternatives = 1;
-    
-    let currentTranscript = '';
-    let silenceTimer = null;
-    
-    recognition.onstart = function() {
-        console.log('🎤 Rozpoczęto nagrywanie');
-        isRecording = true;
-    };
-    
-    recognition.onresult = function(event) {
-        let interimTranscript = '';
-        currentTranscript = '';
-        
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-            const transcript = event.results[i][0].transcript;
-            
-            if (event.results[i].isFinal) {
-                currentTranscript += transcript + ' ';
-                
-                // Resetuj timer ciszy
-                clearTimeout(silenceTimer);
-                
-                // Ustaw timer ciszy (1 sekunda dla szybszej reakcji)
-                silenceTimer = setTimeout(() => {
-                    if (currentTranscript.trim()) {
-                        processSpeech(currentTranscript.trim());
-                        currentTranscript = '';
-                    }
-                }, 1000);
-                
-            } else {
-                interimTranscript += transcript;
-            }
-        }
-    };
-    
-    recognition.onerror = function(event) {
-        console.error('❌ Błąd rozpoznawania:', event.error);
-        if (event.error !== 'aborted') {
-            stopAIListening();
-        }
-    };
-    
-    recognition.onend = function() {
-        console.log('🎤 Zakończono rozpoznawanie');
-        if (isRecording) {
-            // Restart jeśli nadal słuchamy
-            setTimeout(() => {
-                if (isRecording) {
-                    recognition.start();
-                }
-            }, 100);
-        }
-    };
-    
-    return true;
-}
-
-// Przetwarzanie wypowiedzi
-function processSpeech(transcript) {
-    console.log('💬 Nowa wypowiedź:', transcript);
-    
-    // Dodaj do historii sesji
-    if (currentSession) {
-        currentSession.conversationHistory.push({
-            role: 'speech',
-            content: transcript,
-            timestamp: new Date()
-        });
-    }
-    
-    // Analizuj rozmowę w tle
-    analyzeConversationInRealTime();
-} 
+console.log('✅ Real-time AI Assistant loaded successfully'); 
