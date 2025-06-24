@@ -403,6 +403,8 @@ async function startRealtimeSession() {
     }
     
     try {
+        console.log('🔍 Debug: Getting user info...');
+        
         // Get user info from current session
         const userResponse = await fetchWithAuth('/api/user');
         if (!userResponse || !userResponse.ok) {
@@ -410,7 +412,10 @@ async function startRealtimeSession() {
         }
         const user = await userResponse.json();
         
+        console.log('🔍 Debug: User info received:', user.user.id);
+        
         // Request microphone access
+        console.log('🔍 Debug: Requesting microphone access...');
         audioStream = await navigator.mediaDevices.getUserMedia({
             audio: {
                 sampleRate: 16000,
@@ -422,12 +427,8 @@ async function startRealtimeSession() {
         
         console.log('🎤 Microphone access granted');
         
-        // Generate session ID
-        const sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-        
-        // Initialize session
+        // Initialize session object (without sessionId - backend will create it)
         currentSession = {
-            sessionId,
             clientId,
             productId,
             notes,
@@ -437,24 +438,27 @@ async function startRealtimeSession() {
             suggestions: []
         };
         
+        console.log('🔍 Debug: Session object created:', currentSession);
+        
         // Wait for WebSocket connection before sending message
         console.log('⏳ Waiting for WebSocket connection...');
         await waitForWebSocketConnection();
         
-        // Send session start message to WebSocket
-        websocket.send(JSON.stringify({
+        console.log('🔍 Debug: WebSocket ready, sending START_REALTIME_SESSION...');
+        
+        // Send session start message to WebSocket (backend will generate sessionId)
+        const startMessage = {
             type: 'START_REALTIME_SESSION',
-            sessionId,
             clientId,
             productId,
             notes,
             userId: user.user.id
-        }));
+        };
         
-        // Setup audio recording
-        setupAudioRecording();
+        console.log('📤 Sending START_REALTIME_SESSION:', startMessage);
+        websocket.send(JSON.stringify(startMessage));
         
-        console.log('✅ Session start request sent');
+        console.log('✅ Session start request sent, waiting for response...');
         
     } catch (error) {
         console.error('❌ Error starting real-time session:', error);
@@ -615,6 +619,19 @@ function setupAudioRecording() {
 // Session Started Handler
 function onSessionStarted(data) {
     console.log('✅ Real-time session started:', data.sessionId);
+    
+    // Update current session with the sessionId from backend
+    if (currentSession) {
+        currentSession.sessionId = data.sessionId;
+        console.log('🔍 Debug: Session ID set to:', currentSession.sessionId);
+    } else {
+        console.error('❌ currentSession is null when session started!');
+        return;
+    }
+    
+    // Setup audio recording now that session is confirmed
+    console.log('🎤 Setting up audio recording...');
+    setupAudioRecording();
     
     // Show real-time interface
     showRealtimeInterface();

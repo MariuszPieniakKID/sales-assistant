@@ -12,6 +12,52 @@ const { OpenAI } = require('openai');
 const WebSocket = require('ws');
 const http = require('http');
 
+// --- START: Zaawansowane logowanie do pliku ---
+const logFile = path.join(__dirname, 'server.log');
+const logStream = fs.createWriteStream(logFile, { flags: 'a' });
+
+const originalConsole = {
+  log: console.log,
+  error: console.error,
+  warn: console.warn,
+  info: console.info,
+  debug: console.debug
+};
+
+const logToFile = (args, type = 'log') => {
+  const timestamp = new Date().toISOString();
+  const message = args.map(arg => typeof arg === 'object' ? JSON.stringify(arg, null, 2) : arg).join(' ');
+  logStream.write(`[${timestamp}] [${type.toUpperCase()}] ${message}\\n`);
+};
+
+console.log = (...args) => {
+  originalConsole.log.apply(console, args);
+  logToFile(args, 'log');
+};
+
+console.error = (...args) => {
+  originalConsole.error.apply(console, args);
+  logToFile(args, 'error');
+};
+
+console.warn = (...args) => {
+  originalConsole.warn.apply(console, args);
+  logToFile(args, 'warn');
+};
+
+console.info = (...args) => {
+  originalConsole.info.apply(console, args);
+  logToFile(args, 'info');
+};
+
+console.debug = (...args) => {
+  originalConsole.debug.apply(console, args);
+  logToFile(args, 'debug');
+};
+
+console.log('--- Logger do pliku zainicjowany. Dane będą zapisywane w server.log ---');
+// --- END: Zaawansowane logowanie do pliku ---
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -430,18 +476,11 @@ app.get('/api/user', requireAuth, async (req, res) => {
     }
 });
 
-// Endpoint diagnostyczny dla Vercel
+// Endpoint diagnostyczny dla Railway
 app.get('/api/health', async (req, res) => {
   try {
-    const client = await pool.connect();
-    const result = await client.query('SELECT COUNT(*) as user_count FROM users');
-    
-    // Test hasła
-    const testUser = await client.query('SELECT email, password_hash FROM users WHERE email = $1', ['test@test.pl']);
-    const passwordTest = testUser.rows.length > 0 ? 
-      await bcrypt.compare('test123', testUser.rows[0].password_hash) : false;
-    
-    await client.release();
+    const pool = getNeonPool();
+    const result = await pool.query('SELECT COUNT(*) as user_count FROM users');
     
     res.json({
       status: 'OK',
@@ -453,13 +492,8 @@ app.get('/api/health', async (req, res) => {
       hasDatabaseUrl: !!process.env.DATABASE_URL,
       hasOpenAIKey: !!process.env.OPENAI_API_KEY,
       hasAssemblyAIKey: !!process.env.ASSEMBLYAI_API_KEY,
-      bcryptTest: passwordTest,
-      testUserExists: testUser.rows.length > 0,
-      testUserHash: testUser.rows.length > 0 ? testUser.rows[0].password_hash.substring(0, 10) + '...' : 'N/A',
-      aiFeatures: {
-        openai: !!process.env.OPENAI_API_KEY ? 'Available' : 'Missing API Key',
-        assemblyai: !!process.env.ASSEMBLYAI_API_KEY ? 'Available' : 'Missing API Key'
-      }
+      websocketReady: true,
+      activeSessions: activeSessions.size
     });
   } catch (err) {
     console.error('Health check error:', err);
@@ -473,10 +507,7 @@ app.get('/api/health', async (req, res) => {
       hasDatabaseUrl: !!process.env.DATABASE_URL,
       hasOpenAIKey: !!process.env.OPENAI_API_KEY,
       hasAssemblyAIKey: !!process.env.ASSEMBLYAI_API_KEY,
-      aiFeatures: {
-        openai: !!process.env.OPENAI_API_KEY ? 'Available' : 'Missing API Key',
-        assemblyai: !!process.env.ASSEMBLYAI_API_KEY ? 'Available' : 'Missing API Key'
-      }
+      websocketReady: false
     });
   }
 });
@@ -1565,6 +1596,37 @@ app.get('/api/admin/all-meetings', requireAuth, requireAdmin, async (req, res) =
   }
 });
 
+// === NOWY ENDPOINT: POBIERANIE LOGÓW ===
+app.get('/api/download-logs', requireAuth, requireAdmin, (req, res) => {
+  const logFilePath = path.join(__dirname, 'server.log');
+  
+  if (fs.existsSync(logFilePath)) {
+    res.download(logFilePath, 'server.log', (err) => {
+      if (err) {
+        console.error("Błąd podczas wysyłania pliku z logami:", err);
+        res.status(500).send("Nie udało się pobrać pliku z logami.");
+      }
+    });
+  } else {
+    res.status(404).send("Plik z logami nie istnieje.");
+  }
+});
+
+// === NOWY ENDPOINT: WYŚWIETLANIE LOGÓW W KONSOLI ===
+app.get('/api/view-logs', requireAuth, requireAdmin, (req, res) => {
+  const logFilePath = path.join(__dirname, 'server.log');
+  
+  if (fs.existsSync(logFilePath)) {
+    console.log("--- START LOG FILE CONTENT ---");
+    const logContent = fs.readFileSync(logFilePath, 'utf8');
+    originalConsole.log(logContent); // Użyj oryginalnego console.log, aby uniknąć zapisu do pliku
+    console.log("--- END LOG FILE CONTENT ---");
+    res.status(200).send("Logi zostały wyświetlone w konsoli serwera. Możesz zamknąć tę kartę.");
+  } else {
+    res.status(404).send("Plik z logami nie istnieje.");
+  }
+});
+
 // WebSocket Connection Handler
 wss.on('connection', (ws, req) => {
     console.log('🔌🔌🔌 NEW WEBSOCKET CONNECTION ESTABLISHED 🔌🔌🔌');
@@ -1624,7 +1686,7 @@ wss.on('connection', (ws, req) => {
         console.log('🔌 WebSocket connection closed');
         // Clean up any active sessions for this connection
         for (const [sessionId, session] of activeSessions.entries()) {
-            if (session.websocket === ws) {
+            if (session.ws === ws) {
                 cleanupRealtimeSession(sessionId);
             }
         }
@@ -1637,128 +1699,135 @@ wss.on('connection', (ws, req) => {
 
 // Start Real-time AI Assistant Session
 async function startRealtimeSession(ws, data) {
-    const { sessionId, clientId, productId, notes, userId } = data;
-    
-    console.log('🚀 Starting real-time session:', sessionId);
-    
+    const { clientId, productId, notes } = data;
+    const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    console.log(`[${sessionId}] [KROK 1] Rozpoczynanie sesji.`);
+
     try {
-        // Get client and product info from database
-        const clientResult = await safeQuery(
-            'SELECT * FROM clients WHERE id = $1 AND user_id = $2',
-            [clientId, userId]
-        );
-        
-        const productResult = await safeQuery(
-            'SELECT * FROM products WHERE id = $1 AND user_id = $2',
-            [productId, userId]
-        );
-        
+        console.log(`[${sessionId}] [KROK 2] Zapytanie do bazy o klienta i produkt.`);
+        const [clientResult, productResult] = await Promise.all([
+            safeQuery('SELECT * FROM clients WHERE id = $1', [clientId]),
+            safeQuery('SELECT * FROM products WHERE id = $1', [productId])
+        ]);
+        console.log(`[${sessionId}] [KROK 3] Zapytanie do bazy zakończone.`);
+
         if (clientResult.rows.length === 0 || productResult.rows.length === 0) {
-            throw new Error('Client or product not found');
+            console.error(`[${sessionId}] [BŁĄD] Nieprawidłowy ID klienta lub produktu.`);
+            ws.send(JSON.stringify({ type: 'ERROR', message: 'Invalid client or product ID' }));
+            return;
         }
-        
+        console.log(`[${sessionId}] [KROK 4] Klient i produkt zweryfikowani.`);
+
         const client = clientResult.rows[0];
         const product = productResult.rows[0];
-        
-        // Create AssemblyAI real-time session
-        const assemblyAISession = await createAssemblyAISession();
-        
-        // Initialize GPT context
-        const gptContext = createGPTContext(client, product, notes);
-        
-        // Store session
-        activeSessions.set(sessionId, {
-            websocket: ws,
-            userId,
-            clientId,
-            productId,
-            client,
-            product,
-            notes,
-            assemblyAISession,
-            gptContext,
+
+        console.log(`[${sessionId}] [KROK 5] Tworzenie sesji AssemblyAI.`);
+        const assemblyAISession = await createAssemblyAISession(sessionId);
+        console.log(`[${sessionId}] [KROK 6] Obiekt sesji AssemblyAI utworzony.`);
+
+        const session = {
+            ws, sessionId, clientId, productId, notes, client, product,
+            assemblyAISession: {
+                websocket: assemblyAISession.websocket,
+                isConfigured: false,
+                audioQueue: [],
+            },
             conversationHistory: [],
-            aiSuggestions: [], // Dodane: przechowywanie sugestii AI
-            lastAnalysis: Date.now(),
-            startTime: new Date()
-        });
-        
-        // *** WAŻNE: Ustawienie handlera AssemblyAI OD RAZU ***
-        console.log('🔧 Ustawiam handler AssemblyAI od razu...');
-        setupAssemblyAIHandler(sessionId, activeSessions.get(sessionId));
-        assemblyAISession.isConnected = true;
-        
-        // Send success response
+            aiSuggestions: [],
+            startTime: new Date(),
+        };
+        console.log(`[${sessionId}] [KROK 7] Obiekt sesji backendu utworzony.`);
+
+        activeSessions.set(sessionId, session);
+        console.log(`[${sessionId}] [KROK 8] Sesja zapisana w activeSessions. Liczba aktywnych: ${activeSessions.size}`);
+
+        setupAssemblyAIHandler(sessionId, session);
+        console.log(`[${sessionId}] [KROK 9] Handler AssemblyAI skonfigurowany.`);
+
         ws.send(JSON.stringify({
             type: 'SESSION_STARTED',
             sessionId,
-            message: 'Real-time AI assistant started successfully'
+            message: 'Real-time session started successfully'
         }));
-        
-        console.log('✅ Real-time session started:', sessionId);
-        
+        console.log(`[${sessionId}] [KROK 10] Wysłano SESSION_STARTED do klienta.`);
+
     } catch (error) {
-        console.error('❌ Error starting real-time session:', error);
+        console.error(`[${sessionId}] [BŁĄD KRYTYCZNY] Błąd w startRealtimeSession:`, error);
         ws.send(JSON.stringify({
-            type: 'SESSION_ERROR',
+            type: 'ERROR',
             message: 'Failed to start real-time session: ' + error.message
         }));
     }
 }
 
-// Create AssemblyAI Real-time Session
-async function createAssemblyAISession() {
-    console.log('🔧 Tworzenie sesji AssemblyAI...');
-    
+// Get temporary AssemblyAI token
+async function getAssemblyAIToken() {
     if (!ASSEMBLYAI_API_KEY) {
-        throw new Error('ASSEMBLYAI_API_KEY is not configured. Please add it to environment variables.');
+        throw new Error('ASSEMBLYAI_API_KEY is not configured.');
     }
     
-    const requestBody = {
-        expires_in: 3600, // 1 hour
-        sample_rate: ASSEMBLYAI_SAMPLE_RATE,
-        speaker_labels: true, // Enable diarization
-        sentiment_analysis: true, // Enable sentiment analysis
-        auto_highlights: true, // Enable key phrases
-        entity_detection: true // Enable entity detection
-    };
-    
-    console.log('📡 Wysyłam request do AssemblyAI:', requestBody);
+    console.log('🔑 Requesting AssemblyAI token...');
     
     const response = await fetch('https://api.assemblyai.com/v2/realtime/token', {
         method: 'POST',
-        headers: {
+        headers: { 
             'authorization': ASSEMBLYAI_API_KEY,
             'content-type': 'application/json'
         },
-        body: JSON.stringify(requestBody)
+        body: JSON.stringify({ 
+            expires_in: 3600
+        })
     });
-    
-    console.log('📡 Odpowiedź AssemblyAI:', response.status, response.statusText);
     
     if (!response.ok) {
         const errorText = await response.text();
-        console.error('❌ Błąd AssemblyAI API:', errorText);
-        throw new Error(`Failed to create AssemblyAI session: ${response.status} ${errorText}`);
+        console.error('❌ Failed to get AssemblyAI token:', errorText);
+        throw new Error(`Failed to get AssemblyAI token: ${response.status} ${errorText}`);
     }
     
     const data = await response.json();
-    console.log('🎫 Otrzymano token AssemblyAI:', {
-        tokenLength: data.token ? data.token.length : 0,
-        tokenPreview: data.token ? data.token.substring(0, 20) + '...' : 'null'
-    });
+    console.log('✅ AssemblyAI token received successfully');
+    return data.token;
+}
+
+// Create AssemblyAI Real-time Session
+async function createAssemblyAISession(sessionId) {
+    console.log(`[${sessionId}] 🔧 Creating AssemblyAI session...`);
     
-    // Create WebSocket connection to AssemblyAI
-    const wsUrl = `wss://api.assemblyai.com/v2/realtime/ws?token=${data.token}`;
-    console.log('🔌 Tworzę WebSocket połączenie do AssemblyAI:', wsUrl.substring(0, 80) + '...');
-    
-    const assemblyWS = new WebSocket(wsUrl);
-    
-    return {
-        token: data.token,
-        websocket: assemblyWS,
-        isConnected: false
-    };
+    try {
+        const token = await getAssemblyAIToken();
+        const wsUrl = `wss://api.assemblyai.com/v2/realtime/ws?sample_rate=16000&token=${token}`;
+        
+        console.log(`[${sessionId}] 🔌 Connecting to AssemblyAI WebSocket:`, wsUrl);
+        
+        const assemblySocket = new WebSocket(wsUrl);
+        
+        return new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+                console.error(`[${sessionId}] ❌ AssemblyAI WebSocket connection timeout`);
+                reject(new Error('AssemblyAI WebSocket connection timeout'));
+            }, 10000);
+            
+            assemblySocket.on('open', () => {
+                console.log(`[${sessionId}] ✅ AssemblyAI WebSocket connected successfully`);
+                clearTimeout(timeout);
+                resolve({
+                    websocket: assemblySocket,
+                    isConfigured: false,
+                    audioQueue: []
+                });
+            });
+            
+            assemblySocket.on('error', (error) => {
+                console.error(`[${sessionId}] ❌ AssemblyAI WebSocket connection error:`, error);
+                clearTimeout(timeout);
+                reject(error);
+            });
+        });
+    } catch (error) {
+        console.error(`[${sessionId}] ❌ Error creating AssemblyAI session:`, error);
+        throw error;
+    }
 }
 
 // Process Audio Chunk
@@ -1767,354 +1836,239 @@ async function processAudioChunk(ws, data) {
     
     const session = activeSessions.get(sessionId);
     if (!session) {
-        console.error('❌ Session not found:', sessionId);
+        console.error(`❌ Session not found for processAudioChunk: ${sessionId}`);
         return;
     }
     
     try {
-        // Validate audio data
         if (!audioData || audioData.length === 0) {
-            console.warn('⚠️ Empty audio data received');
+            console.warn(`⚠️ Empty audio data received for session: ${sessionId}`);
             return;
         }
         
-        // Send audio to AssemblyAI
-        if (session.assemblyAISession.websocket.readyState === WebSocket.OPEN) {
-            session.assemblyAISession.websocket.send(JSON.stringify({
-                audio_data: audioData
-            }));
-            
-            // Log every 50th audio chunk to avoid spam
-            if (!session.audioChunkCount) session.audioChunkCount = 0;
-            session.audioChunkCount++;
-            
-            if (session.audioChunkCount % 50 === 0) {
-                console.log('🎵 Backend: Audio chunks sent to AssemblyAI:', session.audioChunkCount, {
-                    audioDataLength: audioData.length,
-                    websocketState: session.assemblyAISession.websocket.readyState,
-                    sessionId: sessionId,
-                    assemblyAIUrl: session.assemblyAISession.websocket.url.substring(0, 80) + '...'
-                });
-            }
+        const { assemblyAISession } = session;
+
+        if (assemblyAISession.isConfigured && assemblyAISession.websocket.readyState === WebSocket.OPEN) {
+            // Send audio data directly as base64 string (not wrapped in JSON)
+            assemblyAISession.websocket.send(audioData);
         } else {
-            console.warn('⚠️ AssemblyAI WebSocket not ready:', {
-                readyState: session.assemblyAISession.websocket.readyState,
-                sessionId: sessionId,
-                states: {
-                    CONNECTING: 0,
-                    OPEN: 1,
-                    CLOSING: 2,
-                    CLOSED: 3
-                }
-            });
-            
-            // Spróbuj ponownie utworzyć AssemblyAI session jeśli jest zamknięty
-            if (session.assemblyAISession.websocket.readyState === 3) { // CLOSED
-                console.log('🔄 AssemblyAI WebSocket zamknięty - próbuję ponownie utworzyć...');
+            // Queue audio data if not ready
+            console.log(`🎵 Queueing audio chunk for session ${sessionId} (isConfigured: ${assemblyAISession.isConfigured}, state: ${assemblyAISession.websocket.readyState})`);
+            assemblyAISession.audioQueue.push(audioData);
+
+            // Check if we need to recreate the WebSocket
+            if (assemblyAISession.websocket.readyState === WebSocket.CLOSED || 
+                assemblyAISession.websocket.readyState === WebSocket.CLOSING) {
+                console.log(`🔄 WebSocket for session ${sessionId} is closed. Attempting to recreate...`);
                 try {
-                    const newAssemblyAISession = await createAssemblyAISession();
-                    session.assemblyAISession = newAssemblyAISession;
-                    setupAssemblyAIHandler(sessionId, session);
-                    console.log('✅ AssemblyAI WebSocket odtworzony pomyślnie');
+                    const newAssemblyAISession = await createAssemblyAISession(sessionId);
+                    // Update the session with new WebSocket but preserve queue
+                    assemblyAISession.websocket = newAssemblyAISession.websocket;
+                    assemblyAISession.isConfigured = false;
                     
-                    // Spróbuj wysłać audio ponownie
-                    if (newAssemblyAISession.websocket.readyState === WebSocket.OPEN) {
-                        newAssemblyAISession.websocket.send(JSON.stringify({
-                            audio_data: audioData
-                        }));
-                        console.log('🎵 Audio chunk wysłany do nowego AssemblyAI WebSocket');
-                    }
+                    // Setup handlers for the new WebSocket
+                    setupAssemblyAIHandler(sessionId, session); 
+                    console.log(`✅ New WebSocket for session ${sessionId} created and waiting for connection.`);
                 } catch (error) {
-                    console.error('❌ Błąd odtwarzania AssemblyAI WebSocket:', error);
+                    console.error(`❌ Error recreating WebSocket for session ${sessionId}:`, error);
                 }
             }
         }
-        
-        // Handler AssemblyAI jest już ustawiony w startRealtimeSession
-        
     } catch (error) {
-        console.error('❌ Error processing audio chunk:', error);
+        console.error(`❌ Error in processAudioChunk for session ${sessionId}:`, error);
     }
 }
 
 // Setup AssemblyAI Real-time Handler
 function setupAssemblyAIHandler(sessionId, session) {
-    const assemblyWS = session.assemblyAISession.websocket;
+    const assemblySocket = session.assemblyAISession.websocket;
     
-    assemblyWS.onopen = () => {
-        console.log('🔌 AssemblyAI WebSocket connected for session:', sessionId);
+    console.log(`[${sessionId}] 🔧 Setting up AssemblyAI handlers...`);
+
+    assemblySocket.on('open', () => {
+        console.log(`[${sessionId}] ✅ AssemblyAI WebSocket opened, sending configuration...`);
         
-        // Send configuration message to AssemblyAI
+        // Send initial configuration for the legacy API
         const config = {
-            sample_rate: ASSEMBLYAI_SAMPLE_RATE,
-            speaker_labels: true,
-            sentiment_analysis: true
+            sample_rate: 16000,
+            word_boost: [],
+            encoding: "pcm_s16le"
         };
         
-        assemblyWS.send(JSON.stringify(config));
+        assemblySocket.send(JSON.stringify(config));
+        session.assemblyAISession.isConfigured = true;
         
-        console.log('📤 Sent configuration to AssemblyAI:', config);
+        console.log(`[${sessionId}] 📤 Configuration sent:`, config);
         
-        // Test: sprawdź czy AssemblyAI w ogóle odpowiada
-        setTimeout(() => {
-            console.log('🧪 Test 1: Sprawdzam czy AssemblyAI WebSocket jest aktywny...');
-            console.log('🔍 AssemblyAI WebSocket state:', {
-                readyState: assemblyWS.readyState,
-                url: assemblyWS.url,
-                states: {
-                    CONNECTING: WebSocket.CONNECTING,
-                    OPEN: WebSocket.OPEN,
-                    CLOSING: WebSocket.CLOSING,
-                    CLOSED: WebSocket.CLOSED
-                }
-            });
-            
-            if (assemblyWS.readyState === WebSocket.OPEN) {
-                console.log('🧪 Test 2: Wysyłam test audio do AssemblyAI...');
-                // Bardzo prosty test audio - cisza w formacie PCM
-                const silenceBuffer = new ArrayBuffer(1600); // 100ms ciszy przy 16kHz
-                const view = new DataView(silenceBuffer);
-                for (let i = 0; i < 800; i++) {
-                    view.setInt16(i * 2, 0, true); // 0 = cisza
-                }
-                const base64Audio = btoa(String.fromCharCode(...new Uint8Array(silenceBuffer)));
-                
-                assemblyWS.send(JSON.stringify({
-                    audio_data: base64Audio
-                }));
-                console.log('🧪 Test audio wysłany - długość:', base64Audio.length);
-            } else {
-                console.error('❌ AssemblyAI WebSocket nie jest gotowy!');
+        // Process queued audio
+        const queue = session.assemblyAISession.audioQueue;
+        console.log(`[${sessionId}] 📦 Processing ${queue.length} queued audio chunks...`);
+        
+        while (queue.length > 0) {
+            const audioData = queue.shift();
+            try {
+                assemblySocket.send(audioData);
+            } catch (error) {
+                console.error(`[${sessionId}] ❌ Error sending queued audio:`, error);
+                break;
             }
-        }, 3000);
-    };
-    
-    assemblyWS.onmessage = async (event) => {
-        try {
-            const data = JSON.parse(event.data);
-            console.log('🎵 AssemblyAI message received:', {
-                message_type: data.message_type,
-                text: data.text ? data.text.substring(0, 50) + '...' : 'no text',
-                confidence: data.confidence,
-                speaker: data.speaker,
-                words_count: data.words ? data.words.length : 0,
-                full_data: data
-            });
-            
-            if (data.message_type === 'FinalTranscript' && data.text && data.text.trim()) {
-                console.log('📝 Final transcript received:', {
-                    text: data.text,
-                    confidence: data.confidence,
-                    speaker: data.speaker,
-                    sessionId: sessionId
-                });
-                
-                // Process transcript with speaker detection and sentiment
-                await processTranscript(sessionId, {
-                    text: data.text.trim(),
-                    confidence: data.confidence || 0.8,
-                    speaker: data.speaker || 'Speaker',
-                    sentiment: data.sentiment || 'neutral',
-                    timestamp: Date.now(),
-                    words: data.words || []
-                });
-            }
-            
-            if (data.message_type === 'PartialTranscript' && data.text && data.text.trim()) {
-                console.log('📝 Partial transcript:', data.text.substring(0, 30) + '...');
-                
-                // Send partial transcript for immediate feedback
-                session.websocket.send(JSON.stringify({
-                    type: 'PARTIAL_TRANSCRIPT',
-                    sessionId,
-                    transcript: {
-                        text: data.text.trim(),
-                        speaker: data.speaker || 'Speaker',
-                        confidence: data.confidence || 0.8
-                    }
-                }));
-            }
-            
-            // Handle session begin
-            if (data.message_type === 'SessionBegins') {
-                console.log('🎵 AssemblyAI session began successfully:', {
-                    session_id: data.session_id,
-                    expires_at: data.expires_at
-                });
-            }
-            
-            // Handle session terminated
-            if (data.message_type === 'SessionTerminated') {
-                console.log('🎵 AssemblyAI session terminated:', data);
-            }
-            
-            // Handle errors
-            if (data.message_type === 'error') {
-                console.error('❌ AssemblyAI error:', data);
-                session.websocket.send(JSON.stringify({
-                    type: 'ASSEMBLYAI_ERROR',
-                    sessionId,
-                    error: data.error || 'Unknown AssemblyAI error'
-                }));
-            }
-            
-        } catch (error) {
-            console.error('❌ AssemblyAI message processing error:', error, 'Raw data:', event.data);
         }
-    };
-    
-    assemblyWS.onerror = (error) => {
-        console.error('❌ AssemblyAI WebSocket error:', {
-            error: error,
-            sessionId: sessionId,
-            readyState: assemblyWS.readyState
-        });
-    };
-    
-    assemblyWS.onclose = (event) => {
-        console.log('🔌 AssemblyAI WebSocket ZAMKNIĘTY dla sesji:', {
-            sessionId: sessionId,
-            code: event.code,
-            reason: event.reason,
-            wasClean: event.wasClean,
-            timestamp: new Date().toISOString()
-        });
         
-        // Popularne kody zamknięcia WebSocket
-        const closeReasons = {
-            1000: 'Normal closure',
-            1001: 'Going away',
-            1002: 'Protocol error',
-            1003: 'Unsupported data',
-            1004: 'Reserved',
-            1005: 'No status received',
-            1006: 'Abnormal closure',
-            1007: 'Invalid frame payload data',
-            1008: 'Policy violation',
-            1009: 'Message too big',
-            1010: 'Mandatory extension',
-            1011: 'Internal server error',
-            1015: 'TLS handshake'
-        };
-        
-        console.log('🔍 Powód zamknięcia AssemblyAI WebSocket:', closeReasons[event.code] || 'Unknown');
-    };
+        console.log(`[${sessionId}] ✅ Audio queue processed`);
+    });
+
+    assemblySocket.on('message', async (message) => {
+        try {
+            const parsedMessage = JSON.parse(message);
+            console.log(`[${sessionId}] 📨 AssemblyAI message:`, parsedMessage.message_type || 'unknown', parsedMessage);
+            
+            if (parsedMessage.error) {
+                console.error(`[${sessionId}] ❌ AssemblyAI error:`, parsedMessage.error);
+                session.ws.send(JSON.stringify({
+                    type: 'ASSEMBLYAI_ERROR',
+                    error: parsedMessage.error
+                }));
+                return;
+            }
+
+            // Handle different message types
+            switch (parsedMessage.message_type) {
+                case 'SessionBegins':
+                    console.log(`[${sessionId}] 🎬 AssemblyAI session began`);
+                    break;
+                    
+                case 'PartialTranscript':
+                    if (parsedMessage.text && parsedMessage.text.trim()) {
+                        console.log(`[${sessionId}] 📝 Partial transcript:`, parsedMessage.text);
+                        session.ws.send(JSON.stringify({
+                            type: 'PARTIAL_TRANSCRIPT',
+                            transcript: {
+                                text: parsedMessage.text,
+                                speaker: 'user',
+                                confidence: parsedMessage.confidence
+                            }
+                        }));
+                    }
+                    break;
+                    
+                case 'FinalTranscript':
+                    if (parsedMessage.text && parsedMessage.text.trim()) {
+                        console.log(`[${sessionId}] ✅ Final transcript:`, parsedMessage.text);
+                        await processTranscript(sessionId, parsedMessage);
+                    }
+                    break;
+                    
+                case 'SessionTerminated':
+                    console.log(`[${sessionId}] 🔚 AssemblyAI session terminated`);
+                    break;
+                    
+                default:
+                    console.log(`[${sessionId}] ❓ Unknown AssemblyAI message type:`, parsedMessage.message_type);
+            }
+        } catch (error) {
+            console.error(`[${sessionId}] ❌ Error parsing AssemblyAI message:`, error, 'Raw message:', message.toString());
+        }
+    });
+
+    assemblySocket.on('close', (code, reason) => {
+        console.log(`[${sessionId}] 🔌 AssemblyAI WebSocket closed. Code: ${code}, Reason: ${String(reason)}`);
+        if (session && session.assemblyAISession) {
+            session.assemblyAISession.isConfigured = false;
+        }
+    });
+
+    assemblySocket.on('error', (error) => {
+        console.error(`[${sessionId}] ❌ AssemblyAI WebSocket error:`, error);
+        session.ws.send(JSON.stringify({
+            type: 'ASSEMBLYAI_ERROR',
+            error: error.message
+        }));
+    });
 }
 
 // Process Transcript and Generate AI Suggestions
 async function processTranscript(sessionId, transcript) {
     const session = activeSessions.get(sessionId);
-    if (!session) return;
-    
-    try {
-        // Add to conversation history
-        session.conversationHistory.push(transcript);
+    if (!session) {
+        console.error(`❌ Session not found for processTranscript: ${sessionId}`);
+        return;
+    }
+
+    console.log(`[${sessionId}] 📝 Processing transcript:`, transcript.text);
+
+    if (transcript.text && transcript.message_type === 'FinalTranscript') {
+        const newTranscript = {
+            speaker: 'user', // AssemblyAI legacy doesn't provide speaker info
+            text: transcript.text,
+            timestamp: new Date().toISOString(),
+            confidence: transcript.confidence || 0
+        };
         
-        // Send transcript to client
-        session.websocket.send(JSON.stringify({
+        session.conversationHistory.push(newTranscript);
+        console.log(`[${sessionId}] 📚 Added to conversation history. Total: ${session.conversationHistory.length}`);
+
+        // Send final transcript to frontend
+        session.ws.send(JSON.stringify({
             type: 'FINAL_TRANSCRIPT',
-            sessionId,
-            transcript
+            transcript: newTranscript
         }));
-        
-        // Analyze with GPT if enough time has passed (avoid spam)
-        const now = Date.now();
-        if (now - session.lastAnalysis > 1500) { // 1.5 second throttle for faster responses
-            session.lastAnalysis = now;
-            
-            // Generate AI suggestions
-            const suggestions = await generateAISuggestions(session, transcript);
-            
-            // Store AI suggestions in session
-            session.aiSuggestions.push({
-                timestamp: Date.now(),
-                transcript: transcript.text,
-                speaker: transcript.speaker,
-                suggestions: suggestions
-            });
-            
-            // Send suggestions to client
-            session.websocket.send(JSON.stringify({
-                type: 'AI_SUGGESTIONS',
-                sessionId,
-                suggestions
-            }));
-        }
-        
-    } catch (error) {
-        console.error('❌ Error processing transcript:', error);
+
+        // Generate and send AI suggestions
+        await generateAISuggestions(session, newTranscript);
     }
 }
 
-// Generate AI Suggestions using GPT
 async function generateAISuggestions(session, newTranscript) {
+    const sessionId = session.sessionId;
+    
     try {
-        if (!process.env.OPENAI_API_KEY) {
-            console.log('⚠️ OPENAI_API_KEY not configured - skipping AI suggestions');
-            return {
-                speaker_analysis: "unknown",
-                intent: "OpenAI API key not configured",
-                emotion: "unknown",
-                suggestions: ["Configure OPENAI_API_KEY to enable AI suggestions"],
-                signals: []
-            };
-        }
+        console.log(`[${sessionId}] 🤖 Generating AI suggestions for: "${newTranscript.text}"`);
         
-        const openai = new OpenAI({
-            apiKey: process.env.OPENAI_API_KEY
+        const gptContext = createGPTContext(session.client, session.product, session.notes);
+        const latestHistory = session.conversationHistory.slice(-5).map(t => `[${t.speaker}] ${t.text}`).join('\n');
+        
+        const completion = await openai.chat.completions.create({
+            model: "gpt-4-turbo",
+            messages: [
+                { role: "system", content: gptContext },
+                { role: "user", content: `Przeanalizuj poniższy fragment rozmowy w czasie rzeczywistym. Ostatnia wypowiedź, na której masz się skupić, to: "${newTranscript.text}". Kontekst rozmowy:\n${latestHistory}` }
+            ],
+            response_format: { type: "json_object" },
         });
-        
-        // Get recent conversation context (last 10 messages)
-        const recentContext = session.conversationHistory
-            .slice(-10)
-            .map(t => `[${t.speaker.toUpperCase()}] ${t.text} (sentiment: ${t.sentiment})`)
-            .join('\n');
-        
-        const prompt = `${session.gptContext}
 
-AKTUALNY FRAGMENT ROZMOWY:
-${recentContext}
+        const aiSuggestions = JSON.parse(completion.choices[0].message.content);
+        console.log(`[${sessionId}] 🎯 AI suggestions generated:`, aiSuggestions);
 
-NAJNOWSZA WYPOWIEDŹ:
-[${newTranscript.speaker.toUpperCase()}] ${newTranscript.text} (sentiment: ${newTranscript.sentiment}, confidence: ${newTranscript.confidence})
-
-ZADANIE - NATYCHMIASTOWA ANALIZA:
-1. KTO MÓWI: Określ czy to sprzedawca czy klient na podstawie kontekstu
-2. INTENCJE: Co osoba chce osiągnąć tą wypowiedzią
-3. EMOCJE: Jaki jest nastrój i emocje
-4. SUGESTIE: 2-3 KONKRETNE akcje dla sprzedawcy (co powiedzieć/zrobić TERAZ)
-5. SYGNAŁY: Czy to sygnał kupna, oporu, czy neutralny
-
-ODPOWIADAJ SZYBKO I PRAKTYCZNIE! Format JSON:
-{
-    "speaker_analysis": "sprzedawca/klient",
-    "intent": "krótki opis intencji (max 10 słów)",
-    "emotion": "emocja (pozytywna/neutralna/negatywna)",
-    "suggestions": ["konkretna sugestia 1", "konkretna sugestia 2", "konkretna sugestia 3"],
-    "signals": ["sygnał kupna/oporu/neutralny"]
-}`;
-
-        const response = await openai.chat.completions.create({
-            model: 'gpt-3.5-turbo',
-            messages: [{ role: 'user', content: prompt }],
-            max_tokens: 300,
-            temperature: 0.3
+        session.aiSuggestions.push({
+            transcript: newTranscript.text,
+            suggestions: aiSuggestions,
+            timestamp: new Date().toISOString()
         });
+
+        // Send AI suggestions to frontend
+        session.ws.send(JSON.stringify({
+            type: 'AI_SUGGESTIONS',
+            suggestions: aiSuggestions
+        }));
         
-        const result = JSON.parse(response.choices[0].message.content);
-        console.log('💡 AI Suggestions generated:', result);
-        
-        return result;
+        console.log(`[${sessionId}] 📤 AI suggestions sent to frontend`);
         
     } catch (error) {
-        console.error('❌ Error generating AI suggestions:', error);
-        return {
-            speaker_analysis: "unknown",
-            intent: "Could not analyze",
-            emotion: "unknown",
-            suggestions: ["Continue the conversation naturally"],
+        console.error(`[${sessionId}] ❌ Error generating AI suggestions:`, error);
+        
+        // Send fallback suggestions
+        const fallbackSuggestions = {
+            speaker_analysis: "user",
+            intent: "Continue conversation",
+            emotion: "neutral",
+            suggestions: ["Continue the conversation naturally", "Ask follow-up questions"],
             signals: []
         };
+        
+        session.ws.send(JSON.stringify({
+            type: 'AI_SUGGESTIONS',
+            suggestions: fallbackSuggestions
+        }));
     }
 }
 
@@ -2216,17 +2170,12 @@ async function cleanupRealtimeSession(sessionId) {
 // Save completed real-time session to database
 async function saveRealtimeSession(session) {
     try {
-        console.log('💾 Saving real-time session:', {
-            sessionId: session.sessionId || 'unknown',
-            clientId: session.clientId,
-            productId: session.productId,
-            conversationHistoryLength: session.conversationHistory.length,
-            aiSuggestionsLength: session.aiSuggestions.length,
-            startTime: session.startTime
-        });
+        console.log('--- DEBUG: Entering saveRealtimeSession ---');
+        console.log(`--- DEBUG: conversationHistory length: ${session.conversationHistory.length} ---`);
+        console.log(`--- DEBUG: aiSuggestions length: ${session.aiSuggestions.length} ---`);
         
         const transcription = session.conversationHistory.length > 0 
-            ? session.conversationHistory.map(t => `[${t.speaker}] ${t.text}`).join('\n\n')
+            ? session.conversationHistory.map(t => `[${t.speaker}] ${t.text}`).join('\\n\\n')
             : 'Sesja Real-time AI Assistant - brak transkrypcji (możliwy problem z mikrofonem lub AssemblyAI)';
         
         // Create AI suggestions summary
@@ -2298,8 +2247,8 @@ async function saveRealtimeSession(session) {
 }
 
 // Start serwera z WebSocket support
-server.listen(PORT, async () => {
-  console.log(`🚀 Serwer aplikacji działa na porcie ${PORT}`);
+server.listen(PORT, '::', async () => {
+  console.log(`🚀 Serwer aplikacji działa na porcie ${PORT} (IPv6 ready)`);
   console.log(`🌐 NODE_ENV: ${process.env.NODE_ENV}`);
   console.log(`🔌 WebSocket server ready for real-time AI assistant`);
   
