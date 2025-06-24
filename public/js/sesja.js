@@ -516,7 +516,8 @@ function setupAudioRecording() {
                     websocket: !!websocket,
                     websocketState: websocket ? websocket.readyState : 'null',
                     inputBuffer: !!event.inputBuffer,
-                    bufferLength: event.inputBuffer ? event.inputBuffer.length : 0
+                    bufferLength: event.inputBuffer ? event.inputBuffer.length : 0,
+                    hasSessionId: !!currentSession?.sessionId
                 });
             }
             
@@ -526,6 +527,17 @@ function setupAudioRecording() {
                         isRecording: isRecording,
                         hasWebsocket: !!websocket,
                         websocketState: websocket ? websocket.readyState : 'null'
+                    });
+                }
+                return;
+            }
+            
+            // CRITICAL: Don't send audio without sessionId
+            if (!currentSession?.sessionId) {
+                if (debugLogCount <= 10) {
+                    console.log('⚠️ Debug: Skipping audio - no sessionId yet:', {
+                        hasCurrentSession: !!currentSession,
+                        sessionId: currentSession?.sessionId
                     });
                 }
                 return;

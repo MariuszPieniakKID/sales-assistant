@@ -1627,7 +1627,7 @@ app.get('/api/view-logs', requireAuth, requireAdmin, (req, res) => {
   }
 });
 
-// Endpoint do podglądu logów przez WWW
+// Endpoint do podglądu logów przez WWW (MOVED TO ROUTES SECTION)
 app.get('/debug/logs', (req, res) => {
     try {
         const fs = require('fs');
@@ -1639,7 +1639,9 @@ app.get('/debug/logs', (req, res) => {
             return res.json({
                 error: 'Log file not found',
                 path: logPath,
-                exists: false
+                exists: false,
+                cwd: process.cwd(),
+                __dirname: __dirname
             });
         }
         
@@ -1653,18 +1655,21 @@ app.get('/debug/logs', (req, res) => {
             recentLines: recentLines,
             activeSessions: Array.from(activeSessions.keys()),
             activeSessionsCount: activeSessions.size,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            logPath: logPath
         });
         
     } catch (error) {
         res.status(500).json({
             error: error.message,
-            stack: error.stack
+            stack: error.stack,
+            cwd: process.cwd(),
+            __dirname: __dirname
         });
     }
 });
 
-// Endpoint do podglądu logów w HTML
+// Endpoint do podglądu logów w HTML (MOVED TO ROUTES SECTION)
 app.get('/debug/logs-viewer', (req, res) => {
     res.send(`
         <!DOCTYPE html>
@@ -1706,10 +1711,16 @@ app.get('/debug/logs-viewer', (req, res) => {
                                 🔗 Active Sessions: \${data.activeSessionsCount} | 
                                 📅 Updated: \${new Date(data.timestamp).toLocaleTimeString()}
                                 <br>Sessions: \${data.activeSessions.join(', ') || 'None'}
+                                <br>Log Path: \${data.logPath || 'Unknown'}
                             \`;
                             
                             const logsDiv = document.getElementById('logs');
                             logsDiv.innerHTML = '';
+                            
+                            if (data.error) {
+                                logsDiv.innerHTML = \`<div class="error">Error: \${data.error}</div>\`;
+                                return;
+                            }
                             
                             data.recentLines.forEach(line => {
                                 const div = document.createElement('div');
@@ -1734,7 +1745,7 @@ app.get('/debug/logs-viewer', (req, res) => {
                             logsDiv.scrollTop = logsDiv.scrollHeight;
                         })
                         .catch(err => {
-                            document.getElementById('logs').innerHTML = \`<div class="error">Error: \${err}</div>\`;
+                            document.getElementById('logs').innerHTML = \`<div class="error">Fetch Error: \${err}</div>\`;
                         });
                 }
                 
@@ -1777,10 +1788,18 @@ wss.on('connection', (ws, req) => {
             console.log('📨📨📨 WEBSOCKET MESSAGE RECEIVED 📨📨📨');
             console.log('📨 Message type:', data.type);
             console.log('📨 Full message:', data);
+            console.log('📨 Current active sessions:', activeSessions.size);
+            console.log('📨 Session keys:', Array.from(activeSessions.keys()));
             
             switch (data.type) {
                 case 'START_REALTIME_SESSION':
-                    console.log('🚀 Processing START_REALTIME_SESSION:', data.sessionId);
+                    console.log('🚀🚀🚀 Processing START_REALTIME_SESSION 🚀🚀🚀');
+                    console.log('🚀 Data received:', {
+                        clientId: data.clientId,
+                        productId: data.productId,
+                        userId: data.userId,
+                        notes: data.notes?.substring(0, 50) + '...'
+                    });
                     await startRealtimeSession(ws, data);
                     break;
                     
