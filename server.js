@@ -1627,6 +1627,140 @@ app.get('/api/view-logs', requireAuth, requireAdmin, (req, res) => {
   }
 });
 
+// Endpoint do podglądu logów przez WWW
+app.get('/debug/logs', (req, res) => {
+    try {
+        const fs = require('fs');
+        const path = require('path');
+        
+        // Sprawdź czy plik server.log istnieje
+        const logPath = path.join(__dirname, 'server.log');
+        if (!fs.existsSync(logPath)) {
+            return res.json({
+                error: 'Log file not found',
+                path: logPath,
+                exists: false
+            });
+        }
+        
+        // Odczytaj ostatnie 100 linii
+        const logContent = fs.readFileSync(logPath, 'utf-8');
+        const lines = logContent.split('\n').filter(line => line.trim());
+        const recentLines = lines.slice(-100);
+        
+        res.json({
+            totalLines: lines.length,
+            recentLines: recentLines,
+            activeSessions: Array.from(activeSessions.keys()),
+            activeSessionsCount: activeSessions.size,
+            timestamp: new Date().toISOString()
+        });
+        
+    } catch (error) {
+        res.status(500).json({
+            error: error.message,
+            stack: error.stack
+        });
+    }
+});
+
+// Endpoint do podglądu logów w HTML
+app.get('/debug/logs-viewer', (req, res) => {
+    res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Live Logs Viewer</title>
+            <meta charset="UTF-8">
+            <style>
+                body { font-family: monospace; background: #1e1e1e; color: #d4d4d4; padding: 20px; }
+                .log-line { margin: 2px 0; padding: 2px 5px; }
+                .error { background: #722f37; }
+                .success { background: #2d5a27; }
+                .websocket { background: #1a3a5c; }
+                .session { background: #5c2d1a; }
+                .info { background: #2d2d2d; }
+                #logs { max-height: 80vh; overflow-y: auto; border: 1px solid #555; padding: 10px; }
+                button { padding: 10px; margin: 5px; background: #007acc; color: white; border: none; cursor: pointer; }
+                .stats { background: #333; padding: 10px; margin: 10px 0; border-radius: 5px; }
+            </style>
+        </head>
+        <body>
+            <h1>🔍 Live Server Logs</h1>
+            <div class="stats" id="stats">Loading...</div>
+            <button onclick="refreshLogs()">🔄 Refresh</button>
+            <button onclick="autoRefresh()">⏯️ Auto Refresh</button>
+            <button onclick="clearLogs()">🗑️ Clear</button>
+            <div id="logs"></div>
+            
+            <script>
+                let autoRefreshInterval = null;
+                
+                function refreshLogs() {
+                    fetch('/debug/logs')
+                        .then(r => r.json())
+                        .then(data => {
+                            const statsDiv = document.getElementById('stats');
+                            statsDiv.innerHTML = \`
+                                📊 Total Lines: \${data.totalLines} | 
+                                🔗 Active Sessions: \${data.activeSessionsCount} | 
+                                📅 Updated: \${new Date(data.timestamp).toLocaleTimeString()}
+                                <br>Sessions: \${data.activeSessions.join(', ') || 'None'}
+                            \`;
+                            
+                            const logsDiv = document.getElementById('logs');
+                            logsDiv.innerHTML = '';
+                            
+                            data.recentLines.forEach(line => {
+                                const div = document.createElement('div');
+                                div.className = 'log-line';
+                                
+                                if (line.includes('❌') || line.includes('ERROR') || line.includes('BŁĄD')) {
+                                    div.className += ' error';
+                                } else if (line.includes('✅') || line.includes('SUCCESS')) {
+                                    div.className += ' success';
+                                } else if (line.includes('WebSocket') || line.includes('WEBSOCKET')) {
+                                    div.className += ' websocket';
+                                } else if (line.includes('SESSION') || line.includes('KROK')) {
+                                    div.className += ' session';
+                                } else {
+                                    div.className += ' info';
+                                }
+                                
+                                div.textContent = line;
+                                logsDiv.appendChild(div);
+                            });
+                            
+                            logsDiv.scrollTop = logsDiv.scrollHeight;
+                        })
+                        .catch(err => {
+                            document.getElementById('logs').innerHTML = \`<div class="error">Error: \${err}</div>\`;
+                        });
+                }
+                
+                function autoRefresh() {
+                    if (autoRefreshInterval) {
+                        clearInterval(autoRefreshInterval);
+                        autoRefreshInterval = null;
+                        document.querySelector('button[onclick="autoRefresh()"]').textContent = '▶️ Start Auto';
+                    } else {
+                        autoRefreshInterval = setInterval(refreshLogs, 2000);
+                        document.querySelector('button[onclick="autoRefresh()"]').textContent = '⏸️ Stop Auto';
+                    }
+                }
+                
+                function clearLogs() {
+                    document.getElementById('logs').innerHTML = '';
+                }
+                
+                // Initial load
+                refreshLogs();
+            </script>
+        </body>
+        </html>
+    `);
+});
+
 // WebSocket Connection Handler
 wss.on('connection', (ws, req) => {
     console.log('🔌🔌🔌 NEW WEBSOCKET CONNECTION ESTABLISHED 🔌🔌🔌');
