@@ -2012,8 +2012,9 @@ async function processAudioChunk(ws, data) {
         const { assemblyAISession } = session;
 
         if (assemblyAISession.isConfigured && assemblyAISession.websocket.readyState === WebSocket.OPEN) {
-            // Send audio data directly as base64 string (not wrapped in JSON)
-            assemblyAISession.websocket.send(audioData);
+            // Send audio data in JSON format as expected by legacy API
+            const audioMessage = JSON.stringify({ audio_data: audioData });
+            assemblyAISession.websocket.send(audioMessage);
         } else {
             // Queue audio data if not ready
             console.log(`🎵 Queueing audio chunk for session ${sessionId} (isConfigured: ${assemblyAISession.isConfigured}, state: ${assemblyAISession.websocket.readyState})`);
@@ -2072,7 +2073,8 @@ function setupAssemblyAIHandler(sessionId, session) {
         while (queue.length > 0) {
             const audioData = queue.shift();
             try {
-                assemblySocket.send(audioData);
+                const audioMessage = JSON.stringify({ audio_data: audioData });
+                assemblySocket.send(audioMessage);
             } catch (error) {
                 console.error(`[${sessionId}] ❌ Error sending queued audio:`, error);
                 break;
