@@ -109,6 +109,30 @@ function setupWebSocket() {
     };
 }
 
+// Wait for WebSocket to be ready
+function waitForWebSocketConnection() {
+    return new Promise((resolve, reject) => {
+        const maxRetries = 50; // 5 seconds max wait
+        let retries = 0;
+        
+        const checkConnection = () => {
+            if (websocket && websocket.readyState === WebSocket.OPEN) {
+                console.log('✅ WebSocket is ready for communication');
+                resolve();
+            } else if (retries >= maxRetries) {
+                console.error('❌ WebSocket connection timeout');
+                reject(new Error('WebSocket connection timeout'));
+            } else {
+                retries++;
+                console.log(`⏳ Waiting for WebSocket connection... (${retries}/${maxRetries})`);
+                setTimeout(checkConnection, 100);
+            }
+        };
+        
+        checkConnection();
+    });
+}
+
 // Handle WebSocket Messages
 function handleWebSocketMessage(data) {
     console.log('📨 WebSocket message received:', data.type);
@@ -355,6 +379,10 @@ async function startRealtimeSession() {
             suggestions: []
         };
         
+        // Wait for WebSocket connection before sending message
+        console.log('⏳ Waiting for WebSocket connection...');
+        await waitForWebSocketConnection();
+        
         // Send session start message to WebSocket
         websocket.send(JSON.stringify({
             type: 'START_REALTIME_SESSION',
@@ -394,15 +422,22 @@ function setupAudioRecording() {
                 // Convert audio data to base64 for transmission
                 const reader = new FileReader();
                 reader.onload = () => {
-                    const audioData = reader.result.split(',')[1]; // Remove data:audio/webm;base64,
-                    
-                    websocket.send(JSON.stringify({
-                        type: 'AUDIO_CHUNK',
-                        sessionId: currentSession.sessionId,
-                        audioData: audioData
-                    }));
+                    // Double check WebSocket is still open before sending
+                    if (websocket && websocket.readyState === WebSocket.OPEN) {
+                        const audioData = reader.result.split(',')[1]; // Remove data:audio/webm;base64,
+                        
+                        websocket.send(JSON.stringify({
+                            type: 'AUDIO_CHUNK',
+                            sessionId: currentSession.sessionId,
+                            audioData: audioData
+                        }));
+                    } else {
+                        console.warn('⚠️ WebSocket not ready for audio chunk');
+                    }
                 };
                 reader.readAsDataURL(event.data);
+            } else {
+                console.warn('⚠️ WebSocket not ready or no audio data');
             }
         };
         
@@ -780,12 +815,14 @@ async function stopRealtimeSession() {
             sessionTimer = null;
         }
         
-        // Send end session message
-        if (websocket && currentSession) {
+        // Send end session message safely
+        if (websocket && websocket.readyState === WebSocket.OPEN && currentSession) {
             websocket.send(JSON.stringify({
                 type: 'END_REALTIME_SESSION',
                 sessionId: currentSession.sessionId
             }));
+        } else {
+            console.warn('⚠️ WebSocket not ready to send end session message');
         }
         
         showToast('Sesja zakończona - zapisywanie...', 'info');
