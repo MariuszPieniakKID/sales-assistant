@@ -2052,19 +2052,13 @@ function setupAssemblyAIHandler(sessionId, session) {
 
     // Function to send configuration and process queue
     const sendConfigurationAndProcessQueue = () => {
-        console.log(`[${sessionId}] ✅ AssemblyAI WebSocket opened, sending configuration...`);
+        console.log(`[${sessionId}] ✅ AssemblyAI WebSocket opened, processing queue without config...`);
         
-        // Send initial configuration for the legacy API
-        const config = {
-            sample_rate: 16000,
-            word_boost: [],
-            encoding: "pcm_s16le"
-        };
-        
-        assemblySocket.send(JSON.stringify(config));
+        // FOR LEGACY API: Configuration is set via URL parameters, not JSON message
+        // The sample_rate is already set in the WebSocket URL
         session.assemblyAISession.isConfigured = true;
         
-        console.log(`[${sessionId}] 📤 Configuration sent:`, config);
+        console.log(`[${sessionId}] ⚡ Skipping configuration - using URL parameters`);
         
         // Process queued audio
         const queue = session.assemblyAISession.audioQueue;
