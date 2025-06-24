@@ -82,37 +82,66 @@ function setupWebSocket() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${window.location.host}`;
     
-    console.log('🔌 Connecting to WebSocket:', wsUrl);
+    console.log('🔌 Attempting WebSocket connection:', {
+        url: wsUrl,
+        protocol: protocol,
+        host: window.location.host,
+        location: window.location.href
+    });
     
-    websocket = new WebSocket(wsUrl);
-    
-    websocket.onopen = () => {
-        console.log('✅ WebSocket connected successfully');
-    };
-    
-    websocket.onmessage = (event) => {
-        try {
-            const data = JSON.parse(event.data);
-            handleWebSocketMessage(data);
-        } catch (error) {
-            console.error('❌ WebSocket message error:', error);
-        }
-    };
-    
-    websocket.onclose = () => {
-        console.log('🔌 WebSocket connection closed');
-        setTimeout(setupWebSocket, 3000);
-    };
-    
-    websocket.onerror = (error) => {
-        console.error('❌ WebSocket error:', error);
-    };
+    try {
+        websocket = new WebSocket(wsUrl);
+        
+        websocket.onopen = (event) => {
+            console.log('✅ WebSocket connected successfully', {
+                readyState: websocket.readyState,
+                url: websocket.url,
+                extensions: websocket.extensions,
+                protocol: websocket.protocol
+            });
+        };
+        
+        websocket.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                handleWebSocketMessage(data);
+            } catch (error) {
+                console.error('❌ WebSocket message error:', error);
+            }
+        };
+        
+        websocket.onclose = (event) => {
+            console.log('🔌 WebSocket connection closed', {
+                code: event.code,
+                reason: event.reason,
+                wasClean: event.wasClean,
+                readyState: websocket ? websocket.readyState : 'null'
+            });
+            
+            // Retry connection after 3 seconds
+            setTimeout(() => {
+                console.log('🔄 Retrying WebSocket connection...');
+                setupWebSocket();
+            }, 3000);
+        };
+        
+        websocket.onerror = (error) => {
+            console.error('❌ WebSocket error occurred:', {
+                error: error,
+                readyState: websocket ? websocket.readyState : 'null',
+                url: websocket ? websocket.url : 'null'
+            });
+        };
+        
+    } catch (error) {
+        console.error('❌ Failed to create WebSocket:', error);
+    }
 }
 
 // Wait for WebSocket to be ready
 function waitForWebSocketConnection() {
     return new Promise((resolve, reject) => {
-        const maxRetries = 50; // 5 seconds max wait
+        const maxRetries = 150; // 15 seconds max wait (increased)
         let retries = 0;
         
         const checkConnection = () => {
@@ -120,11 +149,27 @@ function waitForWebSocketConnection() {
                 console.log('✅ WebSocket is ready for communication');
                 resolve();
             } else if (retries >= maxRetries) {
-                console.error('❌ WebSocket connection timeout');
+                console.error('❌ WebSocket connection timeout after 15 seconds');
+                console.error('🔍 Final WebSocket state:', {
+                    websocket: !!websocket,
+                    readyState: websocket ? websocket.readyState : 'null',
+                    url: websocket ? websocket.url : 'null'
+                });
                 reject(new Error('WebSocket connection timeout'));
             } else {
                 retries++;
-                console.log(`⏳ Waiting for WebSocket connection... (${retries}/${maxRetries})`);
+                if (retries % 10 === 0) { // Log every second
+                    console.log(`⏳ Waiting for WebSocket connection... (${retries}/${maxRetries})`, {
+                        websocket: !!websocket,
+                        readyState: websocket ? websocket.readyState : 'null',
+                        states: {
+                            CONNECTING: WebSocket.CONNECTING,
+                            OPEN: WebSocket.OPEN,
+                            CLOSING: WebSocket.CLOSING,
+                            CLOSED: WebSocket.CLOSED
+                        }
+                    });
+                }
                 setTimeout(checkConnection, 100);
             }
         };
