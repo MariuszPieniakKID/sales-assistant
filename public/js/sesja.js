@@ -180,19 +180,28 @@ function waitForWebSocketConnection() {
 
 // Handle WebSocket Messages
 function handleWebSocketMessage(data) {
-    console.log('📨 WebSocket message received:', data.type);
+    console.log('📨 Frontend WebSocket message received:', {
+        type: data.type,
+        hasData: !!data.data,
+        sessionId: data.sessionId,
+        message: data.message,
+        fullData: data
+    });
     
     switch (data.type) {
         case 'SESSION_STARTED':
             onSessionStarted(data);
             break;
         case 'PARTIAL_TRANSCRIPT':
+            console.log('⏳ Frontend: Otrzymano partial transcript:', data.transcript);
             onPartialTranscript(data);
             break;
         case 'FINAL_TRANSCRIPT':
+            console.log('📝 Frontend: Otrzymano final transcript:', data.transcript);
             onFinalTranscript(data);
             break;
         case 'AI_SUGGESTIONS':
+            console.log('🤖 Frontend: Otrzymano AI suggestions:', data.suggestions);
             onAISuggestions(data);
             break;
         case 'SESSION_ENDED':
@@ -201,8 +210,12 @@ function handleWebSocketMessage(data) {
         case 'SESSION_ERROR':
             onSessionError(data);
             break;
+        case 'ASSEMBLYAI_ERROR':
+            console.error('❌ Frontend: AssemblyAI error:', data.error);
+            showToast('Błąd AssemblyAI: ' + data.error, 'error');
+            break;
         default:
-            console.log('❓ Unknown WebSocket message type:', data.type);
+            console.log('❓ Unknown WebSocket message type:', data.type, data);
     }
 }
 
@@ -469,6 +482,8 @@ function setupAudioRecording() {
         // Create ScriptProcessor for real-time audio processing
         const processor = audioContext.createScriptProcessor(4096, 1, 1);
         
+        let audioChunkCount = 0;
+        
         processor.onaudioprocess = (event) => {
             if (!isRecording || !websocket || websocket.readyState !== WebSocket.OPEN) {
                 return;
@@ -491,6 +506,18 @@ function setupAudioRecording() {
             }
             
             const base64Audio = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+            
+            // Debug: log every 100th chunk to avoid spam
+            audioChunkCount++;
+            if (audioChunkCount % 100 === 0) {
+                console.log('🎵 Frontend: Wysyłam audio chunk', audioChunkCount, {
+                    audioDataLength: base64Audio.length,
+                    inputDataLength: inputData.length,
+                    pcmDataLength: pcmData.length,
+                    websocketState: websocket.readyState,
+                    sessionId: currentSession.sessionId
+                });
+            }
             
             // Send to WebSocket
             websocket.send(JSON.stringify({
