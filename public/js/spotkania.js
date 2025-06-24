@@ -1,27 +1,49 @@
 // spotkania.js - Zarządzanie spotkaniami
 
+console.log('🎬 spotkania.js - Start ładowania skryptu');
+
 let meetings = [];
 let filteredMeetings = [];
 
-// Elementy DOM
+// Elementy DOM - sprawdzenie czy istnieją
+console.log('🔍 Sprawdzanie elementów DOM...');
 const meetingsTableBody = document.getElementById('meetingsTableBody');
 const searchInput = document.getElementById('searchMeetings');
 const meetingDetailsModal = document.getElementById('meetingDetailsModal');
 const closeMeetingModal = document.getElementById('closeMeetingModal');
 const meetingDetails = document.getElementById('meetingDetails');
 
-// Inicjalizacja
-document.addEventListener('DOMContentLoaded', function() {
+console.log('📋 Elementy DOM znalezione:', {
+    meetingsTableBody: !!meetingsTableBody,
+    searchInput: !!searchInput,
+    meetingDetailsModal: !!meetingDetailsModal,
+    closeMeetingModal: !!closeMeetingModal,
+    meetingDetails: !!meetingDetails
+});
+
+// Inicjalizacja - sprawdź czy DOM jest już gotowy
+console.log('🎯 Sprawdzanie stanu DOM:', document.readyState);
+
+function initializeMeetings() {
     console.log('🚀 Inicjalizacja sekcji spotkań...');
-    console.log('🔍 Elementy DOM:', {
-        meetingsTableBody: !!meetingsTableBody,
-        searchInput: !!searchInput,
-        meetingDetailsModal: !!meetingDetailsModal
+    console.log('🔍 Elementy DOM w inicjalizacji:', {
+        meetingsTableBody: !!document.getElementById('meetingsTableBody'),
+        searchInput: !!document.getElementById('searchMeetings'),
+        meetingDetailsModal: !!document.getElementById('meetingDetailsModal')
     });
     
     loadMeetings();
     setupEventListeners();
-});
+}
+
+if (document.readyState === 'loading') {
+    console.log('⏳ DOM jeszcze się ładuje - czekam na DOMContentLoaded');
+    document.addEventListener('DOMContentLoaded', initializeMeetings);
+} else {
+    console.log('✅ DOM już gotowy - uruchamiam inicjalizację z małym opóźnieniem');
+    // DOM już gotowy, ale dodaj małe opóźnienie dla sekcji AJAX
+    setTimeout(initializeMeetings, 200);
+}
 
 // Konfiguracja event listenerów
 function setupEventListeners() {
