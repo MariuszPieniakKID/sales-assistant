@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Full Session Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; }
+        .test-container { max-width: 800px; margin: 0 auto; }
+        .test-step { background: white; margin: 10px 0; padding: 15px; border-radius: 8px; border-left: 4px solid #007acc; }
+        .test-step.success { border-left-color: #28a745; }
+        .test-step.error { border-left-color: #dc3545; }
+        .test-step.running { border-left-color: #ffc107; }
+        button { padding: 10px 20px; margin: 5px; background: #007acc; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        .log { background: #f8f9fa; padding: 10px; margin: 10px 0; border-radius: 5px; font-family: monospace; font-size: 12px; max-height: 200px; overflow-y: auto; }
+        .status { font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🧪 Full AI Session Test</h1>
+        
+        <div class="test-step" id="step1">
+            <h3>Step 1: WebSocket Connection</h3>
+            <div class="status">Waiting...</div>
+            <div class="log" id="log1"></div>
+        </div>
+        
+        <div class="test-step" id="step2">
+            <h3>Step 2: Load Clients & Products</h3>
+            <div class="status">Waiting...</div>
+            <div class="log" id="log2"></div>
+        </div>
+        
+        <div class="test-step" id="step3">
+            <h3>Step 3: Start AI Session</h3>
+            <div class="status">Waiting...</div>
+            <div class="log" id="log3"></div>
+            <button onclick="startAISession()">Start AI Session</button>
+        </div>
+        
+        <div class="test-step" id="step4">
+            <h3>Step 4: Audio Processing</h3>
+            <div class="status">Waiting...</div>
+            <div class="log" id="log4"></div>
+        </div>
+        
+        <div class="test-step" id="step5">
+            <h3>Step 5: AssemblyAI Response</h3>
+            <div class="status">Waiting...</div>
+            <div class="log" id="log5"></div>
+        </div>
+        
+        <button onclick="runFullTest()">🚀 Run Full Test</button>
+        <button onclick="clearLogs()">🗑️ Clear Logs</button>
+    </div>
+    
+    <script>
+        let websocket = null;
+        let clients = [];
+        let products = [];
+        let currentSession = null;
+        let testResults = {};
+        
+        function log(stepId, message, type = 'info') {
+            const logElement = document.getElementById(`log${stepId}`);
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = `[${timestamp}] ${message}`;
+            logElement.innerHTML += logEntry + '\\n';
+            logElement.scrollTop = logElement.scrollHeight;
+            console.log(`Step ${stepId}: ${message}`);
+        }
+        
+        function updateStepStatus(stepId, status, className = '') {
+            const step = document.getElementById(`step${stepId}`);
+            const statusElement = step.querySelector('.status');
+            statusElement.textContent = status;
+            
+            step.className = 'test-step';
+            if (className) {
+                step.classList.add(className);
+            }
+        }
+        
+        function clearLogs() {
+            for (let i = 1; i <= 5; i++) {
+                document.getElementById(`log${i}`).innerHTML = '';
+                updateStepStatus(i, 'Waiting...');
+            }
+            testResults = {};
+        }
+        
+        async function runFullTest() {
+            clearLogs();
+            
+            // Step 1: WebSocket Connection
+            await testWebSocketConnection();
+            
+            // Step 2: Load Data
+            await testLoadData();
+            
+            // Step 3 will be manual - user clicks button
+            updateStepStatus(3, 'Ready - Click button to start AI session');
+        }
+        
+        async function testWebSocketConnection() {
+            updateStepStatus(1, 'Connecting...', 'running');
+            log(1, 'Starting WebSocket connection test');
+            
+            try {
+                const wsUrl = `wss://${window.location.host}`;
+                log(1, `Connecting to: ${wsUrl}`);
+                
+                websocket = new WebSocket(wsUrl);
+                
+                return new Promise((resolve, reject) => {
+                    const timeout = setTimeout(() => {
+                        log(1, '❌ WebSocket connection timeout');
+                        updateStepStatus(1, 'Failed - Timeout', 'error');
+                        reject(new Error('Timeout'));
+                    }, 10000);
+                    
+                    websocket.onopen = () => {
+                        clearTimeout(timeout);
+                        log(1, '✅ WebSocket connected successfully');
+                        updateStepStatus(1, 'Success - Connected', 'success');
+                        testResults.websocket = true;
+                        resolve();
+                    };
+                    
+                    websocket.onmessage = (event) => {
+                        try {
+                            const data = JSON.parse(event.data);
+                            log(1, `📨 Received: ${data.type}`);
+                            
+                            // Handle different message types
+                            switch (data.type) {
+                                case 'SESSION_STARTED':
+                                    log(3, `✅ Session started: ${data.sessionId}`);
+                                    currentSession = { sessionId: data.sessionId };
+                                    updateStepStatus(3, 'Success - Session started', 'success');
+                                    
+                                    // Start audio test
+                                    testAudioProcessing();
+                                    break;
+                                    
+                                case 'PARTIAL_TRANSCRIPT':
+                                    log(5, `📝 Partial: ${data.transcript.text}`);
+                                    updateStepStatus(5, 'Receiving transcripts', 'success');
+                                    break;
+                                    
+                                case 'FINAL_TRANSCRIPT':
+                                    log(5, `✅ Final: ${data.transcript.text}`);
+                                    updateStepStatus(5, 'Success - Transcript received', 'success');
+                                    break;
+                                    
+                                case 'AI_SUGGESTIONS':
+                                    log(5, `🤖 AI Suggestions: ${JSON.stringify(data.suggestions)}`);
+                                    break;
+                                    
+                                case 'ERROR':
+                                    log(1, `❌ WebSocket error: ${data.message}`);
+                                    break;
+                            }
+                        } catch (error) {
+                            log(1, `📨 Raw message: ${event.data}`);
+                        }
+                    };
+                    
+                    websocket.onclose = (event) => {
+                        log(1, `🔌 WebSocket closed: ${event.code} - ${event.reason}`);
+                    };
+                    
+                    websocket.onerror = (error) => {
+                        clearTimeout(timeout);
+                        log(1, `❌ WebSocket error: ${error}`);
+                        updateStepStatus(1, 'Failed - Error', 'error');
+                        reject(error);
+                    };
+                });
+            } catch (error) {
+                log(1, `❌ Exception: ${error.message}`);
+                updateStepStatus(1, 'Failed - Exception', 'error');
+                throw error;
+            }
+        }
+        
+        async function testLoadData() {
+            updateStepStatus(2, 'Loading...', 'running');
+            log(2, 'Loading clients and products');
+            
+            try {
+                // Load clients
+                log(2, 'Fetching clients...');
+                const clientsResponse = await fetch('/api/clients');
+                if (!clientsResponse.ok) throw new Error(`Clients API error: ${clientsResponse.status}`);
+                clients = await clientsResponse.json();
+                log(2, `✅ Loaded ${clients.length} clients`);
+                
+                // Load products
+                log(2, 'Fetching products...');
+                const productsResponse = await fetch('/api/products');
+                if (!productsResponse.ok) throw new Error(`Products API error: ${productsResponse.status}`);
+                products = await productsResponse.json();
+                log(2, `✅ Loaded ${products.length} products`);
+                
+                if (clients.length === 0) {
+                    log(2, '⚠️ No clients available');
+                    updateStepStatus(2, 'Warning - No clients', 'error');
+                    return;
+                }
+                
+                if (products.length === 0) {
+                    log(2, '⚠️ No products available');
+                    updateStepStatus(2, 'Warning - No products', 'error');
+                    return;
+                }
+                
+                log(2, `First client: ${clients[0].name} (ID: ${clients[0].id})`);
+                log(2, `First product: ${products[0].name} (ID: ${products[0].id})`);
+                
+                updateStepStatus(2, 'Success - Data loaded', 'success');
+                testResults.data = true;
+                
+            } catch (error) {
+                log(2, `❌ Error loading data: ${error.message}`);
+                updateStepStatus(2, 'Failed - API Error', 'error');
+                throw error;
+            }
+        }
+        
+        async function startAISession() {
+            if (!websocket || websocket.readyState !== WebSocket.OPEN) {
+                log(3, '❌ WebSocket not connected');
+                updateStepStatus(3, 'Failed - No WebSocket', 'error');
+                return;
+            }
+            
+            if (!clients.length || !products.length) {
+                log(3, '❌ No clients or products loaded');
+                updateStepStatus(3, 'Failed - No data', 'error');
+                return;
+            }
+            
+            updateStepStatus(3, 'Starting session...', 'running');
+            log(3, 'Sending START_REALTIME_SESSION');
+            
+            try {
+                // Get user info
+                const userResponse = await fetch('/api/user');
+                if (!userResponse.ok) throw new Error('Failed to get user info');
+                const user = await userResponse.json();
+                
+                log(3, `User ID: ${user.user.id}`);
+                
+                const startMessage = {
+                    type: 'START_REALTIME_SESSION',
+                    clientId: clients[0].id,
+                    productId: products[0].id,
+                    notes: 'Test session from full test',
+                    userId: user.user.id
+                };
+                
+                log(3, `Sending: ${JSON.stringify(startMessage)}`);
+                websocket.send(JSON.stringify(startMessage));
+                
+                log(3, '📤 Message sent, waiting for SESSION_STARTED...');
+                updateStepStatus(3, 'Waiting for response...', 'running');
+                
+            } catch (error) {
+                log(3, `❌ Error starting session: ${error.message}`);
+                updateStepStatus(3, 'Failed - Error', 'error');
+            }
+        }
+        
+        async function testAudioProcessing() {
+            updateStepStatus(4, 'Testing audio...', 'running');
+            log(4, 'Starting audio processing test');
+            
+            if (!currentSession || !currentSession.sessionId) {
+                log(4, '❌ No active session');
+                updateStepStatus(4, 'Failed - No session', 'error');
+                return;
+            }
+            
+            try {
+                // Request microphone access
+                log(4, 'Requesting microphone access...');
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        sampleRate: 16000,
+                        channelCount: 1,
+                        echoCancellation: true,
+                        noiseSuppression: true
+                    }
+                });
+                
+                log(4, '✅ Microphone access granted');
+                
+                // Create AudioContext
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)({
+                    sampleRate: 16000
+                });
+                
+                log(4, `AudioContext created: ${audioContext.sampleRate}Hz`);
+                
+                if (audioContext.state === 'suspended') {
+                    await audioContext.resume();
+                    log(4, 'AudioContext resumed');
+                }
+                
+                // Create audio processing chain
+                const source = audioContext.createMediaStreamSource(stream);
+                const processor = audioContext.createScriptProcessor(4096, 1, 1);
+                
+                let chunkCount = 0;
+                processor.onaudioprocess = (event) => {
+                    chunkCount++;
+                    
+                    if (chunkCount <= 3) {
+                        log(4, `Processing audio chunk ${chunkCount}`);
+                    }
+                    
+                    // Get PCM audio data
+                    const inputData = event.inputBuffer.getChannelData(0);
+                    
+                    // Convert to int16
+                    const pcmData = new Int16Array(inputData.length);
+                    for (let i = 0; i < inputData.length; i++) {
+                        pcmData[i] = Math.max(-32768, Math.min(32767, inputData[i] * 32768));
+                    }
+                    
+                    // Convert to base64
+                    const buffer = new ArrayBuffer(pcmData.length * 2);
+                    const view = new DataView(buffer);
+                    for (let i = 0; i < pcmData.length; i++) {
+                        view.setInt16(i * 2, pcmData[i], true);
+                    }
+                    
+                    const base64Audio = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+                    
+                    // Send to WebSocket
+                    if (websocket && websocket.readyState === WebSocket.OPEN) {
+                        websocket.send(JSON.stringify({
+                            type: 'AUDIO_CHUNK',
+                            sessionId: currentSession.sessionId,
+                            audioData: base64Audio
+                        }));
+                        
+                        if (chunkCount === 1) {
+                            log(4, '📤 First audio chunk sent');
+                        } else if (chunkCount === 10) {
+                            log(4, '📤 10 audio chunks sent');
+                            updateStepStatus(4, 'Success - Audio streaming', 'success');
+                        }
+                    }
+                };
+                
+                source.connect(processor);
+                processor.connect(audioContext.destination);
+                
+                log(4, '🎤 Audio processing started');
+                
+                // Stop after 30 seconds
+                setTimeout(() => {
+                    stream.getTracks().forEach(track => track.stop());
+                    processor.disconnect();
+                    source.disconnect();
+                    log(4, '🛑 Audio processing stopped');
+                }, 30000);
+                
+            } catch (error) {
+                log(4, `❌ Audio error: ${error.message}`);
+                updateStepStatus(4, 'Failed - Audio error', 'error');
+            }
+        }
+        
+        // Auto-start test when page loads
+        window.onload = () => {
+            log(1, '🌐 Page loaded, ready for testing');
+            setTimeout(runFullTest, 1000);
+        };
+    </script>
+</body>
+</html> 
