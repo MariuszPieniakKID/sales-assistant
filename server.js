@@ -1670,6 +1670,16 @@ wss.on('connection', (ws, req) => {
                     await endRealtimeSession(ws, data);
                     break;
                     
+                case 'TEST':
+                    console.log('🧪 TEST message received:', data);
+                    ws.send(JSON.stringify({
+                        type: 'TEST_RESPONSE',
+                        message: 'WebSocket is working!',
+                        originalMessage: data,
+                        timestamp: new Date().toISOString()
+                    }));
+                    break;
+                    
                 default:
                     console.log('❓ Unknown message type:', data.type, data);
             }
