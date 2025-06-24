@@ -451,9 +451,15 @@ app.get('/api/health', async (req, res) => {
       environment: process.env.NODE_ENV,
       hasSessionSecret: !!process.env.SESSION_SECRET,
       hasDatabaseUrl: !!process.env.DATABASE_URL,
+      hasOpenAIKey: !!process.env.OPENAI_API_KEY,
+      hasAssemblyAIKey: !!process.env.ASSEMBLYAI_API_KEY,
       bcryptTest: passwordTest,
       testUserExists: testUser.rows.length > 0,
-      testUserHash: testUser.rows.length > 0 ? testUser.rows[0].password_hash.substring(0, 10) + '...' : 'N/A'
+      testUserHash: testUser.rows.length > 0 ? testUser.rows[0].password_hash.substring(0, 10) + '...' : 'N/A',
+      aiFeatures: {
+        openai: !!process.env.OPENAI_API_KEY ? 'Available' : 'Missing API Key',
+        assemblyai: !!process.env.ASSEMBLYAI_API_KEY ? 'Available' : 'Missing API Key'
+      }
     });
   } catch (err) {
     console.error('Health check error:', err);
@@ -464,7 +470,13 @@ app.get('/api/health', async (req, res) => {
       error: err.message,
       environment: process.env.NODE_ENV,
       hasSessionSecret: !!process.env.SESSION_SECRET,
-      hasDatabaseUrl: !!process.env.DATABASE_URL
+      hasDatabaseUrl: !!process.env.DATABASE_URL,
+      hasOpenAIKey: !!process.env.OPENAI_API_KEY,
+      hasAssemblyAIKey: !!process.env.ASSEMBLYAI_API_KEY,
+      aiFeatures: {
+        openai: !!process.env.OPENAI_API_KEY ? 'Available' : 'Missing API Key',
+        assemblyai: !!process.env.ASSEMBLYAI_API_KEY ? 'Available' : 'Missing API Key'
+      }
     });
   }
 });
@@ -1530,6 +1542,7 @@ async function startRealtimeSession(ws, data) {
             assemblyAISession,
             gptContext,
             conversationHistory: [],
+            aiSuggestions: [], // Dodane: przechowywanie sugestii AI
             lastAnalysis: Date.now(),
             startTime: new Date()
         });
@@ -1554,6 +1567,10 @@ async function startRealtimeSession(ws, data) {
 
 // Create AssemblyAI Real-time Session
 async function createAssemblyAISession() {
+    if (!ASSEMBLYAI_API_KEY) {
+        throw new Error('ASSEMBLYAI_API_KEY is not configured. Please add it to environment variables.');
+    }
+    
     const response = await fetch('https://api.assemblyai.com/v2/realtime/token', {
         method: 'POST',
         headers: {
@@ -1562,12 +1579,17 @@ async function createAssemblyAISession() {
         },
         body: JSON.stringify({
             expires_in: 3600, // 1 hour
-            sample_rate: ASSEMBLYAI_SAMPLE_RATE
+            sample_rate: ASSEMBLYAI_SAMPLE_RATE,
+            speaker_labels: true, // Enable diarization
+            sentiment_analysis: true, // Enable sentiment analysis
+            auto_highlights: true, // Enable key phrases
+            entity_detection: true // Enable entity detection
         })
     });
     
     if (!response.ok) {
-        throw new Error('Failed to create AssemblyAI session');
+        const errorText = await response.text();
+        throw new Error(`Failed to create AssemblyAI session: ${response.status} ${errorText}`);
     }
     
     const data = await response.json();
@@ -1617,33 +1639,57 @@ function setupAssemblyAIHandler(sessionId, session) {
     
     assemblyWS.onopen = () => {
         console.log('🔌 AssemblyAI WebSocket connected for session:', sessionId);
+        
+        // Send configuration message to AssemblyAI
+        assemblyWS.send(JSON.stringify({
+            sample_rate: ASSEMBLYAI_SAMPLE_RATE,
+            speaker_labels: true,
+            sentiment_analysis: true
+        }));
+        
+        console.log('📤 Sent configuration to AssemblyAI');
     };
     
     assemblyWS.onmessage = async (event) => {
         try {
             const data = JSON.parse(event.data);
+            console.log('🎵 AssemblyAI message:', data.message_type, data);
             
-            if (data.message_type === 'FinalTranscript') {
+            if (data.message_type === 'FinalTranscript' && data.text && data.text.trim()) {
                 console.log('📝 Final transcript received:', data.text);
                 
                 // Process transcript with speaker detection and sentiment
                 await processTranscript(sessionId, {
-                    text: data.text,
-                    confidence: data.confidence,
-                    speaker: data.speaker_label || 'unknown',
+                    text: data.text.trim(),
+                    confidence: data.confidence || 0.8,
+                    speaker: data.speaker || 'Speaker',
                     sentiment: data.sentiment || 'neutral',
-                    timestamp: Date.now()
+                    timestamp: Date.now(),
+                    words: data.words || []
                 });
             }
             
-            if (data.message_type === 'PartialTranscript') {
+            if (data.message_type === 'PartialTranscript' && data.text && data.text.trim()) {
                 // Send partial transcript for immediate feedback
                 session.websocket.send(JSON.stringify({
                     type: 'PARTIAL_TRANSCRIPT',
                     sessionId,
-                    text: data.text,
-                    speaker: data.speaker_label || 'unknown'
+                    transcript: {
+                        text: data.text.trim(),
+                        speaker: data.speaker || 'Speaker',
+                        confidence: data.confidence || 0.8
+                    }
                 }));
+            }
+            
+            // Handle session begin
+            if (data.message_type === 'SessionBegins') {
+                console.log('🎵 AssemblyAI session began:', data);
+            }
+            
+            // Handle session terminated
+            if (data.message_type === 'SessionTerminated') {
+                console.log('🎵 AssemblyAI session terminated:', data);
             }
             
         } catch (error) {
@@ -1678,11 +1724,19 @@ async function processTranscript(sessionId, transcript) {
         
         // Analyze with GPT if enough time has passed (avoid spam)
         const now = Date.now();
-        if (now - session.lastAnalysis > 2000) { // 2 second throttle
+        if (now - session.lastAnalysis > 1500) { // 1.5 second throttle for faster responses
             session.lastAnalysis = now;
             
             // Generate AI suggestions
             const suggestions = await generateAISuggestions(session, transcript);
+            
+            // Store AI suggestions in session
+            session.aiSuggestions.push({
+                timestamp: Date.now(),
+                transcript: transcript.text,
+                speaker: transcript.speaker,
+                suggestions: suggestions
+            });
             
             // Send suggestions to client
             session.websocket.send(JSON.stringify({
@@ -1700,6 +1754,17 @@ async function processTranscript(sessionId, transcript) {
 // Generate AI Suggestions using GPT
 async function generateAISuggestions(session, newTranscript) {
     try {
+        if (!process.env.OPENAI_API_KEY) {
+            console.log('⚠️ OPENAI_API_KEY not configured - skipping AI suggestions');
+            return {
+                speaker_analysis: "unknown",
+                intent: "OpenAI API key not configured",
+                emotion: "unknown",
+                suggestions: ["Configure OPENAI_API_KEY to enable AI suggestions"],
+                signals: []
+            };
+        }
+        
         const openai = new OpenAI({
             apiKey: process.env.OPENAI_API_KEY
         });
@@ -1716,21 +1781,22 @@ AKTUALNY FRAGMENT ROZMOWY:
 ${recentContext}
 
 NAJNOWSZA WYPOWIEDŹ:
-[${newTranscript.speaker.toUpperCase()}] ${newTranscript.text} (sentiment: ${newTranscript.sentiment})
+[${newTranscript.speaker.toUpperCase()}] ${newTranscript.text} (sentiment: ${newTranscript.sentiment}, confidence: ${newTranscript.confidence})
 
-ZADANIE:
-1. Określ kto mówi (sprzedawca/klient)
-2. Przeanalizuj intencje i emocje
-3. Podaj 1-2 konkretne sugestie co zrobić TERAZ
-4. Wskaż kluczowe sygnały kupna/oporu
+ZADANIE - NATYCHMIASTOWA ANALIZA:
+1. KTO MÓWI: Określ czy to sprzedawca czy klient na podstawie kontekstu
+2. INTENCJE: Co osoba chce osiągnąć tą wypowiedzią
+3. EMOCJE: Jaki jest nastrój i emocje
+4. SUGESTIE: 2-3 KONKRETNE akcje dla sprzedawcy (co powiedzieć/zrobić TERAZ)
+5. SYGNAŁY: Czy to sygnał kupna, oporu, czy neutralny
 
-Format odpowiedzi (JSON):
+ODPOWIADAJ SZYBKO I PRAKTYCZNIE! Format JSON:
 {
     "speaker_analysis": "sprzedawca/klient",
-    "intent": "krótki opis intencji",
-    "emotion": "emocja klienta",
-    "suggestions": ["sugestia 1", "sugestia 2"],
-    "signals": ["sygnał kupna/oporu"]
+    "intent": "krótki opis intencji (max 10 słów)",
+    "emotion": "emocja (pozytywna/neutralna/negatywna)",
+    "suggestions": ["konkretna sugestia 1", "konkretna sugestia 2", "konkretna sugestia 3"],
+    "signals": ["sygnał kupna/oporu/neutralny"]
 }`;
 
         const response = await openai.chat.completions.create({
@@ -1838,24 +1904,52 @@ async function saveRealtimeSession(session) {
             .map(t => `[${t.speaker}] ${t.text}`)
             .join('\n\n');
         
+        // Create AI suggestions summary
+        const aiSuggestionsText = session.aiSuggestions.map(item => {
+            const time = new Date(item.timestamp).toLocaleTimeString('pl-PL');
+            return `[${time}] ${item.transcript}\n` +
+                   `Sugestie: ${item.suggestions.suggestions?.join(', ') || 'Brak'}\n` +
+                   `Sygnały: ${item.suggestions.signals?.join(', ') || 'Brak'}\n` +
+                   `Emocje: ${item.suggestions.emotion || 'Nieznane'}\n`;
+        }).join('\n---\n');
+        
+        // Generate summary for positive/negative findings
+        const allSuggestions = session.aiSuggestions.flatMap(item => item.suggestions.suggestions || []);
+        const allSignals = session.aiSuggestions.flatMap(item => item.suggestions.signals || []);
+        
+        const positiveFindings = allSignals.filter(signal => 
+            signal.toLowerCase().includes('kupna') || 
+            signal.toLowerCase().includes('zainteresowanie') ||
+            signal.toLowerCase().includes('pozytywny')
+        ).join(', ') || 'Sesja Real-time AI Assistant zakończona';
+        
+        const negativeFindings = allSignals.filter(signal => 
+            signal.toLowerCase().includes('oporu') || 
+            signal.toLowerCase().includes('wątpliwość') ||
+            signal.toLowerCase().includes('negatywny')
+        ).join(', ') || 'Zobacz szczegóły w sugestiach AI';
+        
+        const recommendations = allSuggestions.slice(0, 5).join('; ') || 'Kontynuuj komunikację zgodnie z sugestiami AI';
+        
         await safeQuery(`
             INSERT INTO sales (
                 product_id, client_id, recording_path, transcription, meeting_datetime,
-                positive_findings, negative_findings, recommendations, own_notes
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                positive_findings, negative_findings, recommendations, own_notes, ai_suggestions
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         `, [
             session.productId,
             session.clientId,
             'realtime_ai_session',
             transcription,
             session.startTime,
-            'Real-time AI session completed',
-            'See conversation analysis',
-            'Follow up based on AI suggestions',
-            session.notes || ''
+            positiveFindings,
+            negativeFindings,
+            recommendations,
+            session.notes || '',
+            aiSuggestionsText
         ]);
         
-        console.log('💾 Real-time session saved to database');
+        console.log('💾 Real-time session saved to database with AI suggestions');
         
     } catch (error) {
         console.error('❌ Error saving real-time session:', error);
@@ -1863,25 +1957,14 @@ async function saveRealtimeSession(session) {
 }
 
 // Start serwera z WebSocket support
-if (process.env.NODE_ENV !== 'production') {
-  // Tryb rozwojowy - uruchom normalnie z WebSocket
-  server.listen(PORT, async () => {
-    console.log(`🚀 Serwer aplikacji doradców handlowych działa na porcie ${PORT}`);
-    console.log(`🌐 Otwórz http://localhost:${PORT} w przeglądarce`);
-    console.log(`🔌 WebSocket server ready for real-time AI assistant`);
-    
-    // Test połączenia z bazą danych Neon
-    await testNeonConnection();
-  });
-} else {
-  // Produkcja - Vercel
-  console.log('🚀 Sales Assistant App initialized for Vercel with WebSocket support');
-  console.log('📁 __dirname:', __dirname);
-  console.log('📂 Public path:', path.join(__dirname, 'public'));
-  console.log('🌐 NODE_ENV:', process.env.NODE_ENV);
-  console.log('🔌 WebSocket server ready for real-time AI assistant');
-  testNeonConnection().catch(console.error);
-}
+server.listen(PORT, async () => {
+  console.log(`🚀 Serwer aplikacji działa na porcie ${PORT}`);
+  console.log(`🌐 NODE_ENV: ${process.env.NODE_ENV}`);
+  console.log(`🔌 WebSocket server ready for real-time AI assistant`);
+  
+  // Test połączenia z bazą danych Neon
+  await testNeonConnection();
+});
 
 // Export dla Vercel
 module.exports = server; 

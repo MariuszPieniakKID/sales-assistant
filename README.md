@@ -24,6 +24,14 @@ Nowoczesna aplikacja webowa stworzona dla doradców handlowych do zarządzania p
 - Notatki ze spotkań
 - Historia kontaktów z klientami
 
+### 🤖 **Real-time AI Assistant**
+- Nagrywanie rozmów w czasie rzeczywistym
+- Automatyczna transkrypcja głosu (AssemblyAI)
+- Inteligentne sugestie sprzedażowe (OpenAI GPT)
+- Analiza intencji i emocji klienta
+- Wykrywanie sygnałów kupna/oporu
+- **⚠️ Wymaga platformy obsługującej WebSocket** (Railway, Heroku)
+
 ### 📱 **Responsive Design**
 - Nowoczesny interfejs użytkownika
 - Pełna responsywność (RWD)
@@ -37,6 +45,12 @@ Nowoczesna aplikacja webowa stworzona dla doradców handlowych do zarządzania p
 - bcryptjs (hashowanie haseł)
 - express-session (zarządzanie sesjami)
 - multer (upload plików)
+- WebSocket (real-time komunikacja)
+
+**AI Integration:**
+- OpenAI GPT-3.5/4 (sugestie sprzedażowe)
+- AssemblyAI (transkrypcja głosu)
+- Real-time audio processing
 
 **Frontend:**
 - Vanilla JavaScript (ES6+)
@@ -64,12 +78,21 @@ cd sales-assistant
 npm install
 ```
 
-3. **Uruchom aplikację:**
+3. **Skonfiguruj zmienne środowiskowe:**
+```bash
+# Utwórz plik .env
+DATABASE_URL=your_neon_database_url
+SESSION_SECRET=your_session_secret
+OPENAI_API_KEY=your_openai_api_key
+ASSEMBLYAI_API_KEY=your_assemblyai_api_key
+```
+
+4. **Uruchom aplikację:**
 ```bash
 npm start
 ```
 
-4. **Otwórz w przeglądarce:**
+5. **Otwórz w przeglądarce:**
 ```
 http://localhost:3000
 ```

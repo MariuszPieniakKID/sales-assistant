@@ -453,52 +453,69 @@ async function startRealtimeSession() {
     }
 }
 
-// Setup Audio Recording with Real-time Processing
+// Setup Audio Recording with Real-time Processing for AssemblyAI
 function setupAudioRecording() {
     try {
-        // Create MediaRecorder for audio streaming
-        mediaRecorder = new MediaRecorder(audioStream, {
-            mimeType: 'audio/webm;codecs=opus',
-            audioBitsPerSecond: 128000
+        console.log('🎤 Setting up real-time audio recording for AssemblyAI...');
+        
+        // Create AudioContext for PCM audio processing
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)({
+            sampleRate: 16000 // AssemblyAI requires 16kHz
         });
         
-        mediaRecorder.ondataavailable = (event) => {
-            if (event.data.size > 0 && websocket && websocket.readyState === WebSocket.OPEN) {
-                // Convert audio data to base64 for transmission
-                const reader = new FileReader();
-                reader.onload = () => {
-                    // Double check WebSocket is still open before sending
-                    if (websocket && websocket.readyState === WebSocket.OPEN) {
-                        const audioData = reader.result.split(',')[1]; // Remove data:audio/webm;base64,
-                        
-                        websocket.send(JSON.stringify({
-                            type: 'AUDIO_CHUNK',
-                            sessionId: currentSession.sessionId,
-                            audioData: audioData
-                        }));
-                    } else {
-                        console.warn('⚠️ WebSocket not ready for audio chunk');
-                    }
-                };
-                reader.readAsDataURL(event.data);
-            } else {
-                console.warn('⚠️ WebSocket not ready or no audio data');
+        // Create audio source from stream
+        const source = audioContext.createMediaStreamSource(audioStream);
+        
+        // Create ScriptProcessor for real-time audio processing
+        const processor = audioContext.createScriptProcessor(4096, 1, 1);
+        
+        processor.onaudioprocess = (event) => {
+            if (!isRecording || !websocket || websocket.readyState !== WebSocket.OPEN) {
+                return;
             }
+            
+            // Get PCM audio data
+            const inputData = event.inputBuffer.getChannelData(0);
+            
+            // Convert float32 to int16 (required by AssemblyAI)
+            const pcmData = new Int16Array(inputData.length);
+            for (let i = 0; i < inputData.length; i++) {
+                pcmData[i] = Math.max(-32768, Math.min(32767, inputData[i] * 32768));
+            }
+            
+            // Convert to base64
+            const buffer = new ArrayBuffer(pcmData.length * 2);
+            const view = new DataView(buffer);
+            for (let i = 0; i < pcmData.length; i++) {
+                view.setInt16(i * 2, pcmData[i], true); // little-endian
+            }
+            
+            const base64Audio = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+            
+            // Send to WebSocket
+            websocket.send(JSON.stringify({
+                type: 'AUDIO_CHUNK',
+                sessionId: currentSession.sessionId,
+                audioData: base64Audio
+            }));
         };
         
-        mediaRecorder.onerror = (error) => {
-            console.error('❌ MediaRecorder error:', error);
-        };
+        // Connect audio processing chain
+        source.connect(processor);
+        processor.connect(audioContext.destination);
         
-        // Start recording with 250ms intervals for real-time processing
-        mediaRecorder.start(250);
+        // Store references for cleanup
+        currentSession.audioContext = audioContext;
+        currentSession.audioProcessor = processor;
+        currentSession.audioSource = source;
+        
         isRecording = true;
         
-        console.log('🎤 Audio recording started');
+        console.log('✅ Real-time audio recording started with PCM processing');
         
     } catch (error) {
         console.error('❌ Error setting up audio recording:', error);
-        showToast('Błąd konfiguracji nagrywania audio', 'error');
+        showToast('Błąd konfiguracji nagrywania audio: ' + error.message, 'error');
     }
 }
 
@@ -843,9 +860,29 @@ async function stopRealtimeSession() {
     
     try {
         // Stop recording
-        if (mediaRecorder && isRecording) {
+        isRecording = false;
+        
+        // Clean up audio processing
+        if (currentSession) {
+            if (currentSession.audioProcessor) {
+                currentSession.audioProcessor.disconnect();
+                currentSession.audioProcessor = null;
+            }
+            
+            if (currentSession.audioSource) {
+                currentSession.audioSource.disconnect();
+                currentSession.audioSource = null;
+            }
+            
+            if (currentSession.audioContext) {
+                await currentSession.audioContext.close();
+                currentSession.audioContext = null;
+            }
+        }
+        
+        // Stop MediaRecorder if exists (fallback)
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
             mediaRecorder.stop();
-            isRecording = false;
         }
         
         // Stop audio stream

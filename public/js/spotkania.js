@@ -236,6 +236,18 @@ async function openMeetingDetails(meetingId) {
             </div>
         ` : ''}
         
+        ${meeting.ai_suggestions ? `
+            <div class="ai-suggestions-section">
+                <h4>
+                    <i class="fas fa-robot"></i>
+                    Szczegółowe sugestie AI z sesji
+                </h4>
+                <div class="ai-suggestions-content">
+                    ${escapeHtml(meeting.ai_suggestions).replace(/\n/g, '<br>').replace(/---/g, '<hr style="margin: 16px 0; border: 1px solid #e2e8f0;">')}
+                </div>
+            </div>
+        ` : ''}
+        
         <div class="notes-section">
             <h4>
                 <i class="fas fa-sticky-note"></i>
