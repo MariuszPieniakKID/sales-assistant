@@ -140,8 +140,10 @@
                                     currentSession = { sessionId: data.sessionId };
                                     updateStepStatus(3, 'Success - Session started', 'success');
                                     
-                                    // Start audio test
-                                    testAudioProcessing();
+                                    // Start audio test ONLY after session is confirmed
+                                    setTimeout(() => {
+                                        testAudioProcessing();
+                                    }, 1000);
                                     break;
                                     
                                 case 'PARTIAL_TRANSCRIPT':
@@ -160,6 +162,13 @@
                                     
                                 case 'ERROR':
                                     log(1, `❌ WebSocket error: ${data.message}`);
+                                    if (data.message.includes('Invalid client or product')) {
+                                        updateStepStatus(3, 'Failed - Invalid data', 'error');
+                                    }
+                                    break;
+                                    
+                                case 'TEST_RESPONSE':
+                                    log(1, `🧪 Test response: ${data.message}`);
                                     break;
                             }
                         } catch (error) {
@@ -382,4 +391,4 @@
         };
     </script>
 </body>
-</html> 
+</html>
