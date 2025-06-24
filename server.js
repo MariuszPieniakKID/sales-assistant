@@ -1550,6 +1550,11 @@ async function startRealtimeSession(ws, data) {
             startTime: new Date()
         });
         
+        // *** WAŻNE: Ustawienie handlera AssemblyAI OD RAZU ***
+        console.log('🔧 Ustawiam handler AssemblyAI od razu...');
+        setupAssemblyAIHandler(sessionId, activeSessions.get(sessionId));
+        assemblyAISession.isConnected = true;
+        
         // Send success response
         ws.send(JSON.stringify({
             type: 'SESSION_STARTED',
@@ -1570,9 +1575,22 @@ async function startRealtimeSession(ws, data) {
 
 // Create AssemblyAI Real-time Session
 async function createAssemblyAISession() {
+    console.log('🔧 Tworzenie sesji AssemblyAI...');
+    
     if (!ASSEMBLYAI_API_KEY) {
         throw new Error('ASSEMBLYAI_API_KEY is not configured. Please add it to environment variables.');
     }
+    
+    const requestBody = {
+        expires_in: 3600, // 1 hour
+        sample_rate: ASSEMBLYAI_SAMPLE_RATE,
+        speaker_labels: true, // Enable diarization
+        sentiment_analysis: true, // Enable sentiment analysis
+        auto_highlights: true, // Enable key phrases
+        entity_detection: true // Enable entity detection
+    };
+    
+    console.log('📡 Wysyłam request do AssemblyAI:', requestBody);
     
     const response = await fetch('https://api.assemblyai.com/v2/realtime/token', {
         method: 'POST',
@@ -1580,25 +1598,28 @@ async function createAssemblyAISession() {
             'authorization': ASSEMBLYAI_API_KEY,
             'content-type': 'application/json'
         },
-        body: JSON.stringify({
-            expires_in: 3600, // 1 hour
-            sample_rate: ASSEMBLYAI_SAMPLE_RATE,
-            speaker_labels: true, // Enable diarization
-            sentiment_analysis: true, // Enable sentiment analysis
-            auto_highlights: true, // Enable key phrases
-            entity_detection: true // Enable entity detection
-        })
+        body: JSON.stringify(requestBody)
     });
+    
+    console.log('📡 Odpowiedź AssemblyAI:', response.status, response.statusText);
     
     if (!response.ok) {
         const errorText = await response.text();
+        console.error('❌ Błąd AssemblyAI API:', errorText);
         throw new Error(`Failed to create AssemblyAI session: ${response.status} ${errorText}`);
     }
     
     const data = await response.json();
+    console.log('🎫 Otrzymano token AssemblyAI:', {
+        tokenLength: data.token ? data.token.length : 0,
+        tokenPreview: data.token ? data.token.substring(0, 20) + '...' : 'null'
+    });
     
     // Create WebSocket connection to AssemblyAI
-    const assemblyWS = new WebSocket(`wss://api.assemblyai.com/v2/realtime/ws?token=${data.token}`);
+    const wsUrl = `wss://api.assemblyai.com/v2/realtime/ws?token=${data.token}`;
+    console.log('🔌 Tworzę WebSocket połączenie do AssemblyAI:', wsUrl.substring(0, 80) + '...');
+    
+    const assemblyWS = new WebSocket(wsUrl);
     
     return {
         token: data.token,
@@ -1648,11 +1669,7 @@ async function processAudioChunk(ws, data) {
             });
         }
         
-        // Setup AssemblyAI message handler if not already done
-        if (!session.assemblyAISession.isConnected) {
-            setupAssemblyAIHandler(sessionId, session);
-            session.assemblyAISession.isConnected = true;
-        }
+        // Handler AssemblyAI jest już ustawiony w startRealtimeSession
         
     } catch (error) {
         console.error('❌ Error processing audio chunk:', error);
