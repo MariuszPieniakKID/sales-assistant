@@ -16,26 +16,29 @@ let isRecording = false;
 let realtimeTranscript = '';
 let aiSuggestions = [];
 
-// DOM Elements
-const sessionClientSelect = document.getElementById('sessionClient');
-const sessionProductSelect = document.getElementById('sessionProductSelect');
-const sessionNotesTextarea = document.getElementById('sessionNotes');
-const startSessionBtn = document.getElementById('startSessionBtn');
-const sessionStatus = document.getElementById('sessionStatus');
-const recentSessionsList = document.getElementById('recentSessionsList');
+// DOM Elements - będą wyszukiwane dynamicznie bo AJAX może je zmieniać
 
 // Initialize when DOM is ready
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initRealtimeAssistant);
-} else {
-    initRealtimeAssistant();
-}
+console.log('🎯 Sesja.js loaded, DOM state:', document.readyState);
+
+// Dodaj małe opóźnienie dla stabilności przy ładowaniu sekcji przez AJAX
+setTimeout(() => {
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initRealtimeAssistant);
+    } else {
+        initRealtimeAssistant();
+    }
+}, 150); // Zwiększone opóźnienie dla sekcji AJAX
 
 // Initialize Real-time AI Assistant
 async function initRealtimeAssistant() {
     console.log('🎬 Initializing Real-time AI Assistant...');
     
     try {
+        // Sprawdź czy DOM jest gotowy
+        await waitForDOMElements();
+        
+        // Ładuj dane w odpowiedniej kolejności
         await loadClients();
         await loadProducts();
         await loadRecentSessions();
@@ -47,6 +50,27 @@ async function initRealtimeAssistant() {
         console.error('❌ Failed to initialize AI Assistant:', error);
         showToast('Błąd inicjalizacji asystenta AI', 'error');
     }
+}
+
+// Wait for DOM elements to be available
+function waitForDOMElements() {
+    return new Promise((resolve) => {
+        const checkElements = () => {
+            const sessionClientSelect = document.getElementById('sessionClient');
+            const sessionProductSelect = document.getElementById('sessionProductSelect');
+            const startSessionBtn = document.getElementById('startSessionBtn');
+            
+            if (sessionClientSelect && sessionProductSelect && startSessionBtn) {
+                console.log('✅ DOM elements ready');
+                resolve();
+            } else {
+                console.log('⏳ Waiting for DOM elements...');
+                setTimeout(checkElements, 50);
+            }
+        };
+        
+        checkElements();
+    });
 }
 
 // Setup WebSocket Connection
@@ -113,18 +137,28 @@ function handleWebSocketMessage(data) {
 function setupEventListeners() {
     console.log('🔧 Konfiguracja event listenerów...');
     
+    // Znajdź elementy na nowo (mogą się zmienić przy AJAX)
+    const clientSelect = document.getElementById('sessionClient');
+    const productSelect = document.getElementById('sessionProductSelect');
+    const startBtn = document.getElementById('startSessionBtn');
+    
     // Sprawdź czy elementy istnieją
-    if (!sessionClientSelect || !sessionProductSelect || !startSessionBtn) {
+    if (!clientSelect || !productSelect || !startBtn) {
         console.error('❌ Brak wymaganych elementów DOM dla event listenerów');
+        console.log('🔍 Debug - elementy:', {
+            clientSelect: !!clientSelect,
+            productSelect: !!productSelect,
+            startBtn: !!startBtn
+        });
         return;
     }
     
     // Wybór klienta i produktu
-    sessionClientSelect.addEventListener('change', validateSessionForm);
-    sessionProductSelect.addEventListener('change', validateSessionForm);
+    clientSelect.addEventListener('change', validateSessionForm);
+    productSelect.addEventListener('change', validateSessionForm);
     
     // Rozpoczęcie sesji
-    startSessionBtn.addEventListener('click', startRealtimeSession);
+    startBtn.addEventListener('click', startRealtimeSession);
     
     // Kontrola sesji
     document.getElementById('pauseSessionBtn')?.addEventListener('click', pauseSession);
@@ -186,69 +220,96 @@ async function loadProducts() {
 // Populate Client Select
 function populateClientSelect() {
     console.log('🏢 populateClientSelect - start, klienci:', clients.length);
-    console.log('🔍 Element sessionClientSelect:', !!sessionClientSelect);
     
-    if (!sessionClientSelect) {
+    // Znajdź element na nowo (może się zmienić przy AJAX)
+    const clientSelect = document.getElementById('sessionClient');
+    console.log('🔍 Element sessionClientSelect:', !!clientSelect);
+    
+    if (!clientSelect) {
         console.error('❌ Element sessionClientSelect nie istnieje!');
         return;
     }
     
-    sessionClientSelect.innerHTML = '<option value="">-- Wybierz klienta --</option>';
+    clientSelect.innerHTML = '<option value="">-- Wybierz klienta --</option>';
     
     clients.forEach((client, index) => {
         console.log(`👤 Dodaję klienta ${index + 1}:`, client.name, `(ID: ${client.id})`);
         const option = document.createElement('option');
         option.value = client.id;
         option.textContent = client.name;
-        sessionClientSelect.appendChild(option);
+        clientSelect.appendChild(option);
     });
     
-    console.log('✅ populateClientSelect - zakończone, opcje:', sessionClientSelect.children.length);
+    console.log('✅ populateClientSelect - zakończone, opcje:', clientSelect.children.length);
 }
 
 // Populate Product Select
 function populateProductSelect() {
     console.log('📦 populateProductSelect - start, produkty:', products.length);
-    console.log('🔍 Element sessionProductSelect:', !!sessionProductSelect);
     
-    if (!sessionProductSelect) {
+    // Znajdź element na nowo (może się zmienić przy AJAX)
+    const productSelect = document.getElementById('sessionProductSelect');
+    console.log('🔍 Element sessionProductSelect:', !!productSelect);
+    
+    if (!productSelect) {
         console.error('❌ Element sessionProductSelect nie istnieje!');
         return;
     }
     
-    sessionProductSelect.innerHTML = '<option value="">-- Wybierz produkt --</option>';
+    productSelect.innerHTML = '<option value="">-- Wybierz produkt --</option>';
     
     products.forEach((product, index) => {
         console.log(`📦 Dodaję produkt ${index + 1}:`, product.name, `(ID: ${product.id})`);
         const option = document.createElement('option');
         option.value = product.id;
         option.textContent = product.name;
-        sessionProductSelect.appendChild(option);
+        productSelect.appendChild(option);
     });
     
-    console.log('✅ populateProductSelect - zakończone, opcje:', sessionProductSelect.children.length);
+    console.log('✅ populateProductSelect - zakończone, opcje:', productSelect.children.length);
 }
 
 // Validate Session Form
 function validateSessionForm() {
-    const clientSelected = sessionClientSelect.value !== '';
-    const productSelected = sessionProductSelect.value !== '';
+    // Znajdź elementy na nowo
+    const clientSelect = document.getElementById('sessionClient');
+    const productSelect = document.getElementById('sessionProductSelect');
+    const startBtn = document.getElementById('startSessionBtn');
     
-    startSessionBtn.disabled = !(clientSelected && productSelected);
+    if (!clientSelect || !productSelect || !startBtn) {
+        console.error('❌ Elementy formularza nie istnieją podczas walidacji');
+        return;
+    }
+    
+    const clientSelected = clientSelect.value !== '';
+    const productSelected = productSelect.value !== '';
+    
+    startBtn.disabled = !(clientSelected && productSelected);
+    
+    console.log('🔍 Walidacja formularza:', {
+        clientSelected,
+        productSelected,
+        buttonEnabled: !startBtn.disabled
+    });
 }
 
 // Start Real-time AI Assistant Session
 async function startRealtimeSession() {
     console.log('🚀 Starting real-time AI assistant session...');
     
-    if (!sessionClientSelect || !sessionProductSelect) {
+    // Znajdź elementy na nowo
+    const clientSelect = document.getElementById('sessionClient');
+    const productSelect = document.getElementById('sessionProductSelect');
+    const notesTextarea = document.getElementById('sessionNotes');
+    
+    if (!clientSelect || !productSelect) {
         showToast('Elementy formularza nie zostały znalezione', 'error');
         return;
     }
     
-    const clientId = sessionClientSelect.value;
-    const productId = sessionProductSelect.value;
-    const notes = sessionNotesTextarea ? sessionNotesTextarea.value : '';
+    const clientId = clientSelect.value;
+    const productId = productSelect.value;
+    const notes = notesTextarea ? notesTextarea.value : '';
     
     if (!clientId || !productId) {
         showToast('Proszę wybierz klienta i produkt', 'error');
@@ -748,9 +809,13 @@ function onSessionEnded(data) {
     }
     
     // Reset form
-    if (sessionClientSelect) sessionClientSelect.value = '';
-    if (sessionProductSelect) sessionProductSelect.value = '';
-    if (sessionNotesTextarea) sessionNotesTextarea.value = '';
+    const clientSelect = document.getElementById('sessionClient');
+    const productSelect = document.getElementById('sessionProductSelect');
+    const notesTextarea = document.getElementById('sessionNotes');
+    
+    if (clientSelect) clientSelect.value = '';
+    if (productSelect) productSelect.value = '';
+    if (notesTextarea) notesTextarea.value = '';
     
     // Reset variables
     currentSession = null;
@@ -799,8 +864,16 @@ async function loadRecentSessions() {
 
 // Display Recent Sessions
 function displayRecentSessions(sessions) {
+    // Znajdź element na nowo
+    const sessionsList = document.getElementById('recentSessionsList');
+    
+    if (!sessionsList) {
+        console.error('❌ Element recentSessionsList nie istnieje');
+        return;
+    }
+    
     if (sessions.length === 0) {
-        recentSessionsList.innerHTML = `
+        sessionsList.innerHTML = `
             <div class="no-sessions">
                 <i class="fas fa-microphone-slash"></i>
                 <p>Brak ostatnich sesji</p>
@@ -809,7 +882,7 @@ function displayRecentSessions(sessions) {
         return;
     }
     
-    recentSessionsList.innerHTML = sessions.map(session => `
+    sessionsList.innerHTML = sessions.map(session => `
         <div class="session-item">
             <div class="session-info">
                 <h4>${session.client_name || 'Nieznany klient'}</h4>
