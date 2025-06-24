@@ -470,27 +470,74 @@ async function startRealtimeSession() {
 function setupAudioRecording() {
     try {
         console.log('🎤 Setting up real-time audio recording for AssemblyAI...');
+        console.log('🔍 Debug: audioStream:', !!audioStream, 'tracks:', audioStream ? audioStream.getTracks().length : 0);
+        console.log('🔍 Debug: isRecording before:', isRecording);
+        console.log('🔍 Debug: websocket:', !!websocket, 'readyState:', websocket ? websocket.readyState : 'null');
         
         // Create AudioContext for PCM audio processing
         const audioContext = new (window.AudioContext || window.webkitAudioContext)({
             sampleRate: 16000 // AssemblyAI requires 16kHz
         });
         
+        console.log('🔍 Debug: AudioContext created:', {
+            state: audioContext.state,
+            sampleRate: audioContext.sampleRate,
+            currentTime: audioContext.currentTime
+        });
+        
+        // Resume AudioContext if suspended (required by some browsers)
+        if (audioContext.state === 'suspended') {
+            console.log('🔄 AudioContext suspended, resuming...');
+            audioContext.resume();
+        }
+        
         // Create audio source from stream
         const source = audioContext.createMediaStreamSource(audioStream);
+        console.log('🔍 Debug: MediaStreamSource created');
         
         // Create ScriptProcessor for real-time audio processing
         const processor = audioContext.createScriptProcessor(4096, 1, 1);
+        console.log('🔍 Debug: ScriptProcessor created');
         
         let audioChunkCount = 0;
+        let debugLogCount = 0;
         
         processor.onaudioprocess = (event) => {
+            debugLogCount++;
+            
+            // Debug: log first few calls to see if processor is working
+            if (debugLogCount <= 5) {
+                console.log(`🔍 Debug: onaudioprocess call #${debugLogCount}:`, {
+                    isRecording: isRecording,
+                    websocket: !!websocket,
+                    websocketState: websocket ? websocket.readyState : 'null',
+                    inputBuffer: !!event.inputBuffer,
+                    bufferLength: event.inputBuffer ? event.inputBuffer.length : 0
+                });
+            }
+            
             if (!isRecording || !websocket || websocket.readyState !== WebSocket.OPEN) {
+                if (debugLogCount <= 10) {
+                    console.log('⚠️ Debug: Skipping audio processing:', {
+                        isRecording: isRecording,
+                        hasWebsocket: !!websocket,
+                        websocketState: websocket ? websocket.readyState : 'null'
+                    });
+                }
                 return;
             }
             
             // Get PCM audio data
             const inputData = event.inputBuffer.getChannelData(0);
+            
+            // Check if we have actual audio data
+            let hasAudio = false;
+            for (let i = 0; i < inputData.length; i++) {
+                if (Math.abs(inputData[i]) > 0.001) { // Check for non-silence
+                    hasAudio = true;
+                    break;
+                }
+            }
             
             // Convert float32 to int16 (required by AssemblyAI)
             const pcmData = new Int16Array(inputData.length);
@@ -507,15 +554,17 @@ function setupAudioRecording() {
             
             const base64Audio = btoa(String.fromCharCode(...new Uint8Array(buffer)));
             
-            // Debug: log every 100th chunk to avoid spam
+            // Debug: log every 50th chunk to see more activity
             audioChunkCount++;
-            if (audioChunkCount % 100 === 0) {
+            if (audioChunkCount % 50 === 0) {
                 console.log('🎵 Frontend: Wysyłam audio chunk', audioChunkCount, {
                     audioDataLength: base64Audio.length,
                     inputDataLength: inputData.length,
                     pcmDataLength: pcmData.length,
                     websocketState: websocket.readyState,
-                    sessionId: currentSession.sessionId
+                    sessionId: currentSession.sessionId,
+                    hasAudio: hasAudio,
+                    audioLevel: Math.max(...inputData.map(Math.abs)).toFixed(4)
                 });
             }
             
@@ -531,14 +580,31 @@ function setupAudioRecording() {
         source.connect(processor);
         processor.connect(audioContext.destination);
         
+        console.log('🔍 Debug: Audio chain connected');
+        
         // Store references for cleanup
         currentSession.audioContext = audioContext;
         currentSession.audioProcessor = processor;
         currentSession.audioSource = source;
         
         isRecording = true;
+        console.log('🔍 Debug: isRecording set to:', isRecording);
         
         console.log('✅ Real-time audio recording started with PCM processing');
+        
+        // Additional debug after setup
+        setTimeout(() => {
+            console.log('🔍 Debug: Audio setup status after 2s:', {
+                isRecording: isRecording,
+                audioContext: {
+                    state: audioContext.state,
+                    currentTime: audioContext.currentTime
+                },
+                processor: !!processor,
+                source: !!source,
+                audioChunkCount: audioChunkCount
+            });
+        }, 2000);
         
     } catch (error) {
         console.error('❌ Error setting up audio recording:', error);
