@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Test</title>
+</head>
+<body>
+    <h1>WebSocket Connection Test</h1>
+    <div id="status">Connecting...</div>
+    <div id="log"></div>
+    
+    <script>
+        const log = document.getElementById('log');
+        const status = document.getElementById('status');
+        
+        function addLog(message) {
+            const time = new Date().toLocaleTimeString();
+            log.innerHTML += `<div>[${time}] ${message}</div>`;
+            console.log(message);
+        }
+        
+        addLog('🔧 Starting WebSocket test...');
+        
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${protocol}//${window.location.host}`;
+        
+        addLog(`🔌 Attempting connection to: ${wsUrl}`);
+        addLog(`📍 Location: ${window.location.href}`);
+        addLog(`🌐 Host: ${window.location.host}`);
+        addLog(`🔐 Protocol: ${protocol}`);
+        
+        try {
+            const ws = new WebSocket(wsUrl);
+            
+            ws.onopen = (event) => {
+                addLog('✅ WebSocket CONNECTED successfully!');
+                status.innerHTML = '✅ Connected';
+                status.style.color = 'green';
+                
+                // Test sending a message
+                ws.send(JSON.stringify({
+                    type: 'TEST',
+                    message: 'Hello from test client'
+                }));
+                addLog('📤 Test message sent');
+            };
+            
+            ws.onmessage = (event) => {
+                addLog(`📥 Received: ${event.data}`);
+            };
+            
+            ws.onclose = (event) => {
+                addLog(`🔌 Connection closed: code=${event.code}, reason="${event.reason}", wasClean=${event.wasClean}`);
+                status.innerHTML = '❌ Disconnected';
+                status.style.color = 'red';
+            };
+            
+            ws.onerror = (error) => {
+                addLog(`❌ WebSocket error: ${error}`);
+                addLog(`🔍 ReadyState: ${ws.readyState}`);
+                status.innerHTML = '❌ Error';
+                status.style.color = 'red';
+            };
+            
+            // Monitor connection state
+            const checkState = () => {
+                addLog(`📊 ReadyState: ${ws.readyState} (${getReadyStateText(ws.readyState)})`);
+                if (ws.readyState === WebSocket.CONNECTING) {
+                    setTimeout(checkState, 1000);
+                }
+            };
+            
+            setTimeout(checkState, 100);
+            
+        } catch (error) {
+            addLog(`💥 Failed to create WebSocket: ${error}`);
+            status.innerHTML = '💥 Failed to create';
+            status.style.color = 'red';
+        }
+        
+        function getReadyStateText(state) {
+            switch (state) {
+                case WebSocket.CONNECTING: return 'CONNECTING';
+                case WebSocket.OPEN: return 'OPEN';
+                case WebSocket.CLOSING: return 'CLOSING';
+                case WebSocket.CLOSED: return 'CLOSED';
+                default: return 'UNKNOWN';
+            }
+        }
+    </script>
+</body>
+</html> 
