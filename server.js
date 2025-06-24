@@ -2047,8 +2047,10 @@ function setupAssemblyAIHandler(sessionId, session) {
     const assemblySocket = session.assemblyAISession.websocket;
     
     console.log(`[${sessionId}] 🔧 Setting up AssemblyAI handlers...`);
+    console.log(`[${sessionId}] 🔍 WebSocket readyState: ${assemblySocket.readyState} (0=CONNECTING, 1=OPEN, 2=CLOSING, 3=CLOSED)`);
 
-    assemblySocket.on('open', () => {
+    // Function to send configuration and process queue
+    const sendConfigurationAndProcessQueue = () => {
         console.log(`[${sessionId}] ✅ AssemblyAI WebSocket opened, sending configuration...`);
         
         // Send initial configuration for the legacy API
@@ -2078,6 +2080,17 @@ function setupAssemblyAIHandler(sessionId, session) {
         }
         
         console.log(`[${sessionId}] ✅ Audio queue processed`);
+    };
+
+    // Check if WebSocket is already open
+    if (assemblySocket.readyState === WebSocket.OPEN) {
+        console.log(`[${sessionId}] 🔄 WebSocket already open, sending configuration immediately`);
+        sendConfigurationAndProcessQueue();
+    }
+
+    assemblySocket.on('open', () => {
+        console.log(`[${sessionId}] 🔗 AssemblyAI WebSocket 'open' event triggered`);
+        sendConfigurationAndProcessQueue();
     });
 
     assemblySocket.on('message', async (message) => {
