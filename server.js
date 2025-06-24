@@ -1677,14 +1677,38 @@ function setupAssemblyAIHandler(sessionId, session) {
         
         console.log('📤 Sent configuration to AssemblyAI:', config);
         
-        // Test: wyślij próbkę audio po 2 sekundach
+        // Test: sprawdź czy AssemblyAI w ogóle odpowiada
         setTimeout(() => {
-            console.log('🧪 Wysyłam test audio do AssemblyAI...');
-            const testAudio = 'UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA'; // Krótka próbka audio
-            assemblyWS.send(JSON.stringify({
-                audio_data: testAudio
-            }));
-        }, 2000);
+            console.log('🧪 Test 1: Sprawdzam czy AssemblyAI WebSocket jest aktywny...');
+            console.log('🔍 AssemblyAI WebSocket state:', {
+                readyState: assemblyWS.readyState,
+                url: assemblyWS.url,
+                states: {
+                    CONNECTING: WebSocket.CONNECTING,
+                    OPEN: WebSocket.OPEN,
+                    CLOSING: WebSocket.CLOSING,
+                    CLOSED: WebSocket.CLOSED
+                }
+            });
+            
+            if (assemblyWS.readyState === WebSocket.OPEN) {
+                console.log('🧪 Test 2: Wysyłam test audio do AssemblyAI...');
+                // Bardzo prosty test audio - cisza w formacie PCM
+                const silenceBuffer = new ArrayBuffer(1600); // 100ms ciszy przy 16kHz
+                const view = new DataView(silenceBuffer);
+                for (let i = 0; i < 800; i++) {
+                    view.setInt16(i * 2, 0, true); // 0 = cisza
+                }
+                const base64Audio = btoa(String.fromCharCode(...new Uint8Array(silenceBuffer)));
+                
+                assemblyWS.send(JSON.stringify({
+                    audio_data: base64Audio
+                }));
+                console.log('🧪 Test audio wysłany - długość:', base64Audio.length);
+            } else {
+                console.error('❌ AssemblyAI WebSocket nie jest gotowy!');
+            }
+        }, 3000);
     };
     
     assemblyWS.onmessage = async (event) => {
