@@ -1676,6 +1676,15 @@ function setupAssemblyAIHandler(sessionId, session) {
         assemblyWS.send(JSON.stringify(config));
         
         console.log('📤 Sent configuration to AssemblyAI:', config);
+        
+        // Test: wyślij próbkę audio po 2 sekundach
+        setTimeout(() => {
+            console.log('🧪 Wysyłam test audio do AssemblyAI...');
+            const testAudio = 'UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA'; // Krótka próbka audio
+            assemblyWS.send(JSON.stringify({
+                audio_data: testAudio
+            }));
+        }, 2000);
     };
     
     assemblyWS.onmessage = async (event) => {
