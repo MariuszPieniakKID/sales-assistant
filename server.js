@@ -1461,19 +1461,22 @@ wss.on('connection', (ws, req) => {
             
             switch (data.type) {
                 case 'START_REALTIME_SESSION':
+                    console.log('🚀 Processing START_REALTIME_SESSION:', data.sessionId);
                     await startRealtimeSession(ws, data);
                     break;
                     
                 case 'AUDIO_CHUNK':
+                    // Don't log every audio chunk to avoid spam
                     await processAudioChunk(ws, data);
                     break;
                     
                 case 'END_REALTIME_SESSION':
+                    console.log('🛑 Processing END_REALTIME_SESSION:', data.sessionId);
                     await endRealtimeSession(ws, data);
                     break;
                     
                 default:
-                    console.log('❓ Unknown message type:', data.type);
+                    console.log('❓ Unknown message type:', data.type, data);
             }
         } catch (error) {
             console.error('❌ WebSocket message error:', error);
@@ -1907,6 +1910,12 @@ WSKAZÓWKI:
 async function endRealtimeSession(ws, data) {
     const { sessionId } = data;
     
+    console.log('🛑 Ending real-time session:', {
+        sessionId: sessionId,
+        hasSession: activeSessions.has(sessionId),
+        totalActiveSessions: activeSessions.size
+    });
+    
     try {
         await cleanupRealtimeSession(sessionId);
         
@@ -1916,6 +1925,8 @@ async function endRealtimeSession(ws, data) {
             message: 'Real-time session ended successfully'
         }));
         
+        console.log('✅ Real-time session ended successfully:', sessionId);
+        
     } catch (error) {
         console.error('❌ Error ending real-time session:', error);
     }
@@ -1924,24 +1935,39 @@ async function endRealtimeSession(ws, data) {
 // Cleanup Real-time Session
 async function cleanupRealtimeSession(sessionId) {
     const session = activeSessions.get(sessionId);
-    if (!session) return;
+    
+    console.log('🧹 Cleaning up real-time session:', {
+        sessionId: sessionId,
+        hasSession: !!session,
+        conversationLength: session ? session.conversationHistory.length : 0,
+        aiSuggestionsLength: session ? session.aiSuggestions.length : 0
+    });
+    
+    if (!session) {
+        console.warn('⚠️ Session not found in activeSessions:', sessionId);
+        return;
+    }
     
     try {
         // Close AssemblyAI connection
         if (session.assemblyAISession && session.assemblyAISession.websocket) {
+            console.log('🔌 Closing AssemblyAI WebSocket connection');
             session.assemblyAISession.websocket.close();
         }
         
         // Save session to database - zawsze zapisuj, nawet bez transkrypcji
+        console.log('💾 Attempting to save session to database...');
         await saveRealtimeSession(session);
         
         // Remove from active sessions
         activeSessions.delete(sessionId);
         
-        console.log('🧹 Real-time session cleaned up:', sessionId);
+        console.log('🧹 Real-time session cleaned up successfully:', sessionId);
         
     } catch (error) {
         console.error('❌ Error cleaning up session:', error);
+        // Still remove from active sessions even if save failed
+        activeSessions.delete(sessionId);
     }
 }
 
