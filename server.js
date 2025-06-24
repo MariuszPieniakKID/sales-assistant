@@ -1567,12 +1567,20 @@ app.get('/api/admin/all-meetings', requireAuth, requireAdmin, async (req, res) =
 
 // WebSocket Connection Handler
 wss.on('connection', (ws, req) => {
-    console.log('🔌 New WebSocket connection established');
+    console.log('🔌🔌🔌 NEW WEBSOCKET CONNECTION ESTABLISHED 🔌🔌🔌');
+    console.log('🔗 Connection details:', {
+        url: req.url,
+        headers: req.headers,
+        remoteAddress: req.socket.remoteAddress,
+        timestamp: new Date().toISOString()
+    });
     
     ws.on('message', async (message) => {
         try {
             const data = JSON.parse(message);
-            console.log('📨 WebSocket message received:', data.type);
+            console.log('📨📨📨 WEBSOCKET MESSAGE RECEIVED 📨📨📨');
+            console.log('📨 Message type:', data.type);
+            console.log('📨 Full message:', data);
             
             switch (data.type) {
                 case 'START_REALTIME_SESSION':
