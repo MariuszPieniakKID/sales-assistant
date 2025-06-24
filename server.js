@@ -1581,7 +1581,17 @@ wss.on('connection', (ws, req) => {
                     break;
                     
                 case 'AUDIO_CHUNK':
-                    // Don't log every audio chunk to avoid spam
+                    // Log every 100th audio chunk to track activity
+                    if (!ws.audioChunkCount) ws.audioChunkCount = 0;
+                    ws.audioChunkCount++;
+                    
+                    if (ws.audioChunkCount % 100 === 0) {
+                        console.log('🎵 Backend: Otrzymano audio chunk', ws.audioChunkCount, {
+                            sessionId: data.sessionId,
+                            audioDataLength: data.audioData ? data.audioData.length : 0
+                        });
+                    }
+                    
                     await processAudioChunk(ws, data);
                     break;
                     
@@ -1771,16 +1781,23 @@ async function processAudioChunk(ws, data) {
             session.audioChunkCount++;
             
             if (session.audioChunkCount % 50 === 0) {
-                console.log('🎵 Audio chunks sent to AssemblyAI:', session.audioChunkCount, {
+                console.log('🎵 Backend: Audio chunks sent to AssemblyAI:', session.audioChunkCount, {
                     audioDataLength: audioData.length,
                     websocketState: session.assemblyAISession.websocket.readyState,
-                    sessionId: sessionId
+                    sessionId: sessionId,
+                    assemblyAIUrl: session.assemblyAISession.websocket.url.substring(0, 80) + '...'
                 });
             }
         } else {
             console.warn('⚠️ AssemblyAI WebSocket not ready:', {
                 readyState: session.assemblyAISession.websocket.readyState,
-                sessionId: sessionId
+                sessionId: sessionId,
+                states: {
+                    CONNECTING: 0,
+                    OPEN: 1,
+                    CLOSING: 2,
+                    CLOSED: 3
+                }
             });
         }
         
