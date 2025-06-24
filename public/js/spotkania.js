@@ -12,6 +12,13 @@ const meetingDetails = document.getElementById('meetingDetails');
 
 // Inicjalizacja
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('🚀 Inicjalizacja sekcji spotkań...');
+    console.log('🔍 Elementy DOM:', {
+        meetingsTableBody: !!meetingsTableBody,
+        searchInput: !!searchInput,
+        meetingDetailsModal: !!meetingDetailsModal
+    });
+    
     loadMeetings();
     setupEventListeners();
 });
@@ -42,26 +49,34 @@ function setupEventListeners() {
 // Ładowanie spotkań z API
 async function loadMeetings() {
     try {
+        console.log('🔄 Ładowanie spotkań z API...');
         showLoading();
         
         const response = await fetch('/api/sales');
+        console.log('📡 Odpowiedź API:', response.status, response.statusText);
+        
         if (!response.ok) {
             throw new Error('Błąd pobierania spotkań');
         }
         
         meetings = await response.json();
+        console.log('📊 Załadowano spotkań:', meetings.length, meetings);
+        
         filteredMeetings = [...meetings];
         renderMeetingsTable();
         
     } catch (error) {
-        console.error('Błąd ładowania spotkań:', error);
+        console.error('❌ Błąd ładowania spotkań:', error);
         showError('Nie udało się załadować spotkań');
     }
 }
 
 // Wyświetlanie tabeli spotkań
 function renderMeetingsTable() {
+    console.log('🎨 Renderowanie tabeli spotkań:', filteredMeetings.length);
+    
     if (filteredMeetings.length === 0) {
+        console.log('📭 Brak spotkań do wyświetlenia - pokazuję pusty stan');
         showEmptyState();
         return;
     }
