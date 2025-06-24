@@ -1615,11 +1615,34 @@ async function processAudioChunk(ws, data) {
     }
     
     try {
+        // Validate audio data
+        if (!audioData || audioData.length === 0) {
+            console.warn('⚠️ Empty audio data received');
+            return;
+        }
+        
         // Send audio to AssemblyAI
         if (session.assemblyAISession.websocket.readyState === WebSocket.OPEN) {
             session.assemblyAISession.websocket.send(JSON.stringify({
                 audio_data: audioData
             }));
+            
+            // Log every 50th audio chunk to avoid spam
+            if (!session.audioChunkCount) session.audioChunkCount = 0;
+            session.audioChunkCount++;
+            
+            if (session.audioChunkCount % 50 === 0) {
+                console.log('🎵 Audio chunks sent to AssemblyAI:', session.audioChunkCount, {
+                    audioDataLength: audioData.length,
+                    websocketState: session.assemblyAISession.websocket.readyState,
+                    sessionId: sessionId
+                });
+            }
+        } else {
+            console.warn('⚠️ AssemblyAI WebSocket not ready:', {
+                readyState: session.assemblyAISession.websocket.readyState,
+                sessionId: sessionId
+            });
         }
         
         // Setup AssemblyAI message handler if not already done
@@ -1653,10 +1676,22 @@ function setupAssemblyAIHandler(sessionId, session) {
     assemblyWS.onmessage = async (event) => {
         try {
             const data = JSON.parse(event.data);
-            console.log('🎵 AssemblyAI message:', data.message_type, data);
+            console.log('🎵 AssemblyAI message received:', {
+                message_type: data.message_type,
+                text: data.text ? data.text.substring(0, 50) + '...' : 'no text',
+                confidence: data.confidence,
+                speaker: data.speaker,
+                words_count: data.words ? data.words.length : 0,
+                full_data: data
+            });
             
             if (data.message_type === 'FinalTranscript' && data.text && data.text.trim()) {
-                console.log('📝 Final transcript received:', data.text);
+                console.log('📝 Final transcript received:', {
+                    text: data.text,
+                    confidence: data.confidence,
+                    speaker: data.speaker,
+                    sessionId: sessionId
+                });
                 
                 // Process transcript with speaker detection and sentiment
                 await processTranscript(sessionId, {
@@ -1670,6 +1705,8 @@ function setupAssemblyAIHandler(sessionId, session) {
             }
             
             if (data.message_type === 'PartialTranscript' && data.text && data.text.trim()) {
+                console.log('📝 Partial transcript:', data.text.substring(0, 30) + '...');
+                
                 // Send partial transcript for immediate feedback
                 session.websocket.send(JSON.stringify({
                     type: 'PARTIAL_TRANSCRIPT',
@@ -1684,7 +1721,10 @@ function setupAssemblyAIHandler(sessionId, session) {
             
             // Handle session begin
             if (data.message_type === 'SessionBegins') {
-                console.log('🎵 AssemblyAI session began:', data);
+                console.log('🎵 AssemblyAI session began successfully:', {
+                    session_id: data.session_id,
+                    expires_at: data.expires_at
+                });
             }
             
             // Handle session terminated
@@ -1692,8 +1732,18 @@ function setupAssemblyAIHandler(sessionId, session) {
                 console.log('🎵 AssemblyAI session terminated:', data);
             }
             
+            // Handle errors
+            if (data.message_type === 'error') {
+                console.error('❌ AssemblyAI error:', data);
+                session.websocket.send(JSON.stringify({
+                    type: 'ASSEMBLYAI_ERROR',
+                    sessionId,
+                    error: data.error || 'Unknown AssemblyAI error'
+                }));
+            }
+            
         } catch (error) {
-            console.error('❌ AssemblyAI message processing error:', error);
+            console.error('❌ AssemblyAI message processing error:', error, 'Raw data:', event.data);
         }
     };
     
@@ -1882,10 +1932,8 @@ async function cleanupRealtimeSession(sessionId) {
             session.assemblyAISession.websocket.close();
         }
         
-        // Save session to database (optional)
-        if (session.conversationHistory.length > 0) {
-            await saveRealtimeSession(session);
-        }
+        // Save session to database - zawsze zapisuj, nawet bez transkrypcji
+        await saveRealtimeSession(session);
         
         // Remove from active sessions
         activeSessions.delete(sessionId);
@@ -1900,18 +1948,29 @@ async function cleanupRealtimeSession(sessionId) {
 // Save completed real-time session to database
 async function saveRealtimeSession(session) {
     try {
-        const transcription = session.conversationHistory
-            .map(t => `[${t.speaker}] ${t.text}`)
-            .join('\n\n');
+        console.log('💾 Saving real-time session:', {
+            sessionId: session.sessionId || 'unknown',
+            clientId: session.clientId,
+            productId: session.productId,
+            conversationHistoryLength: session.conversationHistory.length,
+            aiSuggestionsLength: session.aiSuggestions.length,
+            startTime: session.startTime
+        });
+        
+        const transcription = session.conversationHistory.length > 0 
+            ? session.conversationHistory.map(t => `[${t.speaker}] ${t.text}`).join('\n\n')
+            : 'Sesja Real-time AI Assistant - brak transkrypcji (możliwy problem z mikrofonem lub AssemblyAI)';
         
         // Create AI suggestions summary
-        const aiSuggestionsText = session.aiSuggestions.map(item => {
-            const time = new Date(item.timestamp).toLocaleTimeString('pl-PL');
-            return `[${time}] ${item.transcript}\n` +
-                   `Sugestie: ${item.suggestions.suggestions?.join(', ') || 'Brak'}\n` +
-                   `Sygnały: ${item.suggestions.signals?.join(', ') || 'Brak'}\n` +
-                   `Emocje: ${item.suggestions.emotion || 'Nieznane'}\n`;
-        }).join('\n---\n');
+        const aiSuggestionsText = session.aiSuggestions.length > 0 
+            ? session.aiSuggestions.map(item => {
+                const time = new Date(item.timestamp).toLocaleTimeString('pl-PL');
+                return `[${time}] ${item.transcript}\n` +
+                       `Sugestie: ${item.suggestions.suggestions?.join(', ') || 'Brak'}\n` +
+                       `Sygnały: ${item.suggestions.signals?.join(', ') || 'Brak'}\n` +
+                       `Emocje: ${item.suggestions.emotion || 'Nieznane'}\n`;
+            }).join('\n---\n')
+            : 'Brak sugestii AI - prawdopodobnie nie otrzymano transkrypcji z AssemblyAI';
         
         // Generate summary for positive/negative findings
         const allSuggestions = session.aiSuggestions.flatMap(item => item.suggestions.suggestions || []);
@@ -1921,21 +1980,29 @@ async function saveRealtimeSession(session) {
             signal.toLowerCase().includes('kupna') || 
             signal.toLowerCase().includes('zainteresowanie') ||
             signal.toLowerCase().includes('pozytywny')
-        ).join(', ') || 'Sesja Real-time AI Assistant zakończona';
+        ).join(', ') || (session.conversationHistory.length > 0 
+            ? 'Sesja Real-time AI Assistant zakończona' 
+            : 'Sesja zakończona - sprawdź ustawienia mikrofonu');
         
         const negativeFindings = allSignals.filter(signal => 
             signal.toLowerCase().includes('oporu') || 
             signal.toLowerCase().includes('wątpliwość') ||
             signal.toLowerCase().includes('negatywny')
-        ).join(', ') || 'Zobacz szczegóły w sugestiach AI';
+        ).join(', ') || (session.conversationHistory.length > 0 
+            ? 'Zobacz szczegóły w sugestiach AI' 
+            : 'Brak danych - możliwy problem z nagrywaniem audio');
         
-        const recommendations = allSuggestions.slice(0, 5).join('; ') || 'Kontynuuj komunikację zgodnie z sugestiami AI';
+        const recommendations = allSuggestions.slice(0, 5).join('; ') || 
+            (session.conversationHistory.length > 0 
+                ? 'Kontynuuj komunikację zgodnie z sugestiami AI'
+                : 'Sprawdź połączenie z mikrofonem i spróbuj ponownie');
         
-        await safeQuery(`
+        const result = await safeQuery(`
             INSERT INTO sales (
                 product_id, client_id, recording_path, transcription, meeting_datetime,
                 positive_findings, negative_findings, recommendations, own_notes, ai_suggestions
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            RETURNING id
         `, [
             session.productId,
             session.clientId,
@@ -1949,10 +2016,16 @@ async function saveRealtimeSession(session) {
             aiSuggestionsText
         ]);
         
-        console.log('💾 Real-time session saved to database with AI suggestions');
+        const savedId = result.rows[0].id;
+        console.log('💾 Real-time session saved successfully to database:', {
+            id: savedId,
+            hasTranscription: session.conversationHistory.length > 0,
+            hasAISuggestions: session.aiSuggestions.length > 0
+        });
         
     } catch (error) {
         console.error('❌ Error saving real-time session:', error);
+        // Nie rzucaj błędu - pozwól sesji się zakończyć
     }
 }
 
