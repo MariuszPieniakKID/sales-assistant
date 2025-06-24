@@ -481,6 +481,121 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
+// TEST ENDPOINT - AssemblyAI Connection Test
+app.get('/api/test-assemblyai', async (req, res) => {
+  console.log('🧪 TEST: AssemblyAI Connection Test rozpoczęty');
+  
+  try {
+    // Test 1: Sprawdź czy mamy API key
+    if (!process.env.ASSEMBLYAI_API_KEY) {
+      return res.json({
+        success: false,
+        error: 'ASSEMBLYAI_API_KEY not configured',
+        step: 'API_KEY_CHECK'
+      });
+    }
+    
+    console.log('✅ TEST 1: API Key jest skonfigurowany');
+    
+    // Test 2: Sprawdź czy możemy uzyskać token
+    const tokenResponse = await fetch('https://api.assemblyai.com/v2/realtime/token', {
+      method: 'POST',
+      headers: {
+        'authorization': process.env.ASSEMBLYAI_API_KEY,
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        expires_in: 3600,
+        sample_rate: 16000
+      })
+    });
+    
+    if (!tokenResponse.ok) {
+      const errorText = await tokenResponse.text();
+      console.error('❌ TEST 2: Token request failed:', errorText);
+      return res.json({
+        success: false,
+        error: `Token request failed: ${tokenResponse.status} ${errorText}`,
+        step: 'TOKEN_REQUEST'
+      });
+    }
+    
+    const tokenData = await tokenResponse.json();
+    console.log('✅ TEST 2: Token otrzymany:', tokenData.token.substring(0, 20) + '...');
+    
+    // Test 3: Sprawdź czy możemy utworzyć WebSocket
+    const wsUrl = `wss://api.assemblyai.com/v2/realtime/ws?token=${tokenData.token}`;
+    
+    const testResult = await new Promise((resolve) => {
+      const testWS = new WebSocket(wsUrl);
+      let resolved = false;
+      
+      const timeout = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          testWS.close();
+          resolve({
+            success: false,
+            error: 'WebSocket connection timeout (10s)',
+            step: 'WEBSOCKET_TIMEOUT'
+          });
+        }
+      }, 10000);
+      
+      testWS.onopen = () => {
+        console.log('✅ TEST 3: WebSocket połączony!');
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timeout);
+          
+          // Wyślij konfigurację
+          testWS.send(JSON.stringify({
+            sample_rate: 16000,
+            speaker_labels: true
+          }));
+          
+          // Poczekaj chwilę na odpowiedź
+          setTimeout(() => {
+            testWS.close();
+            resolve({
+              success: true,
+              message: 'AssemblyAI WebSocket connection successful',
+              step: 'WEBSOCKET_SUCCESS'
+            });
+          }, 2000);
+        }
+      };
+      
+      testWS.onerror = (error) => {
+        console.error('❌ TEST 3: WebSocket error:', error);
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timeout);
+          resolve({
+            success: false,
+            error: 'WebSocket connection error: ' + error.message,
+            step: 'WEBSOCKET_ERROR'
+          });
+        }
+      };
+      
+      testWS.onmessage = (message) => {
+        console.log('📨 TEST 3: Otrzymano wiadomość z AssemblyAI:', message.data);
+      };
+    });
+    
+    res.json(testResult);
+    
+  } catch (error) {
+    console.error('❌ TEST: AssemblyAI test failed:', error);
+    res.json({
+      success: false,
+      error: error.message,
+      step: 'GENERAL_ERROR'
+    });
+  }
+});
+
 // Wylogowanie
 app.post('/api/logout', (req, res) => {
   req.session.destroy((err) => {
