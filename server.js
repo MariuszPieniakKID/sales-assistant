@@ -1807,6 +1807,27 @@ async function processAudioChunk(ws, data) {
                     CLOSED: 3
                 }
             });
+            
+            // Spróbuj ponownie utworzyć AssemblyAI session jeśli jest zamknięty
+            if (session.assemblyAISession.websocket.readyState === 3) { // CLOSED
+                console.log('🔄 AssemblyAI WebSocket zamknięty - próbuję ponownie utworzyć...');
+                try {
+                    const newAssemblyAISession = await createAssemblyAISession();
+                    session.assemblyAISession = newAssemblyAISession;
+                    setupAssemblyAIHandler(sessionId, session);
+                    console.log('✅ AssemblyAI WebSocket odtworzony pomyślnie');
+                    
+                    // Spróbuj wysłać audio ponownie
+                    if (newAssemblyAISession.websocket.readyState === WebSocket.OPEN) {
+                        newAssemblyAISession.websocket.send(JSON.stringify({
+                            audio_data: audioData
+                        }));
+                        console.log('🎵 Audio chunk wysłany do nowego AssemblyAI WebSocket');
+                    }
+                } catch (error) {
+                    console.error('❌ Błąd odtwarzania AssemblyAI WebSocket:', error);
+                }
+            }
         }
         
         // Handler AssemblyAI jest już ustawiony w startRealtimeSession
@@ -1951,12 +1972,32 @@ function setupAssemblyAIHandler(sessionId, session) {
     };
     
     assemblyWS.onclose = (event) => {
-        console.log('🔌 AssemblyAI WebSocket closed for session:', {
+        console.log('🔌 AssemblyAI WebSocket ZAMKNIĘTY dla sesji:', {
             sessionId: sessionId,
             code: event.code,
             reason: event.reason,
-            wasClean: event.wasClean
+            wasClean: event.wasClean,
+            timestamp: new Date().toISOString()
         });
+        
+        // Popularne kody zamknięcia WebSocket
+        const closeReasons = {
+            1000: 'Normal closure',
+            1001: 'Going away',
+            1002: 'Protocol error',
+            1003: 'Unsupported data',
+            1004: 'Reserved',
+            1005: 'No status received',
+            1006: 'Abnormal closure',
+            1007: 'Invalid frame payload data',
+            1008: 'Policy violation',
+            1009: 'Message too big',
+            1010: 'Mandatory extension',
+            1011: 'Internal server error',
+            1015: 'TLS handshake'
+        };
+        
+        console.log('🔍 Powód zamknięcia AssemblyAI WebSocket:', closeReasons[event.code] || 'Unknown');
     };
 }
 
