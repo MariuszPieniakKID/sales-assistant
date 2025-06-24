@@ -57,14 +57,18 @@ function waitForDOMElements() {
     return new Promise((resolve) => {
         const checkElements = () => {
             const sessionClientSelect = document.getElementById('sessionClient');
-            const sessionProductSelect = document.getElementById('sessionProductSelect');
+            const sessionProductSelect = document.getElementById('sessionProduct'); // POPRAWKA: sessionProduct zamiast sessionProductSelect
             const startSessionBtn = document.getElementById('startSessionBtn');
             
             if (sessionClientSelect && sessionProductSelect && startSessionBtn) {
                 console.log('✅ DOM elements ready');
                 resolve();
             } else {
-                console.log('⏳ Waiting for DOM elements...');
+                console.log('⏳ Waiting for DOM elements...', {
+                    client: !!sessionClientSelect,
+                    product: !!sessionProductSelect, 
+                    button: !!startSessionBtn
+                });
                 setTimeout(checkElements, 50);
             }
         };
@@ -139,7 +143,7 @@ function setupEventListeners() {
     
     // Znajdź elementy na nowo (mogą się zmienić przy AJAX)
     const clientSelect = document.getElementById('sessionClient');
-    const productSelect = document.getElementById('sessionProductSelect');
+    const productSelect = document.getElementById('sessionProduct'); // POPRAWKA: sessionProduct
     const startBtn = document.getElementById('startSessionBtn');
     
     // Sprawdź czy elementy istnieją
@@ -248,8 +252,8 @@ function populateProductSelect() {
     console.log('📦 populateProductSelect - start, produkty:', products.length);
     
     // Znajdź element na nowo (może się zmienić przy AJAX)
-    const productSelect = document.getElementById('sessionProductSelect');
-    console.log('🔍 Element sessionProductSelect:', !!productSelect);
+    const productSelect = document.getElementById('sessionProduct'); // POPRAWKA: sessionProduct
+    console.log('🔍 Element sessionProduct:', !!productSelect);
     
     if (!productSelect) {
         console.error('❌ Element sessionProductSelect nie istnieje!');
@@ -273,7 +277,7 @@ function populateProductSelect() {
 function validateSessionForm() {
     // Znajdź elementy na nowo
     const clientSelect = document.getElementById('sessionClient');
-    const productSelect = document.getElementById('sessionProductSelect');
+    const productSelect = document.getElementById('sessionProduct'); // POPRAWKA: sessionProduct
     const startBtn = document.getElementById('startSessionBtn');
     
     if (!clientSelect || !productSelect || !startBtn) {
@@ -299,7 +303,7 @@ async function startRealtimeSession() {
     
     // Znajdź elementy na nowo
     const clientSelect = document.getElementById('sessionClient');
-    const productSelect = document.getElementById('sessionProductSelect');
+    const productSelect = document.getElementById('sessionProduct'); // POPRAWKA: sessionProduct
     const notesTextarea = document.getElementById('sessionNotes');
     
     if (!clientSelect || !productSelect) {
@@ -810,7 +814,7 @@ function onSessionEnded(data) {
     
     // Reset form
     const clientSelect = document.getElementById('sessionClient');
-    const productSelect = document.getElementById('sessionProductSelect');
+    const productSelect = document.getElementById('sessionProduct'); // POPRAWKA: sessionProduct
     const notesTextarea = document.getElementById('sessionNotes');
     
     if (clientSelect) clientSelect.value = '';
