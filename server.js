@@ -1667,13 +1667,15 @@ function setupAssemblyAIHandler(sessionId, session) {
         console.log('🔌 AssemblyAI WebSocket connected for session:', sessionId);
         
         // Send configuration message to AssemblyAI
-        assemblyWS.send(JSON.stringify({
+        const config = {
             sample_rate: ASSEMBLYAI_SAMPLE_RATE,
             speaker_labels: true,
             sentiment_analysis: true
-        }));
+        };
         
-        console.log('📤 Sent configuration to AssemblyAI');
+        assemblyWS.send(JSON.stringify(config));
+        
+        console.log('📤 Sent configuration to AssemblyAI:', config);
     };
     
     assemblyWS.onmessage = async (event) => {
@@ -1751,11 +1753,20 @@ function setupAssemblyAIHandler(sessionId, session) {
     };
     
     assemblyWS.onerror = (error) => {
-        console.error('❌ AssemblyAI WebSocket error:', error);
+        console.error('❌ AssemblyAI WebSocket error:', {
+            error: error,
+            sessionId: sessionId,
+            readyState: assemblyWS.readyState
+        });
     };
     
-    assemblyWS.onclose = () => {
-        console.log('🔌 AssemblyAI WebSocket closed for session:', sessionId);
+    assemblyWS.onclose = (event) => {
+        console.log('🔌 AssemblyAI WebSocket closed for session:', {
+            sessionId: sessionId,
+            code: event.code,
+            reason: event.reason,
+            wasClean: event.wasClean
+        });
     };
 }
 
