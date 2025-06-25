@@ -211,91 +211,127 @@ async function openMeetingDetails(meetingId) {
         minute: '2-digit'
     });
     
+    // Aktualizuj tytuł modala
+    const modalTitle = document.querySelector('#meetingDetailsModal .modal-header h3');
+    if (modalTitle) {
+        const status = getMeetingStatus(meeting);
+        modalTitle.innerHTML = `
+            <i class="fas fa-handshake"></i>
+            Spotkanie: ${escapeHtml(meeting.client_name)} - ${escapeHtml(meeting.product_name)}
+            <span style="font-size: 14px; font-weight: 400; color: #64748b; margin-left: 12px;">
+                ${status.text}
+            </span>
+        `;
+    }
+    
     const detailsHTML = `
-        <div class="meeting-info">
-            <div class="info-card">
-                <h4>Klient</h4>
-                <p>${escapeHtml(meeting.client_name)}</p>
-            </div>
-            <div class="info-card">
-                <h4>Produkt</h4>
-                <p>${escapeHtml(meeting.product_name)}</p>
-            </div>
-            <div class="info-card">
-                <h4>Data spotkania</h4>
-                <p>${formattedDate}</p>
-            </div>
-        </div>
-        
-        ${meeting.transcription ? `
-            <div class="transcription-section">
-                <h4>
-                    <i class="fas fa-microphone"></i>
-                    Transkrypcja spotkania
-                </h4>
-                <div class="transcription-content">
-                    ${escapeHtml(meeting.transcription).replace(/\n/g, '<br>')}
+        <div class="meeting-details-container">
+            <!-- Podstawowe informacje o spotkaniu -->
+            <div class="meeting-basic-info">
+                <div class="meeting-info">
+                    <div class="info-card">
+                        <h4>Klient</h4>
+                        <p>${escapeHtml(meeting.client_name)}</p>
+                    </div>
+                    <div class="info-card">
+                        <h4>Produkt</h4>
+                        <p>${escapeHtml(meeting.product_name)}</p>
+                    </div>
+                    <div class="info-card">
+                        <h4>Data spotkania</h4>
+                        <p>${formattedDate}</p>
+                    </div>
+                    <div class="info-card">
+                        <h4>Status</h4>
+                        <p>${getMeetingStatus(meeting).text}</p>
+                    </div>
                 </div>
             </div>
-        ` : ''}
-        
-        ${(meeting.positive_findings || meeting.negative_findings) ? `
-            <div class="findings-section">
-                ${meeting.positive_findings ? `
-                    <div class="findings-card positive">
+            
+            <!-- Główna zawartość -->
+            <div class="meeting-main-content">
+                <!-- Lewy panel - Transkrypcja -->
+                <div class="meeting-left-panel">
+                    <div class="transcription-panel">
                         <h4>
-                            <i class="fas fa-thumbs-up"></i>
-                            Pozytywne sygnały
+                            <i class="fas fa-microphone"></i>
+                            Transkrypcja rozmowy
                         </h4>
-                        <p>${escapeHtml(meeting.positive_findings).replace(/\n/g, '<br>')}</p>
+                        <div class="transcription-content">
+                            ${meeting.transcription ? 
+                                escapeHtml(meeting.transcription).replace(/\n/g, '<br>') : 
+                                '<div class="empty-state-message"><i class="fas fa-microphone-slash"></i>Brak transkrypcji dla tego spotkania</div>'
+                            }
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Prawy panel - Sugestie AI (główne) -->
+                <div class="meeting-right-panel">
+                    <div class="ai-suggestions-panel">
+                        <h4>
+                            <i class="fas fa-robot"></i>
+                            Sugestie AI
+                        </h4>
+                        <div class="ai-suggestions-content">
+                            ${meeting.ai_suggestions ? 
+                                escapeHtml(meeting.ai_suggestions).replace(/\n/g, '<br>').replace(/---/g, '<hr style="margin: 16px 0; border: 1px solid #e2e8f0;">') : 
+                                '<div class="empty-state-message"><i class="fas fa-brain"></i>Brak sugestii AI dla tego spotkania<br><small>Sugestie AI pojawiają się podczas sesji na żywo</small></div>'
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Dodatkowe informacje - kompaktowe -->
+            <div class="additional-info-panel">
+                ${(meeting.positive_findings || meeting.negative_findings) ? `
+                    <div class="findings-compact">
+                        ${meeting.positive_findings ? `
+                            <div class="findings-card-compact positive">
+                                <h5>
+                                    <i class="fas fa-thumbs-up"></i>
+                                    Pozytywne sygnały
+                                </h5>
+                                <p>${escapeHtml(meeting.positive_findings).replace(/\n/g, '<br>')}</p>
+                            </div>
+                        ` : ''}
+                        
+                        ${meeting.negative_findings ? `
+                            <div class="findings-card-compact negative">
+                                <h5>
+                                    <i class="fas fa-thumbs-down"></i>
+                                    Zastrzeżenia i obiekcje
+                                </h5>
+                                <p>${escapeHtml(meeting.negative_findings).replace(/\n/g, '<br>')}</p>
+                            </div>
+                        ` : ''}
                     </div>
                 ` : ''}
                 
-                ${meeting.negative_findings ? `
-                    <div class="findings-card negative">
-                        <h4>
-                            <i class="fas fa-thumbs-down"></i>
-                            Zastrzeżenia i obiekcje
-                        </h4>
-                        <p>${escapeHtml(meeting.negative_findings).replace(/\n/g, '<br>')}</p>
+                ${meeting.recommendations ? `
+                    <div class="recommendations-compact">
+                        <h5>
+                            <i class="fas fa-lightbulb"></i>
+                            Rekomendacje AI
+                        </h5>
+                        <p>${escapeHtml(meeting.recommendations).replace(/\n/g, '<br>')}</p>
                     </div>
                 ` : ''}
-            </div>
-        ` : ''}
-        
-        ${meeting.recommendations ? `
-            <div class="recommendations-section">
-                <h4>
-                    <i class="fas fa-lightbulb"></i>
-                    Rekomendacje AI
-                </h4>
-                <p>${escapeHtml(meeting.recommendations).replace(/\n/g, '<br>')}</p>
-            </div>
-        ` : ''}
-        
-        ${meeting.ai_suggestions ? `
-            <div class="ai-suggestions-section">
-                <h4>
-                    <i class="fas fa-robot"></i>
-                    Szczegółowe sugestie AI z sesji
-                </h4>
-                <div class="ai-suggestions-content">
-                    ${escapeHtml(meeting.ai_suggestions).replace(/\n/g, '<br>').replace(/---/g, '<hr style="margin: 16px 0; border: 1px solid #e2e8f0;">')}
+                
+                <div class="notes-section-compact">
+                    <h5>
+                        <i class="fas fa-sticky-note"></i>
+                        Twoje notatki
+                    </h5>
+                    <textarea id="meetingNotes" placeholder="Dodaj swoje notatki do tego spotkania...">${meeting.own_notes || ''}</textarea>
+                    <div class="notes-actions-compact">
+                        <button class="btn-compact btn-primary-compact" onclick="saveMeetingNotes(${meeting.id})">
+                            <i class="fas fa-save"></i>
+                            Zapisz
+                        </button>
+                    </div>
                 </div>
-            </div>
-        ` : ''}
-        
-        <div class="notes-section">
-            <h4>
-                <i class="fas fa-sticky-note"></i>
-                Twoje notatki
-            </h4>
-            <textarea id="meetingNotes" placeholder="Dodaj swoje notatki do tego spotkania...">${meeting.own_notes || ''}</textarea>
-            <div class="notes-actions">
-                <button class="btn btn-primary" onclick="saveMeetingNotes(${meeting.id})">
-                    <i class="fas fa-save"></i>
-                    Zapisz notatki
-                </button>
             </div>
         </div>
     `;
@@ -308,6 +344,12 @@ async function openMeetingDetails(meetingId) {
 function closeMeetingDetailsModal() {
     meetingDetailsModal.classList.remove('active');
     meetingDetails.innerHTML = '';
+    
+    // Resetuj tytuł modala do stanu domyślnego
+    const modalTitle = document.querySelector('#meetingDetailsModal .modal-header h3');
+    if (modalTitle) {
+        modalTitle.innerHTML = 'Szczegóły spotkania';
+    }
 }
 
 // Zapisywanie notatek do spotkania
