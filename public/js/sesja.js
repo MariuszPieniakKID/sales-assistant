@@ -733,39 +733,28 @@ function createRealtimeInterface() {
     const selectedProduct = products.find(p => p.id == currentSession.productId);
     
     interface.innerHTML = `
-        <!-- Nagłówek sesji -->
+        <!-- Kompaktowy nagłówek sesji -->
         <div class="session-header-new">
-            <div class="session-info-new">
-                <h3>
-                    <i class="fas fa-microphone-lines"></i>
-                    Sesja na żywo: ${selectedClient ? selectedClient.name : 'Unknown'} - ${selectedProduct ? selectedProduct.name : 'Unknown'}
-                </h3>
-                <div class="session-meta">
-                    <span class="session-time">
-                        <i class="fas fa-clock"></i>
-                        <span id="sessionTimer">00:00:00</span>
-                    </span>
-                    <span class="session-status">
-                        <div class="status-dot-live"></div>
-                        Na żywo
-                    </span>
-                </div>
+            <div class="session-title-new">
+                <div class="live-dot"></div>
+                <span>Sesja na żywo: ${selectedClient ? selectedClient.name : 'Unknown'} - ${selectedProduct ? selectedProduct.name : 'Unknown'}</span>
             </div>
             <div class="session-controls-new">
-                <button id="pauseBtn" class="btn-session btn-warning">
+                <div class="session-timer-new" id="sessionTimer">00:00:00</div>
+                <button id="pauseBtn" class="btn-stop-new">
                     <i class="fas fa-pause"></i>
-                    Wstrzymaj
+                    Zatrzymaj
                 </button>
-                <button id="stopBtn" class="btn-session btn-danger">
+                <button id="stopBtn" class="btn-end-new">
                     <i class="fas fa-stop"></i>
                     Zakończ
                 </button>
             </div>
         </div>
         
-        <!-- Główna zawartość - nowy układ pionowy -->
+        <!-- Główna zawartość - pełnoekranowy pionowy layout -->
         <div class="session-main-content-vertical">
-            <!-- Górny panel - Sugestie AI (główne, całą szerokość) -->
+            <!-- Górny panel - Sugestie AI (pełna szerokość, główne miejsce) -->
             <div class="session-ai-panel-full">
                 <h4>
                     <i class="fas fa-robot"></i>
@@ -778,16 +767,9 @@ function createRealtimeInterface() {
                         <small>Asystent AI analizuje rozmowę w czasie rzeczywistym</small>
                     </div>
                 </div>
-                
-                <div class="ai-status-new" id="aiStatus">
-                    <div class="status-indicator-new">
-                        <div class="status-dot active"></div>
-                        <span>AI Assistant aktywny</span>
-                    </div>
-                </div>
             </div>
             
-            <!-- Dolny panel - Transkrypcja -->
+            <!-- Dolny panel - Transkrypcja (kompaktowa) -->
             <div class="session-transcript-panel-bottom">
                 <h4>
                     <i class="fas fa-microphone"></i>
@@ -799,6 +781,14 @@ function createRealtimeInterface() {
                         <span>Rozpocznij rozmowę - asystent AI nasłuchuje...</span>
                     </div>
                 </div>
+            </div>
+        </div>
+        
+        <!-- AI Status - floating -->
+        <div class="ai-status-new" id="aiStatus">
+            <div class="status-indicator-new">
+                <div class="status-dot active"></div>
+                <span>AI Assistant aktywny</span>
             </div>
         </div>
     `;
