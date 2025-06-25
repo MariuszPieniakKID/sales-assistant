@@ -1934,6 +1934,23 @@ function setupWebSpeechHandlersMethod2() {
                     }
                 });
             } else {
+                // Send partial transcript to backend for live AI suggestions
+                if (websocket && websocket.readyState === WebSocket.OPEN && currentSession?.sessionId) {
+                    console.log('🔬📤 Sending Method 2 PARTIAL transcript to backend for live suggestions...');
+                    websocket.send(JSON.stringify({
+                        type: 'WEB_SPEECH_PARTIAL_METHOD2',
+                        sessionId: currentSession.sessionId,
+                        transcript: {
+                            text: transcript,
+                            confidence: confidence || 0.9,
+                            language: 'pl',
+                            speaker: speakerInfo.speaker,
+                            speakerRole: speakerInfo.speakerRole,
+                            wordsCount: transcript.split(' ').length
+                        }
+                    }));
+                }
+                
                 // Update UI with partial transcript (Method 2 enhanced)
                 onPartialTranscriptMethod2({
                     transcript: {

@@ -1851,6 +1851,17 @@ wss.on('connection', (ws, req) => {
                     await processWebSpeechTranscriptMethod2(ws, data);
                     break;
                     
+                case 'WEB_SPEECH_PARTIAL_METHOD2':
+                    console.log('🔬🇵🇱⚡ Processing WEB_SPEECH_PARTIAL_METHOD2 (Polish + Live Suggestions):', {
+                        sessionId: data.sessionId,
+                        text: data.transcript.text.substring(0, 30) + '...',
+                        wordsCount: data.transcript.wordsCount,
+                        speaker: data.transcript.speaker || 'unknown',
+                        speakerRole: data.transcript.speakerRole || 'unknown'
+                    });
+                    await processWebSpeechPartialMethod2(ws, data);
+                    break;
+                    
                 case 'END_REALTIME_SESSION':
                     console.log('🛑 Processing END_REALTIME_SESSION:', data.sessionId);
                     await endRealtimeSession(ws, data);
@@ -2236,6 +2247,53 @@ async function processWebSpeechTranscriptMethod2(ws, data) {
         
     } catch (error) {
         console.error(`[${sessionId}] ❌ Error processing Web Speech Method 2 transcript:`, error);
+        session.ws.send(JSON.stringify({
+            type: 'WEB_SPEECH_ERROR',
+            error: error.message
+        }));
+    }
+}
+
+// NOWE: Process Web Speech API Partial Transcript for Method 2 (Polish with Live AI Suggestions)
+async function processWebSpeechPartialMethod2(ws, data) {
+    const { sessionId, transcript } = data;
+    
+    const session = activeSessions.get(sessionId);
+    if (!session) {
+        console.error(`❌ Session not found for processWebSpeechPartialMethod2: ${sessionId}`);
+        return;
+    }
+    
+    try {
+        console.log(`[${sessionId}] 🔬🇵🇱⚡ Processing Web Speech Method 2 PARTIAL transcript for live suggestions: "${transcript.text.substring(0, 30)}..."`);
+        console.log(`[${sessionId}] 🔬🇵🇱⚡ Partial transcript info:`, {
+            speaker: transcript.speaker || 'unknown',
+            speakerRole: transcript.speakerRole || 'unknown',
+            wordsCount: transcript.wordsCount,
+            language: transcript.language || 'pl',
+            confidence: transcript.confidence || 0.9
+        });
+        
+        // Create partial transcript object for live AI suggestions
+        const partialTranscript = {
+            speaker: transcript.speaker || 'unknown',
+            speakerRole: transcript.speakerRole || 'unknown',
+            text: transcript.text,
+            timestamp: new Date().toISOString(),
+            confidence: transcript.confidence || 0.9,
+            language: transcript.language || 'pl',
+            method: 2,
+            wordsCount: transcript.wordsCount || transcript.text.split(' ').length,
+            isPartial: true // Mark as partial for live suggestions
+        };
+        
+        // Process partial transcript for live AI suggestions
+        await processPartialTranscriptMethod2(sessionId, partialTranscript);
+        
+        console.log(`[${sessionId}] ✅ Web Speech Method 2 PARTIAL transcript processed for live suggestions`);
+        
+    } catch (error) {
+        console.error(`[${sessionId}] ❌ Error processing Web Speech Method 2 partial transcript:`, error);
         session.ws.send(JSON.stringify({
             type: 'WEB_SPEECH_ERROR',
             error: error.message
@@ -2915,18 +2973,7 @@ UWAGI:
             hasApiKey: process.env.OPENAI_API_KEY?.substring(0, 20) + '...'
         });
 
-        // Send debug info - request
-        session.ws.send(JSON.stringify({
-            type: 'DEBUG_INFO',
-            debugType: 'request',
-            debugData: {
-                prompt: prompt,
-                context: gptContext,
-                speaker: newTranscript.speakerRole,
-                timestamp: new Date().toISOString(),
-                openaiStatus: typeof openai !== 'undefined' ? 'available' : 'undefined'
-            }
-        }));
+        // Debug info removed for better performance
 
         // Dodaj nową wypowiedź do conversation history
         const userMessage = { role: "user", content: prompt };
@@ -2961,16 +3008,7 @@ UWAGI:
         console.log(`[${sessionId}] 🔬🎯 Method 2 AI suggestions generated in ${responseTime}ms:`, aiSuggestions);
         console.log(`[${sessionId}] 🔬💾 Conversation history updated: ${session.chatGPTHistory.length} total messages`);
 
-        // Send debug info - response
-        session.ws.send(JSON.stringify({
-            type: 'DEBUG_INFO',
-            debugType: 'response',
-            debugData: {
-                suggestions: aiSuggestions,
-                responseTime: responseTime,
-                timestamp: new Date().toISOString()
-            }
-        }));
+        // Debug info removed for better performance
 
         // Enhanced suggestion object with Method 2 data
         const enhancedSuggestion = {
@@ -3001,16 +3039,7 @@ UWAGI:
         const errorTime = Date.now() - startTime;
         console.error(`[${sessionId}] 🔬❌ Error generating Method 2 AI suggestions after ${errorTime}ms:`, error);
         
-        // Send debug info - error
-        session.ws.send(JSON.stringify({
-            type: 'DEBUG_INFO',
-            debugType: 'error',
-            debugData: {
-                error: error.message,
-                responseTime: errorTime,
-                timestamp: new Date().toISOString()
-            }
-        }));
+        // Debug info removed for better performance
         
         // Send fallback suggestions with Method 2 context
         const fallbackSuggestions = {
@@ -3071,19 +3100,7 @@ Odpowiedz SZYBKO w formacie JSON po polsku:
   "natychmiastowa_akcja": "co zrobić TERAZ"
 }`;
 
-        // Send debug info - live request
-        session.ws.send(JSON.stringify({
-            type: 'DEBUG_INFO',
-            debugType: 'request',
-            debugData: {
-                prompt: `LIVE REQUEST (${partialTranscript.wordsCount || partialTranscript.text.split(' ').length} słów): ${partialTranscript.text.substring(0, 100)}...`,
-                context: 'ChatGPT Conversation History',
-                speaker: partialTranscript.speakerRole,
-                timestamp: new Date().toISOString(),
-                isLive: true,
-                historyLength: session.chatGPTHistory ? session.chatGPTHistory.length : 0
-            }
-        }));
+        // Debug info removed for better performance
 
         // Użyj conversation history zamiast krótkiego kontekstu
         const messages = [
@@ -3117,18 +3134,7 @@ Odpowiedz SZYBKO w formacie JSON po polsku:
         console.log(`[${sessionId}] 🔬⚡ LIVE Method 2 AI suggestions generated in ${responseTime}ms:`, liveAISuggestions);
         console.log(`[${sessionId}] 🔬⚡💾 LIVE conversation history updated: ${session.chatGPTHistory.length} total messages`);
 
-        // Send debug info - live response
-        session.ws.send(JSON.stringify({
-            type: 'DEBUG_INFO',
-            debugType: 'response',
-            debugData: {
-                suggestions: liveAISuggestions,
-                responseTime: responseTime,
-                timestamp: new Date().toISOString(),
-                isLive: true,
-                historyLength: session.chatGPTHistory.length
-            }
-        }));
+        // Debug info removed for better performance
 
         // Send live AI suggestions to frontend with special indicator
         session.ws.send(JSON.stringify({
@@ -3148,17 +3154,7 @@ Odpowiedz SZYBKO w formacie JSON po polsku:
         const errorTime = Date.now() - startTime;
         console.error(`[${sessionId}] 🔬⚡❌ Error generating LIVE Method 2 AI suggestions after ${errorTime}ms:`, error);
         
-        // Send debug info - live error
-        session.ws.send(JSON.stringify({
-            type: 'DEBUG_INFO',
-            debugType: 'error',
-            debugData: {
-                error: 'LIVE: ' + error.message,
-                responseTime: errorTime,
-                timestamp: new Date().toISOString(),
-                isLive: true
-            }
-        }));
+        // Debug info removed for better performance
     }
 }
 
