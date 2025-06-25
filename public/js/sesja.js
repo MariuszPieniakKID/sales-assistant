@@ -575,9 +575,12 @@ async function startRealtimeSessionMethod2() {
         // Show real-time interface immediately
         showRealtimeInterface();
         
-        // Show debug panel for Method 2
-        showDebugPanel();
-        initializeDebugPanel();
+        // Show debug panel for Method 2 with slight delay to ensure interface is created
+        setTimeout(() => {
+            console.log('🔬 Delayed debug panel setup...');
+            showDebugPanel();
+            initializeDebugPanel();
+        }, 500);
         
         // Wait for WebSocket connection
         console.log('⏳ Method 2: Waiting for WebSocket connection...');
@@ -677,7 +680,8 @@ function setupAudioRecording() {
                 if (debugLogCount <= 10) {
                     console.log('⚠️ Debug: Skipping audio - no sessionId yet:', {
                         hasCurrentSession: !!currentSession,
-                        sessionId: currentSession?.sessionId
+                        sessionId: currentSession?.sessionId,
+                        method: currentSession?.method
                     });
                 }
                 return;
@@ -771,10 +775,19 @@ function setupAudioRecording() {
 // Session Started Handler
 function onSessionStarted(data) {
     console.log('🎉 Session started:', data);
+    console.log('🔍 Debug: Session method:', data.method, 'Type:', typeof data.method);
+    
+    // Update current session with sessionId
+    if (currentSession) {
+        currentSession.sessionId = data.sessionId;
+        console.log('🔍 Debug: Session ID set to:', currentSession.sessionId);
+    }
     
     if (data.method === 2) {
         console.log('🔬 Method 2 session started with enhanced diarization');
+        console.log('🔬 Debug: Calling showDebugPanel()...');
         showDebugPanel();
+        console.log('🔬 Debug: showDebugPanel() called');
     }
     
     const startButton = document.getElementById('startSessionBtn');
@@ -947,8 +960,13 @@ function updateSessionTimer() {
 
 // Partial Transcript Handler
 function onPartialTranscript(data) {
+    console.log('📝 onPartialTranscript called:', data);
     const transcriptContent = document.getElementById('transcriptContent');
-    if (!transcriptContent) return;
+    console.log('📝 Transcript content element:', !!transcriptContent);
+    if (!transcriptContent) {
+        console.log('📝 No transcript content element found');
+        return;
+    }
     
     // Update live transcript with partial results
     const partialElement = transcriptContent.querySelector('.partial-transcript');
@@ -983,8 +1001,13 @@ function onPartialTranscript(data) {
 
 // Final Transcript Handler
 function onFinalTranscript(data) {
+    console.log('📝 onFinalTranscript called:', data);
     const transcriptContent = document.getElementById('transcriptContent');
-    if (!transcriptContent) return;
+    console.log('📝 Transcript content element for final:', !!transcriptContent);
+    if (!transcriptContent) {
+        console.log('📝 No transcript content element found for final');
+        return;
+    }
     
     // Remove partial transcript
     const partialElement = transcriptContent.querySelector('.partial-transcript');
@@ -1043,9 +1066,15 @@ function onFinalTranscript(data) {
 // AI Suggestions Handler
 function onAISuggestions(data) {
     console.log('💡 AI Suggestions received:', data.suggestions);
+    console.log('💡 Speaker info:', data.speakerInfo);
+    console.log('💡 Full data:', data);
     
     const suggestionsContent = document.getElementById('suggestionsContent');
-    if (!suggestionsContent) return;
+    console.log('💡 Suggestions content element:', !!suggestionsContent);
+    if (!suggestionsContent) {
+        console.log('💡 No suggestions content element found');
+        return;
+    }
     
     // Check if this is Method 2 with enhanced suggestions
     const isMethod2 = data.speakerInfo?.method === 2;
@@ -1651,6 +1680,8 @@ function initializeDebugPanel() {
 
 // Update debug info
 function updateDebugInfo(type, data) {
+    console.log('🔬 updateDebugInfo called:', type, data);
+    
     const requestDiv = document.getElementById('debugGptRequest');
     const responseDiv = document.getElementById('debugGptResponse');
     const timeDiv = document.getElementById('debugResponseTime');
@@ -1658,14 +1689,38 @@ function updateDebugInfo(type, data) {
     const avgTimeSpan = document.getElementById('debugAvgTime');
     const statusSpan = document.getElementById('debugLastStatus');
     
-    if (!requestDiv || !responseDiv) return;
+    console.log('🔬 Debug elements found:', {
+        requestDiv: !!requestDiv,
+        responseDiv: !!responseDiv,
+        timeDiv: !!timeDiv,
+        countSpan: !!countSpan,
+        avgTimeSpan: !!avgTimeSpan,
+        statusSpan: !!statusSpan
+    });
+    
+    if (!requestDiv || !responseDiv) {
+        console.log('🔬 Missing debug elements, returning');
+        return;
+    }
     
     switch (type) {
         case 'request':
             debugStats.lastStatus = 'Wysyłanie zapytania...';
+            console.log('🔬 Updating request debug info:', data);
+            
+            // Show system prompt
+            const systemPromptDiv = document.getElementById('debugSystemPrompt');
+            if (systemPromptDiv && data.context) {
+                systemPromptDiv.className = 'debug-text';
+                systemPromptDiv.textContent = data.context;
+                console.log('🔬 System prompt updated');
+            }
+            
+            // Show user prompt
             if (requestDiv) {
                 requestDiv.className = 'debug-text request';
-                requestDiv.textContent = JSON.stringify(data, null, 2);
+                requestDiv.textContent = data.prompt || JSON.stringify(data, null, 2);
+                console.log('🔬 Request prompt updated');
             }
             if (statusSpan) statusSpan.textContent = debugStats.lastStatus;
             break;
@@ -1711,10 +1766,23 @@ function updateDebugInfo(type, data) {
 
 // Show debug panel for Method 2
 function showDebugPanel() {
+    console.log('🔬 showDebugPanel() called');
     const debugPanel = document.getElementById('debugPanel');
+    console.log('🔬 Debug panel element:', !!debugPanel);
+    console.log('🔬 Current session:', currentSession);
+    console.log('🔬 Current session method:', currentSession?.method);
+    
     if (debugPanel && currentSession?.method === 2) {
+        console.log('🔬 Showing debug panel...');
         debugPanel.style.display = 'block';
         debugPanel.classList.add('active');
+        console.log('🔬 Debug panel should be visible now');
+    } else {
+        console.log('🔬 Debug panel NOT shown:', {
+            hasPanel: !!debugPanel,
+            hasSession: !!currentSession,
+            method: currentSession?.method
+        });
     }
 }
 
