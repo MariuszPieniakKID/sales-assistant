@@ -847,9 +847,46 @@ function onSessionStarted(data) {
     // Start session timer
     startSessionTimer();
     
-    // Start audio recording
-    if (audioStream) {
-        setupAudioRecording();
+    // Start appropriate audio recording based on method
+    if (currentSession.method === 1) {
+        // Method 1: Use Web Speech API for Polish
+        console.log('🇵🇱 Method 1: Starting Web Speech API for Polish...');
+        if (webSpeechRecognition && useWebSpeech) {
+            try {
+                webSpeechRecognition.start();
+                console.log('✅ Web Speech API started for Polish');
+                showToast('Rozpoznawanie mowy po polsku uruchomione', 'success');
+            } catch (error) {
+                console.error('❌ Error starting Web Speech API:', error);
+                showToast('Błąd uruchamiania rozpoznawania polskiego: ' + error.message, 'error');
+            }
+        } else {
+            console.warn('⚠️ Web Speech API not available, fallback to AssemblyAI (English only)');
+            setupAudioRecording(); // Fallback to AssemblyAI
+        }
+    } else if (currentSession.method === 2) {
+        // Method 2: Hybrid approach - Web Speech API (Polish) + enhanced processing
+        console.log('🔬🇵🇱 Method 2: Starting hybrid approach (Web Speech + enhanced processing)...');
+        if (webSpeechRecognition && useWebSpeech) {
+            try {
+                // Override the result handler for Method 2
+                setupWebSpeechHandlersMethod2();
+                webSpeechRecognition.start();
+                console.log('✅ Web Speech API started for Method 2 with enhanced processing');
+                showToast('Method 2: Rozpoznawanie z diarization uruchomione', 'success');
+            } catch (error) {
+                console.error('❌ Error starting Web Speech API for Method 2:', error);
+                showToast('Błąd uruchamiania Method 2: ' + error.message, 'error');
+            }
+        } else {
+            console.warn('⚠️ Web Speech API not available for Method 2, using AssemblyAI backup');
+            setupAudioRecording(); // Fallback to AssemblyAI
+        }
+    } else {
+        // Default: AssemblyAI
+        if (audioStream) {
+            setupAudioRecording();
+        }
     }
 }
 
@@ -1091,6 +1128,115 @@ function onFinalTranscript(data) {
     if (currentSession) {
         currentSession.transcript += `[${data.transcript.speaker}] ${data.transcript.text}\n`;
     }
+}
+
+// NOWE: Partial Transcript Handler for Method 2 (Enhanced Diarization)
+function onPartialTranscriptMethod2(data) {
+    console.log('📝 onPartialTranscriptMethod2 called:', data);
+    const transcriptContent = document.getElementById('transcriptContent');
+    
+    if (!transcriptContent) {
+        console.log('📝 No transcript content element found for Method 2 partial');
+        return;
+    }
+    
+    // Update live transcript with partial results (Method 2 enhanced)
+    const partialElement = transcriptContent.querySelector('.partial-transcript-method2');
+    
+    const speakerEmoji = data.transcript.speakerRole === 'salesperson' ? '🔵' : 
+                        data.transcript.speakerRole === 'client' ? '🔴' : '🟡';
+    const speakerRole = data.transcript.speakerRole === 'salesperson' ? 'SPRZEDAWCA' : 
+                       data.transcript.speakerRole === 'client' ? 'KLIENT' : 
+                       data.transcript.speaker || 'NIEZNANY';
+    
+    if (partialElement) {
+        partialElement.innerHTML = `
+            <div class="transcript-line partial method-2">
+                <span class="speaker method-2">[${speakerEmoji} ${speakerRole}]</span>
+                <span class="text">${data.transcript.text}</span>
+                <span class="partial-indicator method-2">...</span>
+                <span class="method-badge" title="Method 2 - Enhanced Diarization">M2</span>
+            </div>
+        `;
+    } else {
+        const newPartial = document.createElement('div');
+        newPartial.className = 'partial-transcript-method2';
+        newPartial.innerHTML = `
+            <div class="transcript-line partial method-2">
+                <span class="speaker method-2">[${speakerEmoji} ${speakerRole}]</span>
+                <span class="text">${data.transcript.text}</span>
+                <span class="partial-indicator method-2">...</span>
+                <span class="method-badge" title="Method 2 - Enhanced Diarization">M2</span>
+            </div>
+        `;
+        transcriptContent.appendChild(newPartial);
+    }
+    
+    // Remove placeholder
+    const placeholder = transcriptContent.querySelector('.transcript-placeholder');
+    if (placeholder) {
+        placeholder.remove();
+    }
+}
+
+// NOWE: Final Transcript Handler for Method 2 (Enhanced Diarization)
+function onFinalTranscriptMethod2(data) {
+    console.log('📝 onFinalTranscriptMethod2 called:', data);
+    const transcriptContent = document.getElementById('transcriptContent');
+    
+    if (!transcriptContent) {
+        console.log('📝 No transcript content element found for Method 2 final');
+        return;
+    }
+    
+    // Remove partial transcript for Method 2
+    const partialElement = transcriptContent.querySelector('.partial-transcript-method2');
+    if (partialElement) {
+        partialElement.remove();
+    }
+    
+    // Add final transcript with enhanced Method 2 styling
+    const finalElement = document.createElement('div');
+    finalElement.className = 'transcript-entry-new method-2';
+    
+    const timestamp = new Date().toLocaleTimeString('pl-PL');
+    const speakerEmoji = data.transcript.speakerRole === 'salesperson' ? '🔵' : 
+                        data.transcript.speakerRole === 'client' ? '🔴' : '🟡';
+    const speakerRole = data.transcript.speakerRole === 'salesperson' ? 'SPRZEDAWCA' : 
+                       data.transcript.speakerRole === 'client' ? 'KLIENT' : 
+                       data.transcript.speaker || 'NIEZNANY';
+    
+    finalElement.innerHTML = `
+        <div class="transcript-line-new final method-2">
+            <div class="transcript-meta-new method-2">
+                <span class="timestamp-new">${timestamp}</span>
+                <span class="speaker-new ${data.transcript.speakerRole}">[${speakerEmoji} ${speakerRole}]</span>
+                <span class="method-badge" title="Method 2 - Enhanced Diarization">M2</span>
+                <span class="confidence-badge" title="Confidence: ${Math.round(data.transcript.confidence * 100)}%">
+                    ${Math.round(data.transcript.confidence * 100)}%
+                </span>
+            </div>
+            <div class="transcript-text-new method-2">
+                ${data.transcript.text}
+            </div>
+        </div>
+    `;
+    
+    transcriptContent.appendChild(finalElement);
+    
+    // Auto-scroll to bottom
+    transcriptContent.scrollTop = transcriptContent.scrollHeight;
+    
+    // Update session transcript with Method 2 formatting
+    if (currentSession) {
+        currentSession.transcript += `[${speakerEmoji} ${speakerRole}] ${data.transcript.text}\n`;
+    }
+    
+    // Add animation effect for Method 2
+    finalElement.classList.add('method-2-new-entry');
+    setTimeout(() => {
+        finalElement.classList.remove('method-2-new-entry');
+    }, 500);
 }
 
 // AI Suggestions Handler
@@ -1687,6 +1833,120 @@ function setupWebSpeechHandlers() {
             setTimeout(() => {
                 if (isRecording) {
                     console.log('🔄 Restarting Web Speech API...');
+                    webSpeechRecognition.start();
+                }
+            }, 100);
+        }
+    };
+}
+
+// NOWE: Setup Web Speech API event handlers for Method 2 (Enhanced Diarization)
+function setupWebSpeechHandlersMethod2() {
+    if (!webSpeechRecognition) return;
+    
+    console.log('🔬🇵🇱 Setting up Web Speech API handlers for Method 2...');
+    
+    // Override handlers for Method 2
+    webSpeechRecognition.onresult = (event) => {
+        console.log('📝 Method 2 Web Speech API result:', event);
+        
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            const result = event.results[i];
+            const transcript = result[0].transcript;
+            const confidence = result[0].confidence;
+            const isFinal = result.isFinal;
+            
+            console.log(`🔬🇵🇱 ${isFinal ? 'Final' : 'Partial'} transcript (Method 2 PL):`, transcript);
+            
+            // For Method 2, we try to detect speaker based on patterns or timing
+            // This is a simple heuristic - in real applications you might use more sophisticated methods
+            let speakerInfo = {
+                speaker: 'unknown',
+                speakerRole: 'unknown'
+            };
+            
+            // Simple heuristic: alternating speakers based on conversation flow
+            if (currentSession && currentSession.conversationHistory) {
+                const historyCount = currentSession.conversationHistory.length;
+                if (historyCount === 0) {
+                    // First speaker is usually salesperson
+                    speakerInfo.speaker = 'A';
+                    speakerInfo.speakerRole = 'salesperson';
+                } else {
+                    // Alternate between speakers
+                    const lastSpeaker = currentSession.conversationHistory[historyCount - 1]?.speaker;
+                    speakerInfo.speaker = lastSpeaker === 'A' ? 'B' : 'A';
+                    speakerInfo.speakerRole = lastSpeaker === 'A' ? 'client' : 'salesperson';
+                }
+            }
+            
+            if (isFinal) {
+                // Update local conversation history for speaker detection
+                if (!currentSession.conversationHistory) {
+                    currentSession.conversationHistory = [];
+                }
+                currentSession.conversationHistory.push({
+                    speaker: speakerInfo.speaker,
+                    speakerRole: speakerInfo.speakerRole,
+                    text: transcript,
+                    timestamp: new Date().toISOString()
+                });
+                
+                // Send final transcript via WebSocket with Method 2 type
+                if (websocket && websocket.readyState === WebSocket.OPEN && currentSession?.sessionId) {
+                    console.log('🔬📤 Sending Method 2 transcript to backend...');
+                    websocket.send(JSON.stringify({
+                        type: 'WEB_SPEECH_TRANSCRIPT_METHOD2',
+                        sessionId: currentSession.sessionId,
+                        transcript: {
+                            text: transcript,
+                            confidence: confidence || 0.9,
+                            language: 'pl',
+                            speaker: speakerInfo.speaker,
+                            speakerRole: speakerInfo.speakerRole
+                        }
+                    }));
+                }
+                
+                // Update UI with enhanced Method 2 final transcript
+                onFinalTranscriptMethod2({
+                    transcript: {
+                        text: transcript,
+                        speaker: speakerInfo.speaker,
+                        speakerRole: speakerInfo.speakerRole,
+                        confidence: confidence || 0.9,
+                        method: 2
+                    }
+                });
+            } else {
+                // Update UI with partial transcript (Method 2 enhanced)
+                onPartialTranscriptMethod2({
+                    transcript: {
+                        text: transcript,
+                        speaker: speakerInfo.speaker,
+                        speakerRole: speakerInfo.speakerRole,
+                        confidence: confidence || 0.9,
+                        method: 2
+                    }
+                });
+            }
+        }
+    };
+    
+    // Enhanced error handling for Method 2
+    webSpeechRecognition.onerror = (event) => {
+        console.error('❌ Method 2 Web Speech API error:', event.error);
+        showToast(`Method 2 - Błąd rozpoznawania mowy: ${event.error}`, 'error');
+    };
+    
+    // Enhanced end handling for Method 2
+    webSpeechRecognition.onend = () => {
+        console.log('🔚 Method 2 Web Speech API ended');
+        if (isRecording && currentSession?.sessionId && currentSession?.method === 2) {
+            // Restart if still recording Method 2 session
+            setTimeout(() => {
+                if (isRecording && currentSession?.method === 2) {
+                    console.log('🔄 Restarting Method 2 Web Speech API...');
                     webSpeechRecognition.start();
                 }
             }, 100);

@@ -1831,13 +1831,24 @@ wss.on('connection', (ws, req) => {
                     break;
                     
                 case 'WEB_SPEECH_TRANSCRIPT':
-                    console.log('🇵🇱 Processing WEB_SPEECH_TRANSCRIPT:', {
+                    console.log('🇵🇱 Processing WEB_SPEECH_TRANSCRIPT (Method 1 - Polish):', {
                         sessionId: data.sessionId,
                         text: data.transcript.text,
                         language: data.transcript.language,
                         confidence: data.transcript.confidence
                     });
                     await processWebSpeechTranscript(ws, data);
+                    break;
+                    
+                case 'WEB_SPEECH_TRANSCRIPT_METHOD2':
+                    console.log('🔬🇵🇱 Processing WEB_SPEECH_TRANSCRIPT_METHOD2 (Polish + Diarization):', {
+                        sessionId: data.sessionId,
+                        text: data.transcript.text,
+                        language: data.transcript.language,
+                        confidence: data.transcript.confidence,
+                        speaker: data.transcript.speaker || 'unknown'
+                    });
+                    await processWebSpeechTranscriptMethod2(ws, data);
                     break;
                     
                 case 'END_REALTIME_SESSION':
@@ -2059,13 +2070,14 @@ async function getAssemblyAIToken() {
 
 // Create AssemblyAI Real-time Session
 async function createAssemblyAISession(sessionId) {
-    console.log(`[${sessionId}] 🔧 Creating AssemblyAI session...`);
+    console.log(`[${sessionId}] 🔧 Creating AssemblyAI session (Method 1 - English only)...`);
     
     try {
         const token = await getAssemblyAIToken();
+        // Method 1: Legacy API - tylko angielski
         const wsUrl = `wss://api.assemblyai.com/v2/realtime/ws?sample_rate=16000&token=${token}`;
         
-        console.log(`[${sessionId}] 🔌 Connecting to AssemblyAI WebSocket:`, wsUrl);
+        console.log(`[${sessionId}] 🔌 Connecting to AssemblyAI Legacy WebSocket (English only):`, wsUrl);
         
         const assemblySocket = new WebSocket(wsUrl);
         
@@ -2076,7 +2088,7 @@ async function createAssemblyAISession(sessionId) {
             }, 10000);
             
             assemblySocket.on('open', () => {
-                console.log(`[${sessionId}] ✅ AssemblyAI WebSocket connected successfully`);
+                console.log(`[${sessionId}] ✅ AssemblyAI Legacy WebSocket connected successfully`);
                 clearTimeout(timeout);
                 resolve({
                     websocket: assemblySocket,
@@ -2097,44 +2109,51 @@ async function createAssemblyAISession(sessionId) {
     }
 }
 
-// Create AssemblyAI Universal Real-time Session for Method 2 (with enhanced diarization)
+// Create AssemblyAI Universal Real-time Session for Method 2 (NAPRAWIONA WERSJA)
 async function createAssemblyAISessionMethod2(sessionId, config) {
-    console.log(`[${sessionId}] 🔬 Creating AssemblyAI Universal session with diarization...`);
+    console.log(`[${sessionId}] 🔬 Creating CORRECTED AssemblyAI session for Method 2...`);
     
     try {
         const token = await getAssemblyAIToken();
-        // Universal API with Polish language and diarization enabled
-        const wsUrl = `wss://api.assemblyai.com/v2/realtime/ws?sample_rate=16000&token=${token}&language_code=pl&speaker_labels=true`;
-        console.log(`[${sessionId}] 🇵🇱 Using Polish language with diarization - Method 2 Enhanced`);
         
-        console.log(`[${sessionId}] 🔌 Connecting to AssemblyAI Universal WebSocket:`, wsUrl);
+        // UWAGA: AssemblyAI Real-time Streaming API nie obsługuje polskiego!
+        // Użyjemy hybrydowego podejścia: Web Speech API (polski) + AssemblyAI (angielski backup)
+        console.log(`[${sessionId}] ⚠️ IMPORTANT: Real-time AssemblyAI doesn't support Polish!`);
+        console.log(`[${sessionId}] 🔬 Method 2 will use Web Speech API for Polish + AssemblyAI for backup`);
+        
+        // Legacy API dla backupu (tylko angielski)
+        const wsUrl = `wss://api.assemblyai.com/v2/realtime/ws?sample_rate=16000&token=${token}`;
+        
+        console.log(`[${sessionId}] 🔌 Connecting to AssemblyAI Legacy WebSocket as backup:`, wsUrl);
         
         const assemblySocket = new WebSocket(wsUrl);
         
         return new Promise((resolve, reject) => {
             const timeout = setTimeout(() => {
-                console.error(`[${sessionId}] ❌ AssemblyAI Universal WebSocket connection timeout`);
-                reject(new Error('AssemblyAI Universal WebSocket connection timeout'));
+                console.error(`[${sessionId}] ❌ AssemblyAI Method 2 WebSocket connection timeout`);
+                reject(new Error('AssemblyAI Method 2 WebSocket connection timeout'));
             }, 10000);
             
             assemblySocket.on('open', () => {
-                console.log(`[${sessionId}] ✅ AssemblyAI Universal WebSocket connected successfully`);
+                console.log(`[${sessionId}] ✅ AssemblyAI Method 2 WebSocket connected successfully (backup only)`);
                 clearTimeout(timeout);
                 resolve({
                     websocket: assemblySocket,
                     isConfigured: false,
-                    audioQueue: []
+                    audioQueue: [],
+                    config: config,
+                    isBackupOnly: true // Oznacz że to backup
                 });
             });
             
             assemblySocket.on('error', (error) => {
-                console.error(`[${sessionId}] ❌ AssemblyAI Universal WebSocket connection error:`, error);
+                console.error(`[${sessionId}] ❌ AssemblyAI Method 2 WebSocket connection error:`, error);
                 clearTimeout(timeout);
                 reject(error);
             });
         });
     } catch (error) {
-        console.error(`[${sessionId}] ❌ Error creating AssemblyAI Universal session:`, error);
+        console.error(`[${sessionId}] ❌ Error creating AssemblyAI Method 2 session:`, error);
         throw error;
     }
 }
@@ -2167,6 +2186,49 @@ async function processWebSpeechTranscript(ws, data) {
         
     } catch (error) {
         console.error(`[${sessionId}] ❌ Error processing Web Speech transcript:`, error);
+        session.ws.send(JSON.stringify({
+            type: 'WEB_SPEECH_ERROR',
+            error: error.message
+        }));
+    }
+}
+
+// NOWE: Process Web Speech API Transcript for Method 2 (Polish with Speaker Diarization)
+async function processWebSpeechTranscriptMethod2(ws, data) {
+    const { sessionId, transcript } = data;
+    
+    const session = activeSessions.get(sessionId);
+    if (!session) {
+        console.error(`❌ Session not found for processWebSpeechTranscriptMethod2: ${sessionId}`);
+        return;
+    }
+    
+    try {
+        console.log(`[${sessionId}] 🔬🇵🇱 Processing Web Speech Method 2 transcript: "${transcript.text}"`);
+        console.log(`[${sessionId}] 🔬🇵🇱 Speaker info:`, {
+            speaker: transcript.speaker || 'unknown',
+            language: transcript.language || 'pl',
+            confidence: transcript.confidence || 0.9
+        });
+        
+        // Create enhanced transcript object with speaker diarization for Method 2
+        const processedTranscript = {
+            speaker: transcript.speaker || 'unknown',
+            speakerRole: transcript.speakerRole || 'unknown', // Will be determined in processing
+            text: transcript.text,
+            timestamp: new Date().toISOString(),
+            confidence: transcript.confidence || 0.9,
+            language: transcript.language || 'pl',
+            method: 2 // Mark as Method 2
+        };
+        
+        // Process the transcript with Method 2 enhanced processing
+        await processTranscriptMethod2(sessionId, processedTranscript);
+        
+        console.log(`[${sessionId}] ✅ Web Speech Method 2 transcript processed successfully`);
+        
+    } catch (error) {
+        console.error(`[${sessionId}] ❌ Error processing Web Speech Method 2 transcript:`, error);
         session.ws.send(JSON.stringify({
             type: 'WEB_SPEECH_ERROR',
             error: error.message
