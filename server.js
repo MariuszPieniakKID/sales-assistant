@@ -2219,7 +2219,8 @@ async function processWebSpeechTranscriptMethod2(ws, data) {
             timestamp: new Date().toISOString(),
             confidence: transcript.confidence || 0.9,
             language: transcript.language || 'pl',
-            method: 2 // Mark as Method 2
+            method: 2, // Mark as Method 2
+            message_type: 'FinalTranscript' // Add message_type for Web Speech API compatibility
         };
         
         // Process the transcript with Method 2 enhanced processing
@@ -2669,10 +2670,16 @@ async function processPartialTranscriptMethod2(sessionId, partialTranscript) {
             speakerRole: speakerRole
         };
 
-        console.log(`[${sessionId}] 🔬⚡ Live partial transcript - Speaker: ${speakerRole}, Words: ${partialTranscript.wordsCount}`);
+        console.log(`[${sessionId}] 🔬⚡ Live partial transcript - Speaker: ${speakerRole}, Words: ${partialTranscript.wordsCount || partialTranscript.text.split(' ').length}`);
 
-        // Generate live AI suggestions without adding to conversation history
-        await generateLiveAISuggestionsMethod2(session, tempTranscript);
+        // Generate live AI suggestions for longer partial transcripts (8+ words)
+        const wordCount = partialTranscript.wordsCount || partialTranscript.text.split(' ').length;
+        if (wordCount >= 8) {
+            console.log(`[${sessionId}] 🔬⚡ Generating live AI suggestions for partial transcript (${wordCount} words)...`);
+            await generateLiveAISuggestionsMethod2(session, tempTranscript);
+        } else {
+            console.log(`[${sessionId}] 🔬⚡ Partial transcript too short (${wordCount} words), waiting for more content...`);
+        }
         
     } catch (error) {
         console.error(`[${sessionId}] 🔬❌ Error processing partial transcript Method 2:`, error);
@@ -2691,12 +2698,12 @@ async function processTranscriptMethod2(sessionId, transcript) {
     console.log(`[${sessionId}] 🔬 Words data:`, transcript.words?.slice(0, 5)); // Show first 5 words
 
     if (transcript.text && transcript.message_type === 'FinalTranscript') {
-        // Enhanced speaker detection from words array
-        let speakerInfo = 'unknown';
+        // Enhanced speaker detection - handle both AssemblyAI (words array) and Web Speech API
+        let speakerInfo = transcript.speaker || 'unknown';
         let speakerWords = {};
         
         if (transcript.words && transcript.words.length > 0) {
-            // Count words per speaker
+            // AssemblyAI mode: Count words per speaker from words array
             transcript.words.forEach(word => {
                 if (word.speaker) {
                     if (!speakerWords[word.speaker]) {
@@ -2712,17 +2719,25 @@ async function processTranscriptMethod2(sessionId, transcript) {
                     speakerWords[a] > speakerWords[b] ? a : b);
             }
             
-            console.log(`[${sessionId}] 🔬 Speaker analysis:`, {
+            console.log(`[${sessionId}] 🔬 AssemblyAI Speaker analysis:`, {
                 speakerWords,
                 dominantSpeaker: speakerInfo,
                 totalWords: transcript.words.length
             });
+        } else {
+            // Web Speech API mode: Use speaker from frontend detection
+            console.log(`[${sessionId}] 🔬🇵🇱 Web Speech API mode - using frontend speaker detection:`, {
+                speaker: speakerInfo,
+                speakerRole: transcript.speakerRole,
+                method: transcript.method
+            });
         }
         
-        // Determine speaker role based on conversation context
-        let speakerRole = speakerInfo;
-        if (speakerInfo !== 'unknown') {
-            // Simple heuristic: if this is the first speaker or alternating pattern
+        // Determine speaker role - prioritize frontend detection (Web Speech API) or analyze conversation context
+        let speakerRole = transcript.speakerRole || speakerInfo;
+        
+        if (!transcript.speakerRole && speakerInfo !== 'unknown') {
+            // Fallback: Analyze conversation pattern for AssemblyAI mode
             const conversationLength = session.conversationHistory.length;
             if (conversationLength === 0) {
                 speakerRole = 'salesperson'; // First speaker is usually salesperson
@@ -2739,14 +2754,22 @@ async function processTranscriptMethod2(sessionId, transcript) {
                 }
             }
         }
+        
+        console.log(`[${sessionId}] 🔬 Final speaker determination:`, {
+            originalSpeaker: transcript.speaker,
+            originalSpeakerRole: transcript.speakerRole,
+            finalSpeaker: speakerInfo,
+            finalSpeakerRole: speakerRole,
+            method: transcript.method
+        });
 
         const newTranscript = {
-            speaker: speakerInfo, // Raw speaker ID from AssemblyAI (A, B, C, etc.)
+            speaker: speakerInfo, // Raw speaker ID from AssemblyAI (A, B, C, etc.) or Web Speech API
             speakerRole: speakerRole, // Enhanced role (salesperson, client, unknown)
             text: transcript.text,
             timestamp: new Date().toISOString(),
             confidence: transcript.confidence || 0,
-            wordsCount: transcript.words?.length || 0,
+            wordsCount: transcript.words?.length || transcript.text.split(' ').length, // Use words array or count words
             method: 2
         };
         
@@ -2765,8 +2788,20 @@ async function processTranscriptMethod2(sessionId, transcript) {
             transcript: newTranscript
         }));
 
-        // Generate and send enhanced AI suggestions with speaker context
+        // Generate and send enhanced AI suggestions with speaker context immediately
+        console.log(`[${sessionId}] 🔬⚡ Generating real-time AI suggestions for Method 2...`);
         await generateAISuggestionsMethod2(session, newTranscript);
+        
+        // Also generate faster live suggestions for immediate feedback
+        if (newTranscript.text.split(' ').length >= 8) {
+            console.log(`[${sessionId}] 🔬⚡⚡ Also generating LIVE suggestions for immediate feedback...`);
+            setTimeout(() => {
+                generateLiveAISuggestionsMethod2(session, {
+                    ...newTranscript,
+                    isPartial: false // This is final but we want quick suggestions too
+                });
+            }, 100); // Small delay to not overwhelm the API
+        }
     }
 }
 
@@ -2991,7 +3026,7 @@ PRODUKT: ${session.product.name}
 OBECNY MÓWCA: ${partialTranscript.speakerRole === 'salesperson' ? '🔵 SPRZEDAWCA' : 
                 partialTranscript.speakerRole === 'client' ? '🔴 KLIENT' : '🟡 NIEZNANY'}
 
-WYPOWIEDŹ W TRAKCIE (${partialTranscript.wordsCount} słów): "${partialTranscript.text}"
+WYPOWIEDŹ W TRAKCIE (${partialTranscript.wordsCount || partialTranscript.text.split(' ').length} słów): "${partialTranscript.text}"
 
 Odpowiedz SZYBKO w formacie JSON po polsku z natychmiastowymi sugestiami:
 {
@@ -3006,7 +3041,7 @@ Odpowiedz SZYBKO w formacie JSON po polsku z natychmiastowymi sugestiami:
             type: 'DEBUG_INFO',
             debugType: 'request',
             debugData: {
-                prompt: `LIVE REQUEST (${partialTranscript.wordsCount} słów): ${partialTranscript.text.substring(0, 100)}...`,
+                prompt: `LIVE REQUEST (${partialTranscript.wordsCount || partialTranscript.text.split(' ').length} słów): ${partialTranscript.text.substring(0, 100)}...`,
                 context: 'Szybki kontekst live',
                 speaker: partialTranscript.speakerRole,
                 timestamp: new Date().toISOString(),
