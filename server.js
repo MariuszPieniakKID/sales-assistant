@@ -12,6 +12,11 @@ const { OpenAI } = require('openai');
 const WebSocket = require('ws');
 const http = require('http');
 
+// Initialize OpenAI globally
+const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY
+});
+
 // --- START: Zaawansowane logowanie do pliku ---
 const logFile = path.join(__dirname, 'server.log');
 const logStream = fs.createWriteStream(logFile, { flags: 'a' });
@@ -797,9 +802,7 @@ app.post('/api/chat/save-session', requireAuth, async (req, res) => {
         // Wyślij całą rozmowę do ChatGPT dla analizy
         console.log('🤖 Wysyłam rozmowę do analizy ChatGPT...');
         
-        const openai = new OpenAI({
-            apiKey: process.env.OPENAI_API_KEY
-        });
+        // OpenAI is initialized globally
         
         const analysisPrompt = `Przeanalizuj poniższą rozmowę sprzedażową i podaj:
 
@@ -893,9 +896,7 @@ app.post('/api/chat/message', requireAuth, async (req, res) => {
     }
     
     try {
-        const openai = new OpenAI({
-            apiKey: process.env.OPENAI_API_KEY
-        });
+        // OpenAI is initialized globally
         
         console.log('🤖 Wysyłam streaming request do OpenAI...');
         
@@ -2102,8 +2103,9 @@ async function createAssemblyAISessionMethod2(sessionId, config) {
     
     try {
         const token = await getAssemblyAIToken();
-        // For Universal API with Polish and diarization, we need different URL params
-        const wsUrl = `wss://api.assemblyai.com/v2/realtime/ws?sample_rate=16000&token=${token}&language_code=pl&speaker_labels=true`;
+        // For Universal API with diarization - trying English first to test speaker detection
+        const wsUrl = `wss://api.assemblyai.com/v2/realtime/ws?sample_rate=16000&token=${token}&speaker_labels=true`;
+        console.log(`[${sessionId}] 🔬 Note: Using English for diarization testing - Polish may need separate configuration`);
         
         console.log(`[${sessionId}] 🔌 Connecting to AssemblyAI Universal WebSocket:`, wsUrl);
         
@@ -2353,10 +2355,24 @@ function setupAssemblyAIHandlerMethod2(sessionId, session) {
     const sendConfigurationAndProcessQueue = () => {
         console.log(`[${sessionId}] ✅ AssemblyAI Universal WebSocket opened, processing queue...`);
         
-        // Universal API: Configuration may be sent via WebSocket message
-        session.assemblyAISession.isConfigured = true;
+        // Universal API: Send configuration message for enhanced features
+        try {
+            const configMessage = {
+                sample_rate: 16000,
+                speaker_labels: true,
+                // language_code: 'pl', // Removed for testing - English first
+                word_boost: ['sales', 'product', 'price', 'offer', 'deal', 'buy', 'purchase']
+            };
+            
+            console.log(`[${sessionId}] 🔧 Sending Universal API configuration:`, configMessage);
+            assemblySocket.send(JSON.stringify(configMessage));
+            
+        } catch (configError) {
+            console.error(`[${sessionId}] ❌ Error sending Universal API configuration:`, configError);
+        }
         
-        console.log(`[${sessionId}] ⚡ Universal API configured with Polish language and diarization`);
+        session.assemblyAISession.isConfigured = true;
+        console.log(`[${sessionId}] ⚡ Universal API configured with English language and diarization`);
         
         // Process queued audio
         const queue = session.assemblyAISession.audioQueue;
@@ -2455,7 +2471,22 @@ function setupAssemblyAIHandlerMethod2(sessionId, session) {
                 case 'FinalTranscript':
                     if (parsedMessage.text && parsedMessage.text.trim()) {
                         console.log(`[${sessionId}] ✅ Universal Final transcript:`, parsedMessage.text);
-                        console.log(`[${sessionId}] 🔍 Words with speakers:`, parsedMessage.words);
+                        console.log(`[${sessionId}] 🔍 Full AssemblyAI response:`, JSON.stringify(parsedMessage, null, 2));
+                        
+                        // Debug speaker detection
+                        if (parsedMessage.words && parsedMessage.words.length > 0) {
+                            const speakers = parsedMessage.words.map(w => w.speaker).filter(s => s);
+                            const uniqueSpeakers = [...new Set(speakers)];
+                            console.log(`[${sessionId}] 🎤 Speaker detection:`, {
+                                totalWords: parsedMessage.words.length,
+                                wordsWithSpeakers: speakers.length,
+                                uniqueSpeakers: uniqueSpeakers,
+                                speakerSample: parsedMessage.words.slice(0, 3).map(w => ({word: w.text, speaker: w.speaker}))
+                            });
+                        } else {
+                            console.log(`[${sessionId}] ❌ No words array in AssemblyAI response - diarization may not be working`);
+                        }
+                        
                         await processTranscriptMethod2(sessionId, parsedMessage);
                     }
                     break;
@@ -2749,6 +2780,13 @@ UWAGI:
 - Analiza w języku polskim z rozpoznaniem mówców
 - Skoncentruj się na dynamice sprzedaży i interakcji między mówcami`;
 
+        // Debug: Check if OpenAI is available
+        console.log(`[${sessionId}] 🔬🔍 OpenAI check:`, {
+            openaiDefined: typeof openai !== 'undefined',
+            openaiApiKey: !!process.env.OPENAI_API_KEY,
+            hasApiKey: process.env.OPENAI_API_KEY?.substring(0, 20) + '...'
+        });
+
         // Send debug info - request
         session.ws.send(JSON.stringify({
             type: 'DEBUG_INFO',
@@ -2757,7 +2795,8 @@ UWAGI:
                 prompt: prompt,
                 context: gptContext,
                 speaker: newTranscript.speakerRole,
-                timestamp: new Date().toISOString()
+                timestamp: new Date().toISOString(),
+                openaiStatus: typeof openai !== 'undefined' ? 'available' : 'undefined'
             }
         }));
 
