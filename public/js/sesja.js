@@ -284,14 +284,30 @@ function setupEventListeners() {
     
     // Start session button (Method 1)
     const startBtn = document.getElementById('startSessionBtn');
+    console.log('🔵 Method 1 button found:', !!startBtn);
     if (startBtn) {
-        startBtn.addEventListener('click', startRealtimeSession);
+        console.log('🔵 Adding Method 1 event listener...');
+        startBtn.addEventListener('click', () => {
+            console.log('🔵 Method 1 button clicked!');
+            startRealtimeSession();
+        });
+        console.log('🔵 Method 1 event listener added');
+    } else {
+        console.error('❌ Method 1 button not found!');
     }
     
     // Start session button (Method 2 - with diarization)
     const startBtnMethod2 = document.getElementById('startSessionBtnMethod2');
+    console.log('🔬 Method 2 button found:', !!startBtnMethod2);
     if (startBtnMethod2) {
-        startBtnMethod2.addEventListener('click', startRealtimeSessionMethod2);
+        console.log('🔬 Adding Method 2 event listener...');
+        startBtnMethod2.addEventListener('click', () => {
+            console.log('🔬 Method 2 button clicked!');
+            startRealtimeSessionMethod2();
+        });
+        console.log('🔬 Method 2 event listener added');
+    } else {
+        console.error('❌ Method 2 button not found!');
     }
     
     console.log('✅ Event listeners set up successfully');
@@ -485,10 +501,14 @@ async function startRealtimeSession() {
             userId: user.user.id,
             startTime: new Date(),
             transcript: '',
-            suggestions: []
+            suggestions: [],
+            method: 1 // Mark as Method 1
         };
         
-        console.log('🔍 Debug: Session object created:', currentSession);
+        console.log('🔍 Debug: Session object created (Method 1):', currentSession);
+        
+        // Show real-time interface for Method 1 too
+        showRealtimeInterface();
         
         // Wait for WebSocket connection before sending message
         console.log('⏳ Waiting for WebSocket connection...');
@@ -776,11 +796,21 @@ function setupAudioRecording() {
 function onSessionStarted(data) {
     console.log('🎉 Session started:', data);
     console.log('🔍 Debug: Session method:', data.method, 'Type:', typeof data.method);
+    console.log('🔍 Debug: Current session before update:', currentSession);
     
-    // Update current session with sessionId
+    // CRITICAL: Update current session with sessionId
     if (currentSession) {
         currentSession.sessionId = data.sessionId;
         console.log('🔍 Debug: Session ID set to:', currentSession.sessionId);
+        console.log('🔍 Debug: Current session after update:', currentSession);
+    } else {
+        console.error('❌ CRITICAL: currentSession is null when session started!');
+        // Create currentSession if it doesn't exist
+        currentSession = {
+            sessionId: data.sessionId,
+            method: data.method || 1
+        };
+        console.log('🔧 Debug: Created new currentSession:', currentSession);
     }
     
     if (data.method === 2) {
