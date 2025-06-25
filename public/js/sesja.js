@@ -21,6 +21,13 @@ let selectedLanguage = 'pl'; // Default: Polish
 let webSpeechRecognition = null;
 let useWebSpeech = true; // Default: use Web Speech API for Polish
 
+// Debug tracking for Method 2
+let debugStats = {
+    requestCount: 0,
+    totalResponseTime: 0,
+    lastStatus: 'Oczekuje...'
+};
+
 // DOM Elements - będą wyszukiwane dynamicznie bo AJAX może je zmieniać
 
 // Initialize when DOM is ready
@@ -214,6 +221,10 @@ function handleWebSocketMessage(data) {
                 console.log('🔬 Frontend: Method 2 speaker info:', data.speakerInfo);
             }
             onAISuggestions(data);
+            break;
+        case 'DEBUG_INFO':
+            console.log('🔬 Frontend: Debug info received:', data);
+            updateDebugInfo(data.debugType, data.debugData);
             break;
         case 'SESSION_ENDED':
             onSessionEnded(data);
@@ -511,24 +522,14 @@ async function startRealtimeSession() {
 
 // Start Real-time AI Assistant Session with Method 2 (Enhanced Diarization)
 async function startRealtimeSessionMethod2() {
-    console.log('🚀 Starting real-time AI assistant session with Method 2 (Enhanced Diarization)...');
+    console.log('🔬 Method 2: Starting enhanced session with debug...');
     
-    // Znajdź elementy na nowo
-    const clientSelect = document.getElementById('sessionClient');
-    const productSelect = document.getElementById('sessionProduct');
-    const notesTextarea = document.getElementById('sessionNotes');
-    
-    if (!clientSelect || !productSelect) {
-        showToast('Elementy formularza nie zostały znalezione', 'error');
-        return;
-    }
-    
-    const clientId = clientSelect.value;
-    const productId = productSelect.value;
-    const notes = notesTextarea ? notesTextarea.value : '';
+    const clientId = document.getElementById('sessionClient').value;
+    const productId = document.getElementById('sessionProduct').value;
+    const notes = document.getElementById('sessionNotes').value;
     
     if (!clientId || !productId) {
-        showToast('Proszę wybierz klienta i produkt', 'error');
+        showToast('Wybierz klienta i produkt', 'error');
         return;
     }
     
@@ -571,6 +572,10 @@ async function startRealtimeSessionMethod2() {
         
         console.log('🔍 Method 2: Session object created:', currentSession);
         
+        // Show debug panel for Method 2
+        showDebugPanel();
+        initializeDebugPanel();
+        
         // Wait for WebSocket connection
         console.log('⏳ Method 2: Waiting for WebSocket connection...');
         await waitForWebSocketConnection();
@@ -589,14 +594,15 @@ async function startRealtimeSessionMethod2() {
         console.log('📤 Method 2: Sending START_REALTIME_SESSION_METHOD2:', startMessage);
         websocket.send(JSON.stringify(startMessage));
         
-        console.log('✅ Method 2: Session start request sent, waiting for response...');
+        console.log('✅ Method 2: Session start message sent');
         
     } catch (error) {
-        console.error('❌ Method 2: Error starting real-time session:', error);
-        if (error.name === 'NotAllowedError') {
-            showToast('Dostęp do mikrofonu został odrzucony. Włącz mikrofon w ustawieniach przeglądarki.', 'error');
-        } else {
-            showToast('Błąd rozpoczynania sesji Method 2: ' + error.message, 'error');
+        console.error('❌ Method 2: Error starting session:', error);
+        showToast('Błąd podczas uruchamiania Method 2: ' + error.message, 'error');
+        
+        if (audioStream) {
+            audioStream.getTracks().forEach(track => track.stop());
+            audioStream = null;
         }
     }
 }
@@ -761,50 +767,40 @@ function setupAudioRecording() {
 
 // Session Started Handler
 function onSessionStarted(data) {
-    console.log('✅ Real-time session started:', data.sessionId);
+    console.log('🎉 Session started:', data);
     
-    // Update current session with the sessionId from backend
-    if (currentSession) {
-        currentSession.sessionId = data.sessionId;
-        console.log('🔍 Debug: Session ID set to:', currentSession.sessionId);
-    } else {
-        console.error('❌ currentSession is null when session started!');
-        return;
+    if (data.method === 2) {
+        console.log('🔬 Method 2 session started with enhanced diarization');
+        showDebugPanel();
     }
     
-    // NOWE: Choose audio recording method based on language
-    if (useWebSpeech && selectedLanguage === 'pl' && webSpeechRecognition) {
-        console.log('🇵🇱 Using Web Speech API for Polish language...');
-        startWebSpeechRecording();
-    } else {
-        console.log('🇺🇸 Using AssemblyAI for English language...');
+    const startButton = document.querySelector('.start-session-btn');
+    const startButtonMethod2 = document.querySelector('.start-session-btn-method2');
+    const stopButton = document.querySelector('.stop-session-btn');
+    
+    if (startButton) {
+        startButton.disabled = true;
+        startButton.textContent = 'Sesja w toku...';
+    }
+    
+    if (startButtonMethod2) {
+        startButtonMethod2.disabled = true;
+        startButtonMethod2.textContent = 'Method 2 w toku...';
+    }
+    
+    if (stopButton) {
+        stopButton.disabled = false;
+        stopButton.style.display = 'inline-block';
+    }
+    
+    // Show session info with method indicator
+    const methodLabel = data.method === 2 ? ' (Method 2 - Enhanced Diarization)' : '';
+    showToast(`Sesja Real-time AI Assistant${methodLabel} rozpoczęta!`, 'success');
+    isRecording = true;
+    
+    // Start audio recording
+    if (audioStream) {
         setupAudioRecording();
-    }
-    
-    // Show real-time interface
-    showRealtimeInterface();
-    
-    // Start session timer
-    startSessionTimer();
-    
-    const languageFlag = selectedLanguage === 'pl' ? '🇵🇱' : '🇺🇸';
-    showToast(`🤖 ${languageFlag} Asystent AI rozpoczął nasłuchiwanie!`, 'success');
-}
-
-// NOWE: Start Web Speech API recording for Polish
-function startWebSpeechRecording() {
-    if (!webSpeechRecognition) {
-        console.error('❌ Web Speech API not available');
-        return;
-    }
-    
-    try {
-        isRecording = true;
-        webSpeechRecognition.start();
-        console.log('🎤🇵🇱 Web Speech API recording started for Polish');
-    } catch (error) {
-        console.error('❌ Error starting Web Speech API:', error);
-        showToast('Błąd uruchamiania rozpoznawania mowy: ' + error.message, 'error');
     }
 }
 
@@ -1047,6 +1043,7 @@ function onAISuggestions(data) {
     
     // Check if this is Method 2 with enhanced suggestions
     const isMethod2 = data.speakerInfo?.method === 2;
+    const isLive = data.speakerInfo?.isLive === true;
     const suggestions = data.suggestions;
     
     // Remove placeholder
@@ -1060,51 +1057,63 @@ function onAISuggestions(data) {
     
     // Method 2 enhanced display
     if (isMethod2 && suggestions) {
-        // Add Method 2 header
+        // Add Method 2 header with live indicator
         const method2Header = document.createElement('div');
         method2Header.className = 'method2-header';
         method2Header.innerHTML = `
             <div class="method2-badge">
                 <i class="fas fa-microscope"></i>
                 <span>Method 2 - Enhanced Diarization</span>
+                ${isLive ? '<span class="live-indicator">🔴 LIVE</span>' : ''}
             </div>
             <div class="speaker-context">
-                Ostatni mówca: ${data.speakerInfo.speakerRole === 'salesperson' ? '🔵 SPRZEDAWCA' : 
+                ${isLive ? 'Mówca w trakcie: ' : 'Ostatni mówca: '}${data.speakerInfo.speakerRole === 'salesperson' ? '🔵 SPRZEDAWCA' : 
                                data.speakerInfo.speakerRole === 'client' ? '🔴 KLIENT' : 
                                '🟡 ' + (data.speakerInfo.speaker || 'NIEZNANY')}
             </div>
         `;
         suggestionsContent.appendChild(method2Header);
         
-        // Enhanced suggestions structure for Method 2
+        // Enhanced suggestions structure for Method 2 (support both Polish and English keys)
         const enhancedSuggestions = [
-            { type: 'speaker-analysis', content: suggestions.speaker_analysis, icon: 'fa-user-analytics' },
-            { type: 'intent-analysis', content: suggestions.intent, icon: 'fa-bullseye' },
-            { type: 'emotion-analysis', content: suggestions.emotion, icon: 'fa-heart' },
-            { type: 'conversation-dynamics', content: suggestions.conversation_dynamics, icon: 'fa-exchange-alt' },
-            { type: 'next-action', content: suggestions.next_action, icon: 'fa-arrow-right' }
+            { type: 'speaker-analysis', content: suggestions.analiza_mowcy || suggestions.speaker_analysis, icon: 'fa-user-analytics' },
+            { type: 'intent-analysis', content: suggestions.intencja || suggestions.intent, icon: 'fa-bullseye' },
+            { type: 'emotion-analysis', content: suggestions.emocje || suggestions.emotion, icon: 'fa-heart' },
+            { type: 'conversation-dynamics', content: suggestions.dynamika_rozmowy || suggestions.conversation_dynamics, icon: 'fa-exchange-alt' },
+            { type: 'next-action', content: suggestions.nastepny_krok || suggestions.natychmiastowa_akcja || suggestions.next_action, icon: 'fa-arrow-right' },
+            { type: 'suggestions', content: suggestions.sugestie || suggestions.suggestions, icon: 'fa-lightbulb' },
+            { type: 'signals', content: suggestions.sygnaly || suggestions.signals, icon: 'fa-chart-line' }
         ];
         
         enhancedSuggestions.forEach(item => {
             if (item.content) {
                 const suggestionElement = document.createElement('div');
-                suggestionElement.className = `suggestion-item-method2 ${item.type}`;
+                suggestionElement.className = `suggestion-item-method2 ${item.type}${isLive ? ' live' : ''}`;
                 
                 const typeLabel = {
                     'speaker-analysis': 'Analiza mówcy',
                     'intent-analysis': 'Intencja',
                     'emotion-analysis': 'Emocje',
                     'conversation-dynamics': 'Dynamika rozmowy',
-                    'next-action': 'Następny krok'
+                    'next-action': isLive ? 'Natychmiastowa akcja' : 'Następny krok',
+                    'suggestions': 'Sugestie',
+                    'signals': 'Sygnały'
                 }[item.type];
+                
+                // Format content - handle arrays
+                let formattedContent = item.content;
+                if (Array.isArray(item.content)) {
+                    formattedContent = item.content.map(c => `• ${c}`).join('<br>');
+                }
                 
                 suggestionElement.innerHTML = `
                     <div class="suggestion-header-method2">
                         <i class="fas ${item.icon}"></i>
                         <span>${typeLabel}</span>
+                        ${isLive ? '<span class="live-pulse">⚡</span>' : ''}
                     </div>
                     <div class="suggestion-content-method2">
-                        ${item.content}
+                        ${formattedContent}
                     </div>
                 `;
                 
@@ -1311,42 +1320,68 @@ async function stopRealtimeSession() {
 
 // Session Ended Handler
 function onSessionEnded(data) {
-    console.log('✅ Session ended successfully');
+    console.log('🛑 Session ended:', data);
     
-    // Remove real-time interface
-    const realtimeInterface = document.getElementById('realtimeInterface');
-    if (realtimeInterface) {
-        realtimeInterface.remove();
+    // Hide debug panel
+    hideDebugPanel();
+    
+    // Reset debug stats
+    debugStats = {
+        requestCount: 0,
+        totalResponseTime: 0,
+        lastStatus: 'Sesja zakończona'
+    };
+    
+    const startButton = document.querySelector('.start-session-btn');
+    const startButtonMethod2 = document.querySelector('.start-session-btn-method2');
+    const stopButton = document.querySelector('.stop-session-btn');
+    
+    if (startButton) {
+        startButton.disabled = false;
+        startButton.textContent = 'Rozpocznij sesję (Method 1)';
     }
     
-    // Show setup form and recent sessions again
-    const setupCard = document.querySelector('.setup-card');
-    const recentSessions = document.querySelector('.recent-sessions');
-    
-    if (setupCard) {
-        setupCard.style.display = 'block';
-    }
-    if (recentSessions) {
-        recentSessions.style.display = 'block';
+    if (startButtonMethod2) {
+        startButtonMethod2.disabled = false;
+        startButtonMethod2.textContent = 'Rozpocznij sesję (Method 2)';
     }
     
-    // Reset form
-    const clientSelect = document.getElementById('sessionClient');
-    const productSelect = document.getElementById('sessionProduct'); // POPRAWKA: sessionProduct
-    const notesTextarea = document.getElementById('sessionNotes');
+    if (stopButton) {
+        stopButton.disabled = true;
+        stopButton.style.display = 'none';
+    }
     
-    if (clientSelect) clientSelect.value = '';
-    if (productSelect) productSelect.value = '';
-    if (notesTextarea) notesTextarea.value = '';
-    
-    // Reset variables
+    showToast('Sesja zakończona i zapisana', 'success');
+    isRecording = false;
     currentSession = null;
-    sessionStartTime = null;
     
-    validateSessionForm();
-    loadRecentSessions();
+    // Stop audio stream
+    if (audioStream) {
+        audioStream.getTracks().forEach(track => track.stop());
+        audioStream = null;
+    }
     
-    showToast('Sesja została zapisana pomyślnie!', 'success');
+    // Reset transcript display
+    const transcriptContent = document.getElementById('transcriptContent');
+    if (transcriptContent) {
+        transcriptContent.innerHTML = `
+            <div class="transcript-placeholder">
+                <i class="fas fa-microphone"></i>
+                <p>Transkrypcja pojawi się tutaj...</p>
+            </div>
+        `;
+    }
+    
+    // Reset suggestions display
+    const suggestionsContent = document.getElementById('suggestionsContent');
+    if (suggestionsContent) {
+        suggestionsContent.innerHTML = `
+            <div class="suggestion-placeholder">
+                <i class="fas fa-lightbulb"></i>
+                <p>Sugestie AI pojawią się tutaj...</p>
+            </div>
+        `;
+    }
 }
 
 // Session Error Handler
@@ -1575,6 +1610,98 @@ function setupWebSpeechHandlers() {
             }, 100);
         }
     };
+}
+
+// Initialize debug panel
+function initializeDebugPanel() {
+    const toggleButton = document.getElementById('toggleDebug');
+    const debugPanel = document.getElementById('debugPanel');
+    
+    if (toggleButton && debugPanel) {
+        toggleButton.addEventListener('click', () => {
+            const isVisible = debugPanel.style.display !== 'none';
+            debugPanel.style.display = isVisible ? 'none' : 'block';
+            toggleButton.textContent = isVisible ? 'Pokaż Debug' : 'Ukryj Debug';
+        });
+    }
+}
+
+// Update debug info
+function updateDebugInfo(type, data) {
+    const requestDiv = document.getElementById('debugGptRequest');
+    const responseDiv = document.getElementById('debugGptResponse');
+    const timeDiv = document.getElementById('debugResponseTime');
+    const countSpan = document.getElementById('debugRequestCount');
+    const avgTimeSpan = document.getElementById('debugAvgTime');
+    const statusSpan = document.getElementById('debugLastStatus');
+    
+    if (!requestDiv || !responseDiv) return;
+    
+    switch (type) {
+        case 'request':
+            debugStats.lastStatus = 'Wysyłanie zapytania...';
+            if (requestDiv) {
+                requestDiv.className = 'debug-text request';
+                requestDiv.textContent = JSON.stringify(data, null, 2);
+            }
+            if (statusSpan) statusSpan.textContent = debugStats.lastStatus;
+            break;
+            
+        case 'response':
+            debugStats.requestCount++;
+            debugStats.totalResponseTime += data.responseTime || 0;
+            debugStats.lastStatus = 'Otrzymano odpowiedź';
+            
+            if (responseDiv) {
+                responseDiv.className = 'debug-text json';
+                responseDiv.textContent = JSON.stringify(data.suggestions, null, 2);
+            }
+            if (timeDiv) {
+                timeDiv.textContent = `${data.responseTime || 0}ms`;
+            }
+            if (countSpan) countSpan.textContent = debugStats.requestCount;
+            if (avgTimeSpan) {
+                const avgTime = Math.round(debugStats.totalResponseTime / debugStats.requestCount);
+                avgTimeSpan.textContent = `${avgTime}ms`;
+            }
+            if (statusSpan) statusSpan.textContent = debugStats.lastStatus;
+            
+            // Animate updated sections
+            [responseDiv.parentElement, timeDiv.parentElement].forEach(section => {
+                if (section) {
+                    section.classList.add('updated');
+                    setTimeout(() => section.classList.remove('updated'), 500);
+                }
+            });
+            break;
+            
+        case 'error':
+            debugStats.lastStatus = 'Błąd: ' + (data.error || 'Nieznany błąd');
+            if (responseDiv) {
+                responseDiv.className = 'debug-text error';
+                responseDiv.textContent = debugStats.lastStatus;
+            }
+            if (statusSpan) statusSpan.textContent = debugStats.lastStatus;
+            break;
+    }
+}
+
+// Show debug panel for Method 2
+function showDebugPanel() {
+    const debugPanel = document.getElementById('debugPanel');
+    if (debugPanel && currentSession?.method === 2) {
+        debugPanel.style.display = 'block';
+        debugPanel.classList.add('active');
+    }
+}
+
+// Hide debug panel
+function hideDebugPanel() {
+    const debugPanel = document.getElementById('debugPanel');
+    if (debugPanel) {
+        debugPanel.style.display = 'none';
+        debugPanel.classList.remove('active');
+    }
 }
 
 console.log('✅ Real-time AI Assistant loaded successfully'); 

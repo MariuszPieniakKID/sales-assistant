@@ -2428,6 +2428,27 @@ function setupAssemblyAIHandlerMethod2(sessionId, session) {
                                 method: 2
                             }
                         }));
+                        
+                        // Generate live AI suggestions for longer partial transcripts (15+ words)
+                        const wordCount = parsedMessage.text.split(' ').length;
+                        if (wordCount >= 15) {
+                            console.log(`[${sessionId}] 🔬⚡ Generating live AI suggestions for partial transcript (${wordCount} words)`);
+                            
+                            // Create temporary transcript object for live suggestions
+                            const partialTranscript = {
+                                speaker: speakerInfo,
+                                speakerRole: 'unknown', // Will be determined in processing
+                                text: parsedMessage.text,
+                                timestamp: new Date().toISOString(),
+                                confidence: parsedMessage.confidence || 0,
+                                wordsCount: wordCount,
+                                method: 2,
+                                isPartial: true // Mark as partial for different handling
+                            };
+                            
+                            // Process partial transcript for live suggestions without adding to history
+                            await processPartialTranscriptMethod2(sessionId, partialTranscript);
+                        }
                     }
                     break;
                     
@@ -2496,6 +2517,53 @@ async function processTranscript(sessionId, transcript) {
 
         // Generate and send AI suggestions
         await generateAISuggestions(session, newTranscript);
+    }
+}
+
+// Process Partial Transcript for Method 2 - Live AI Suggestions without saving to history
+async function processPartialTranscriptMethod2(sessionId, partialTranscript) {
+    const session = activeSessions.get(sessionId);
+    if (!session) {
+        console.error(`❌ Session not found for processPartialTranscriptMethod2: ${sessionId}`);
+        return;
+    }
+
+    console.log(`[${sessionId}] 🔬⚡ Processing Method 2 PARTIAL transcript for live suggestions:`, partialTranscript.text.substring(0, 50) + '...');
+
+    try {
+        // Determine speaker role based on existing conversation pattern (don't save to history)
+        let speakerRole = 'unknown';
+        const speakerInfo = partialTranscript.speaker;
+        
+        if (speakerInfo !== 'unknown' && session.conversationHistory.length > 0) {
+            // Try to match with recent speakers to determine role
+            const recentSpeakers = session.conversationHistory.slice(-3);
+            const matchingSpeaker = recentSpeakers.find(t => t.speaker === speakerInfo);
+            
+            if (matchingSpeaker) {
+                speakerRole = matchingSpeaker.speakerRole;
+            } else {
+                // New speaker - alternate roles
+                const lastRole = session.conversationHistory[session.conversationHistory.length - 1].speakerRole;
+                speakerRole = lastRole === 'salesperson' ? 'client' : 'salesperson';
+            }
+        } else if (session.conversationHistory.length === 0) {
+            speakerRole = 'salesperson'; // First speaker is usually salesperson
+        }
+
+        // Create temporary transcript object with role
+        const tempTranscript = {
+            ...partialTranscript,
+            speakerRole: speakerRole
+        };
+
+        console.log(`[${sessionId}] 🔬⚡ Live partial transcript - Speaker: ${speakerRole}, Words: ${partialTranscript.wordsCount}`);
+
+        // Generate live AI suggestions without adding to conversation history
+        await generateLiveAISuggestionsMethod2(session, tempTranscript);
+        
+    } catch (error) {
+        console.error(`[${sessionId}] 🔬❌ Error processing partial transcript Method 2:`, error);
     }
 }
 
@@ -2647,6 +2715,7 @@ async function generateAISuggestions(session, newTranscript) {
 // Enhanced AI Suggestions for Method 2 with Speaker Diarization
 async function generateAISuggestionsMethod2(session, newTranscript) {
     const sessionId = session.sessionId;
+    const startTime = Date.now();
     
     try {
         console.log(`[${sessionId}] 🔬🤖 Generating Method 2 AI suggestions for: "${newTranscript.text}"`);
@@ -2680,6 +2749,18 @@ UWAGI:
 - Analiza w języku polskim z rozpoznaniem mówców
 - Skoncentruj się na dynamice sprzedaży i interakcji między mówcami`;
 
+        // Send debug info - request
+        session.ws.send(JSON.stringify({
+            type: 'DEBUG_INFO',
+            debugType: 'request',
+            debugData: {
+                prompt: prompt,
+                context: gptContext,
+                speaker: newTranscript.speakerRole,
+                timestamp: new Date().toISOString()
+            }
+        }));
+
         const completion = await openai.chat.completions.create({
             model: "gpt-4-turbo",
             messages: [
@@ -2689,8 +2770,20 @@ UWAGI:
             response_format: { type: "json_object" },
         });
 
+        const responseTime = Date.now() - startTime;
         const aiSuggestions = JSON.parse(completion.choices[0].message.content);
-        console.log(`[${sessionId}] 🔬🎯 Method 2 AI suggestions generated:`, aiSuggestions);
+        console.log(`[${sessionId}] 🔬🎯 Method 2 AI suggestions generated in ${responseTime}ms:`, aiSuggestions);
+
+        // Send debug info - response
+        session.ws.send(JSON.stringify({
+            type: 'DEBUG_INFO',
+            debugType: 'response',
+            debugData: {
+                suggestions: aiSuggestions,
+                responseTime: responseTime,
+                timestamp: new Date().toISOString()
+            }
+        }));
 
         // Enhanced suggestion object with Method 2 data
         const enhancedSuggestion = {
@@ -2718,22 +2811,35 @@ UWAGI:
         console.log(`[${sessionId}] 🔬📤 Method 2 AI suggestions sent to frontend`);
         
     } catch (error) {
-        console.error(`[${sessionId}] 🔬❌ Error generating Method 2 AI suggestions:`, error);
+        const errorTime = Date.now() - startTime;
+        console.error(`[${sessionId}] 🔬❌ Error generating Method 2 AI suggestions after ${errorTime}ms:`, error);
+        
+        // Send debug info - error
+        session.ws.send(JSON.stringify({
+            type: 'DEBUG_INFO',
+            debugType: 'error',
+            debugData: {
+                error: error.message,
+                responseTime: errorTime,
+                timestamp: new Date().toISOString()
+            }
+        }));
         
         // Send fallback suggestions with Method 2 context
         const fallbackSuggestions = {
-            speaker_analysis: newTranscript.speakerRole || "unknown",
-            intent: "Continue conversation",
-            emotion: "neutral",
-            suggestions: [
+            analiza_mowcy: newTranscript.speakerRole || "nieznany",
+            intencja: "Kontynuuj rozmowę",
+            emocje: "neutralne",
+            sugestie: [
                 newTranscript.speakerRole === 'client' ? 
                     "Klient wypowiedział się - przeanalizuj jego potrzeby" : 
                     "Kontynuuj rozmowę zgodnie z technikami sprzedaży",
                 "Zadaj pytania odkrywcze",
                 "Słuchaj aktywnie i dopasuj ofertę"
             ],
-            signals: [],
-            method2_note: "Rozpoznano mówcę z diarization"
+            sygnaly: [],
+            dynamika_rozmowy: "Analiza automatyczna z rozpoznaniem mówców",
+            nastepny_krok: "Dostosuj strategię do wypowiedzi " + (newTranscript.speakerRole === 'client' ? 'klienta' : 'rozmówcy')
         };
         
         session.ws.send(JSON.stringify({
@@ -2743,6 +2849,103 @@ UWAGI:
                 speaker: newTranscript.speaker,
                 speakerRole: newTranscript.speakerRole,
                 method: 2
+            }
+        }));
+    }
+}
+
+// Generate Live AI Suggestions for Method 2 - Optimized for partial transcripts
+async function generateLiveAISuggestionsMethod2(session, partialTranscript) {
+    const sessionId = session.sessionId;
+    const startTime = Date.now();
+    
+    try {
+        console.log(`[${sessionId}] 🔬⚡ Generating LIVE Method 2 AI suggestions for partial: "${partialTranscript.text.substring(0, 30)}..."`);
+        
+        // Shorter, faster context for live suggestions
+        const quickContext = `Jesteś asystentem sprzedażowym AI analizującym rozmowę NA ŻYWO z rozpoznaniem mówców.
+
+KLIENT: ${session.client.name}
+PRODUKT: ${session.product.name}
+
+OBECNY MÓWCA: ${partialTranscript.speakerRole === 'salesperson' ? '🔵 SPRZEDAWCA' : 
+                partialTranscript.speakerRole === 'client' ? '🔴 KLIENT' : '🟡 NIEZNANY'}
+
+WYPOWIEDŹ W TRAKCIE (${partialTranscript.wordsCount} słów): "${partialTranscript.text}"
+
+Odpowiedz SZYBKO w formacie JSON po polsku z natychmiastowymi sugestiami:
+{
+  "analiza_mowcy": "sprzedawca|klient|nieznany",
+  "sugestie": ["2-3 szybkie sugestie"],
+  "sygnaly": ["kluczowe sygnały jeśli wykryto"],
+  "natychmiastowa_akcja": "co zrobić TERAZ"
+}`;
+
+        // Send debug info - live request
+        session.ws.send(JSON.stringify({
+            type: 'DEBUG_INFO',
+            debugType: 'request',
+            debugData: {
+                prompt: `LIVE REQUEST (${partialTranscript.wordsCount} słów): ${partialTranscript.text.substring(0, 100)}...`,
+                context: 'Szybki kontekst live',
+                speaker: partialTranscript.speakerRole,
+                timestamp: new Date().toISOString(),
+                isLive: true
+            }
+        }));
+
+        const completion = await openai.chat.completions.create({
+            model: "gpt-4-turbo",
+            messages: [
+                { role: "system", content: quickContext }
+            ],
+            response_format: { type: "json_object" },
+            max_tokens: 300, // Limit for faster response
+        });
+
+        const responseTime = Date.now() - startTime;
+        const liveAISuggestions = JSON.parse(completion.choices[0].message.content);
+        console.log(`[${sessionId}] 🔬⚡ LIVE Method 2 AI suggestions generated in ${responseTime}ms:`, liveAISuggestions);
+
+        // Send debug info - live response
+        session.ws.send(JSON.stringify({
+            type: 'DEBUG_INFO',
+            debugType: 'response',
+            debugData: {
+                suggestions: liveAISuggestions,
+                responseTime: responseTime,
+                timestamp: new Date().toISOString(),
+                isLive: true
+            }
+        }));
+
+        // Send live AI suggestions to frontend with special indicator
+        session.ws.send(JSON.stringify({
+            type: 'AI_SUGGESTIONS',
+            suggestions: liveAISuggestions,
+            speakerInfo: {
+                speaker: partialTranscript.speaker,
+                speakerRole: partialTranscript.speakerRole,
+                method: 2,
+                isLive: true // Mark as live suggestion
+            }
+        }));
+        
+        console.log(`[${sessionId}] 🔬⚡ LIVE Method 2 AI suggestions sent to frontend`);
+        
+    } catch (error) {
+        const errorTime = Date.now() - startTime;
+        console.error(`[${sessionId}] 🔬⚡❌ Error generating LIVE Method 2 AI suggestions after ${errorTime}ms:`, error);
+        
+        // Send debug info - live error
+        session.ws.send(JSON.stringify({
+            type: 'DEBUG_INFO',
+            debugType: 'error',
+            debugData: {
+                error: 'LIVE: ' + error.message,
+                responseTime: errorTime,
+                timestamp: new Date().toISOString(),
+                isLive: true
             }
         }));
     }
@@ -2812,15 +3015,15 @@ ZAAWANSOWANE WSKAZÓWKI DLA METHOD 2:
 - Ostrzegasz przed mówienie za dużo przez sprzedawcę
 - Sugerujesz aktywne słuchanie i dopasowanie stylu komunikacji
 
-FORMAT ODPOWIEDZI JSON:
+FORMAT ODPOWIEDZI JSON (wszystko po polsku):
 {
-  "speaker_analysis": "salesperson|client|unknown",
-  "intent": "opis intencji wypowiedzi",
-  "emotion": "pozytywne|negatywne|neutralne",
-  "suggestions": ["konkretne sugestie dla sprzedawcy"],
-  "signals": ["sygnały kupna lub oporu"],
-  "conversation_dynamics": "analiza dynamiki rozmowy",
-  "next_action": "konkretna rekomendacja następnego kroku"
+  "analiza_mowcy": "sprzedawca|klient|nieznany",
+  "intencja": "opis intencji wypowiedzi w języku polskim",
+  "emocje": "pozytywne|negatywne|neutralne",
+  "sugestie": ["konkretne sugestie dla sprzedawcy po polsku"],
+  "sygnaly": ["sygnały kupna lub oporu po polsku"],
+  "dynamika_rozmowy": "analiza dynamiki rozmowy po polsku",
+  "nastepny_krok": "konkretna rekomendacja następnego kroku po polsku"
 }`;
 }
 

@@ -112,6 +112,36 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Debug Panel for Method 2 -->
+            <div id="debugPanel" class="debug-panel" style="display: none;">
+                <div class="debug-header">
+                    <h3>🔬 Method 2 - Debug Panel</h3>
+                    <button id="toggleDebug" class="debug-toggle">Ukryj Debug</button>
+                </div>
+                <div class="debug-content">
+                    <div class="debug-section">
+                        <h4>📤 Ostatnie zapytanie do ChatGPT:</h4>
+                        <div id="debugGptRequest" class="debug-text"></div>
+                    </div>
+                    <div class="debug-section">
+                        <h4>📥 Ostatnia odpowiedź ChatGPT:</h4>
+                        <div id="debugGptResponse" class="debug-text"></div>
+                    </div>
+                    <div class="debug-section">
+                        <h4>⏱️ Czas odpowiedzi:</h4>
+                        <div id="debugResponseTime" class="debug-time"></div>
+                    </div>
+                    <div class="debug-section">
+                        <h4>📊 Statystyki:</h4>
+                        <div id="debugStats" class="debug-stats">
+                            <span>Zapytania: <span id="debugRequestCount">0</span></span>
+                            <span>Średni czas: <span id="debugAvgTime">0ms</span></span>
+                            <span>Ostatni status: <span id="debugLastStatus">Oczekuje...</span></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </div>
