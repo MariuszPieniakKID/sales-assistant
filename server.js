@@ -2103,9 +2103,9 @@ async function createAssemblyAISessionMethod2(sessionId, config) {
     
     try {
         const token = await getAssemblyAIToken();
-        // For Universal API with diarization - trying English first to test speaker detection
-        const wsUrl = `wss://api.assemblyai.com/v2/realtime/ws?sample_rate=16000&token=${token}&speaker_labels=true`;
-        console.log(`[${sessionId}] 🔬 Note: Using English for diarization testing - Polish may need separate configuration`);
+        // Universal API with Polish language and diarization enabled
+        const wsUrl = `wss://api.assemblyai.com/v2/realtime/ws?sample_rate=16000&token=${token}&language_code=pl&speaker_labels=true`;
+        console.log(`[${sessionId}] 🇵🇱 Using Polish language with diarization - Method 2 Enhanced`);
         
         console.log(`[${sessionId}] 🔌 Connecting to AssemblyAI Universal WebSocket:`, wsUrl);
         
@@ -2380,7 +2380,7 @@ function setupAssemblyAIHandlerMethod2(sessionId, session) {
         console.log(`[${sessionId}] ⚡ Universal API: Configuration set via URL parameters, not WebSocket message`);
         
         session.assemblyAISession.isConfigured = true;
-        console.log(`[${sessionId}] ⚡ Universal API configured with English language and diarization`);
+        console.log(`[${sessionId}] ⚡ Universal API configured with Polish language and diarization`);
         
         // Process queued audio
         const queue = session.assemblyAISession.audioQueue;
