@@ -763,44 +763,40 @@ function createRealtimeInterface() {
             </div>
         </div>
         
-        <!-- Główna zawartość -->
-        <div class="session-main-content">
-            <!-- Lewy panel - Transkrypcja -->
-            <div class="session-left-panel">
-                <div class="session-transcript-panel">
-                    <h4>
-                        <i class="fas fa-microphone"></i>
-                        Transkrypcja na żywo
-                    </h4>
-                    <div class="session-transcript-content" id="transcriptContent">
-                        <div class="transcript-placeholder">
-                            <i class="fas fa-ear-listen"></i>
-                            <span>Rozpocznij rozmowę - asystent AI nasłuchuje...</span>
-                        </div>
+        <!-- Główna zawartość - nowy układ pionowy -->
+        <div class="session-main-content-vertical">
+            <!-- Górny panel - Sugestie AI (główne, całą szerokość) -->
+            <div class="session-ai-panel-full">
+                <h4>
+                    <i class="fas fa-robot"></i>
+                    Sugestie AI
+                </h4>
+                <div class="session-suggestions-content-full" id="suggestionsContent">
+                    <div class="suggestion-placeholder">
+                        <i class="fas fa-brain"></i>
+                        <span>Sugestie pojawią się podczas rozmowy...</span>
+                        <small>Asystent AI analizuje rozmowę w czasie rzeczywistym</small>
+                    </div>
+                </div>
+                
+                <div class="ai-status-new" id="aiStatus">
+                    <div class="status-indicator-new">
+                        <div class="status-dot active"></div>
+                        <span>AI Assistant aktywny</span>
                     </div>
                 </div>
             </div>
             
-            <!-- Prawy panel - Sugestie AI (główne) -->
-            <div class="session-right-panel">
-                <div class="session-ai-panel">
-                    <h4>
-                        <i class="fas fa-robot"></i>
-                        Sugestie AI
-                    </h4>
-                    <div class="session-suggestions-content" id="suggestionsContent">
-                        <div class="suggestion-placeholder">
-                            <i class="fas fa-brain"></i>
-                            <span>Sugestie pojawią się podczas rozmowy...</span>
-                            <small>Asystent AI analizuje rozmowę w czasie rzeczywistym</small>
-                        </div>
-                    </div>
-                    
-                    <div class="ai-status-new" id="aiStatus">
-                        <div class="status-indicator-new">
-                            <div class="status-dot active"></div>
-                            <span>AI Assistant aktywny</span>
-                        </div>
+            <!-- Dolny panel - Transkrypcja -->
+            <div class="session-transcript-panel-bottom">
+                <h4>
+                    <i class="fas fa-microphone"></i>
+                    Transkrypcja na żywo
+                </h4>
+                <div class="session-transcript-content-bottom" id="transcriptContent">
+                    <div class="transcript-placeholder">
+                        <i class="fas fa-ear-listen"></i>
+                        <span>Rozpocznij rozmowę - asystent AI nasłuchuje...</span>
                     </div>
                 </div>
             </div>
