@@ -220,114 +220,7 @@
     text-shadow: 0 0 1px #000000 !important; /* CIEŃ TEKSTU dla jeszcze większej czytelności */
 }
 
-/* Panel debug w głównym interfejsie - zastąpił transkrypcję */
-.session-debug-panel-main {
-    flex: 1.5; /* Zajmuje miejsce transkrypcji */
-    display: flex;
-    flex-direction: column;
-    background: rgba(15, 15, 15, 0.95); /* Ciemne tło jak debug panel */
-    border-top: 3px solid #fbbf24; /* Żółty border */
-    padding: 0;
-    overflow: hidden;
-    min-height: 250px;
-}
-
-/* Style dla debug panelu w głównym interfejsie */
-.session-debug-panel-main .debug-header {
-    background: #fbbf24;
-    color: #000;
-    padding: 12px 20px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-shrink: 0;
-    border-bottom: 2px solid #fbbf24;
-}
-
-.session-debug-panel-main .debug-header h3 {
-    margin: 0;
-    font-size: 16px;
-    font-weight: bold;
-    color: #000;
-}
-
-.session-debug-panel-main .debug-toggle {
-    background: rgba(0, 0, 0, 0.2);
-    border: none;
-    color: #000;
-    padding: 6px 12px;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 12px;
-    font-weight: bold;
-}
-
-.session-debug-panel-main .debug-content {
-    flex: 1;
-    background: rgba(15, 15, 15, 0.95);
-    padding: 16px 20px;
-    overflow-y: auto;
-    color: #e5e7eb;
-}
-
-/* Style dla sekcji debug w głównym panelu */
-.session-debug-panel-main .debug-section {
-    margin-bottom: 20px;
-    border-bottom: 1px solid rgba(251, 191, 36, 0.3);
-    padding-bottom: 15px;
-}
-
-.session-debug-panel-main .debug-section:last-child {
-    border-bottom: none;
-    margin-bottom: 0;
-}
-
-.session-debug-panel-main .debug-section h4 {
-    color: #fbbf24;
-    font-size: 14px;
-    margin: 0 0 10px 0;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.session-debug-panel-main .debug-text {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(251, 191, 36, 0.2);
-    border-radius: 6px;
-    padding: 12px;
-    font-size: 12px;
-    line-height: 1.4;
-    color: #e5e7eb;
-    white-space: pre-wrap;
-    word-wrap: break-word;
-    max-height: 150px;
-    overflow-y: auto;
-    font-family: 'Courier New', monospace;
-}
-
-.session-debug-panel-main .debug-time {
-    color: #10b981;
-    font-size: 14px;
-    font-weight: bold;
-    font-family: 'Courier New', monospace;
-}
-
-.session-debug-panel-main .debug-stats {
-    display: flex;
-    gap: 20px;
-    flex-wrap: wrap;
-    font-size: 13px;
-}
-
-.session-debug-panel-main .debug-stats span {
-    color: #9ca3af;
-}
-
-.session-debug-panel-main .debug-stats span span {
-    color: #fbbf24;
-    font-weight: bold;
-}
+/* Debug panel styles removed for cleaner interface */
 
 .session-transcript-content-bottom::-webkit-scrollbar {
     width: 8px;
@@ -372,26 +265,7 @@
     line-height: 1.5;
 }
 
-/* AI Status - pozycjonowany względem kontenera */
-.ai-status-new {
-    position: absolute;
-    top: 12px;
-    right: 200px;
-    background: rgba(255, 255, 255, 0.95);
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
-    padding: 6px 12px;
-    backdrop-filter: blur(10px);
-    z-index: 10;
-}
-
-.status-indicator-new {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 12px;
-    color: #374151;
-}
+/* AI Status removed for cleaner interface */
 
 /* Placeholder style */
 .suggestion-placeholder,
@@ -516,10 +390,7 @@
         font-size: 13px;
     }
     
-    .ai-status-new {
-        right: 16px;
-        top: 10px;
-    }
+    /* AI Status removed for cleaner interface */
 }
 
 /* Responsywność dla telefonów */
@@ -609,16 +480,7 @@
         margin-bottom: 10px;
     }
     
-    .ai-status-new {
-        right: 12px;
-        top: 8px;
-        padding: 4px 8px;
-    }
-    
-    .status-indicator-new {
-        font-size: 11px;
-        gap: 4px;
-    }
+        /* AI Status removed for cleaner interface */
 }
 
 .realtime-header {
@@ -851,19 +713,7 @@
     100% { transform: scale(1); }
 }
 
-/* AI Status */
-.ai-status-new {
-    margin-top: 16px;
-    padding-top: 16px;
-    border-top: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.status-indicator-new {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 14px;
-}
+/* AI Status removed for cleaner interface */
 
 .status-dot {
     width: 8px;

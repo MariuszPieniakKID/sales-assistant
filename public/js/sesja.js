@@ -21,12 +21,7 @@ let selectedLanguage = 'pl'; // Default: Polish
 let webSpeechRecognition = null;
 let useWebSpeech = true; // Default: use Web Speech API for Polish
 
-// Debug tracking for Method 2
-let debugStats = {
-    requestCount: 0,
-    totalResponseTime: 0,
-    lastStatus: 'Oczekuje...'
-};
+// Debug tracking removed for cleaner interface
 
 // DOM Elements - będą wyszukiwane dynamicznie bo AJAX może je zmieniać
 
@@ -223,8 +218,8 @@ function handleWebSocketMessage(data) {
             onAISuggestions(data);
             break;
         case 'DEBUG_INFO':
-            console.log('🔬 Frontend: Debug info received:', data);
-            updateDebugInfo(data.debugType, data.debugData);
+            console.log('🔬 Frontend: Debug info received (debug panel removed):', data);
+            // Debug panel removed - no updates needed
             break;
         case 'SESSION_ENDED':
             onSessionEnded(data);
@@ -599,12 +594,7 @@ async function startRealtimeSessionMethod2() {
         // Show real-time interface immediately
         showRealtimeInterface();
         
-        // Show debug panel for Method 2 with slight delay to ensure interface is created
-        setTimeout(() => {
-            console.log('🔬 Delayed debug panel setup...');
-            showDebugPanel();
-            initializeDebugPanel();
-        }, 500);
+        // Debug panel removed for cleaner interface
         
         // Wait for WebSocket connection
         console.log('⏳ Method 2: Waiting for WebSocket connection...');
@@ -819,9 +809,7 @@ function onSessionStarted(data) {
     
     if (data.method === 2) {
         console.log('🔬 Method 2 session started with enhanced diarization');
-        console.log('🔬 Debug: Calling showDebugPanel()...');
-        showDebugPanel();
-        console.log('🔬 Debug: showDebugPanel() called');
+        // Debug panel removed for cleaner interface
     }
     
     const startButton = document.getElementById('startSessionBtn');
@@ -962,48 +950,10 @@ function createRealtimeInterface() {
                 </div>
             </div>
             
-            <!-- Dolny panel - Debug Panel (w miejsce transkrypcji) -->
-            <div class="session-debug-panel-main">
-                <div class="debug-header">
-                    <h3>🔬 Method 2 - Debug Panel</h3>
-                    <button id="toggleDebugMain" class="debug-toggle">Ukryj Debug</button>
-                </div>
-                <div class="debug-content">
-                    <div class="debug-section">
-                        <h4>🧠 System Prompt (Główny kontekst):</h4>
-                        <div id="debugSystemPromptMain" class="debug-text"></div>
-                    </div>
-                    <div class="debug-section">
-                        <h4>📤 Ostatnie zapytanie do ChatGPT:</h4>
-                        <div id="debugGptRequestMain" class="debug-text"></div>
-                    </div>
-                    <div class="debug-section">
-                        <h4>📥 Ostatnia odpowiedź ChatGPT:</h4>
-                        <div id="debugGptResponseMain" class="debug-text"></div>
-                    </div>
-                    <div class="debug-section">
-                        <h4>⏱️ Czas odpowiedzi:</h4>
-                        <div id="debugResponseTimeMain" class="debug-time"></div>
-                    </div>
-                    <div class="debug-section">
-                        <h4>📊 Statystyki:</h4>
-                        <div id="debugStatsMain" class="debug-stats">
-                            <span>Zapytania: <span id="debugRequestCountMain">0</span></span>
-                            <span>Średni czas: <span id="debugAvgTimeMain">0ms</span></span>
-                            <span>Ostatni status: <span id="debugLastStatusMain">Oczekuje...</span></span>
-                        </div>
-                    </div>
-                </div>
-            </div>
         </div>
         
-        <!-- AI Status - floating -->
-        <div class="ai-status-new" id="aiStatus">
-            <div class="status-indicator-new">
-                <div class="status-dot active"></div>
-                <span>AI Assistant aktywny</span>
-            </div>
-        </div>
+        <!-- Hidden transcript content element for Method 2 functionality -->
+        <div id="transcriptContent" style="display: none;"></div>
     `;
     
     // Add event listeners
@@ -1486,13 +1436,7 @@ function onChatGPTReady(data) {
     }, 1000);
     
     // Update debug panel
-    if (data.responseTime) {
-        updateDebugInfo('chatgpt-ready', {
-            responseTime: data.responseTime,
-            timestamp: data.timestamp,
-            message: data.message
-        });
-    }
+    // Debug panel removed - no updates needed
     
     // Show success toast
     showToast('ChatGPT gotowy do analizy rozmowy!', 'success');
@@ -1612,15 +1556,7 @@ async function stopRealtimeSession() {
 function onSessionEnded(data) {
     console.log('🛑 Session ended:', data);
     
-    // Hide debug panel
-    hideDebugPanel();
-    
-    // Reset debug stats
-    debugStats = {
-        requestCount: 0,
-        totalResponseTime: 0,
-        lastStatus: 'Sesja zakończona'
-    };
+    // Debug panel removed - no cleanup needed
     
     const startButton = document.getElementById('startSessionBtn');
     const startButtonMethod2 = document.getElementById('startSessionBtnMethod2');
@@ -2033,133 +1969,6 @@ function setupWebSpeechHandlersMethod2() {
     };
 }
 
-// Initialize debug panel
-function initializeDebugPanel() {
-    const toggleButton = document.getElementById('toggleDebug');
-    const debugPanel = document.getElementById('debugPanel');
-    
-    if (toggleButton && debugPanel) {
-        toggleButton.addEventListener('click', () => {
-            const isVisible = debugPanel.style.display !== 'none';
-            debugPanel.style.display = isVisible ? 'none' : 'block';
-            toggleButton.textContent = isVisible ? 'Pokaż Debug' : 'Ukryj Debug';
-        });
-    }
-}
-
-// Update debug info - używamy nowych elementów z głównego panelu
-function updateDebugInfo(type, data) {
-    console.log('🔬 updateDebugInfo called:', type, data);
-    
-    const requestDiv = document.getElementById('debugGptRequestMain');
-    const responseDiv = document.getElementById('debugGptResponseMain');
-    const timeDiv = document.getElementById('debugResponseTimeMain');
-    const countSpan = document.getElementById('debugRequestCountMain');
-    const avgTimeSpan = document.getElementById('debugAvgTimeMain');
-    const statusSpan = document.getElementById('debugLastStatusMain');
-    
-    console.log('🔬 Debug elements found:', {
-        requestDiv: !!requestDiv,
-        responseDiv: !!responseDiv,
-        timeDiv: !!timeDiv,
-        countSpan: !!countSpan,
-        avgTimeSpan: !!avgTimeSpan,
-        statusSpan: !!statusSpan
-    });
-    
-    if (!requestDiv || !responseDiv) {
-        console.log('🔬 Missing debug elements, returning');
-        return;
-    }
-    
-    switch (type) {
-        case 'request':
-            debugStats.lastStatus = 'Wysyłanie zapytania...';
-            console.log('🔬 Updating request debug info:', data);
-            
-            // Show system prompt - używamy nowego elementu z głównego panelu
-            const systemPromptDiv = document.getElementById('debugSystemPromptMain');
-            if (systemPromptDiv && data.context) {
-                systemPromptDiv.className = 'debug-text';
-                systemPromptDiv.textContent = data.context;
-                console.log('🔬 System prompt updated');
-            }
-            
-            // Show user prompt
-            if (requestDiv) {
-                requestDiv.className = 'debug-text request';
-                requestDiv.textContent = data.prompt || JSON.stringify(data, null, 2);
-                console.log('🔬 Request prompt updated');
-            }
-            if (statusSpan) statusSpan.textContent = debugStats.lastStatus;
-            break;
-            
-        case 'response':
-            debugStats.requestCount++;
-            debugStats.totalResponseTime += data.responseTime || 0;
-            debugStats.lastStatus = 'Otrzymano odpowiedź';
-            
-            if (responseDiv) {
-                responseDiv.className = 'debug-text json';
-                responseDiv.textContent = JSON.stringify(data.suggestions, null, 2);
-            }
-            if (timeDiv) {
-                timeDiv.textContent = `${data.responseTime || 0}ms`;
-            }
-            if (countSpan) countSpan.textContent = debugStats.requestCount;
-            if (avgTimeSpan) {
-                const avgTime = Math.round(debugStats.totalResponseTime / debugStats.requestCount);
-                avgTimeSpan.textContent = `${avgTime}ms`;
-            }
-            if (statusSpan) statusSpan.textContent = debugStats.lastStatus;
-            
-            // Animate updated sections
-            [responseDiv.parentElement, timeDiv.parentElement].forEach(section => {
-                if (section) {
-                    section.classList.add('updated');
-                    setTimeout(() => section.classList.remove('updated'), 500);
-                }
-            });
-            break;
-            
-        case 'error':
-            debugStats.lastStatus = 'Błąd: ' + (data.error || 'Nieznany błąd');
-            if (responseDiv) {
-                responseDiv.className = 'debug-text error';
-                responseDiv.textContent = debugStats.lastStatus;
-            }
-            if (statusSpan) statusSpan.textContent = debugStats.lastStatus;
-            break;
-    }
-}
-
-// Show debug panel for Method 2
-function showDebugPanel() {
-    console.log('🔬 showDebugPanel() called');
-    const debugPanel = document.getElementById('debugPanel');
-    console.log('🔬 Debug panel element:', !!debugPanel);
-    console.log('🔬 Current session:', currentSession);
-    console.log('🔬 Current session method:', currentSession?.method);
-    
-    if (debugPanel && currentSession?.method === 2) {
-        console.log('🔬 Showing debug panel...');
-        debugPanel.style.display = 'block';
-        debugPanel.classList.add('active');
-        console.log('🔬 Debug panel should be visible now');
-    } else {
-        console.log('🔬 Debug panel NOT shown:', {
-            hasPanel: !!debugPanel,
-            hasSession: !!currentSession,
-            method: currentSession?.method
-        });
-    }
-}
-
-// Hide debug panel
-function hideDebugPanel() {
-    console.log('🔬 Debug panel pozostaje widoczny - nie ukrywamy głównego panelu');
-    // NIE UKRYWAMY debug panelu - pozostaje zawsze widoczny w głównym interfejsie
-    // Oryginalny floating panel jest już ukryty przez CSS
-}
+// Debug panel functions removed for cleaner interface
 
 console.log('✅ Real-time AI Assistant loaded successfully'); 
