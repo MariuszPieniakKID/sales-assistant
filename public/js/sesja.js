@@ -572,6 +572,9 @@ async function startRealtimeSessionMethod2() {
         
         console.log('🔍 Method 2: Session object created:', currentSession);
         
+        // Show real-time interface immediately
+        showRealtimeInterface();
+        
         // Show debug panel for Method 2
         showDebugPanel();
         initializeDebugPanel();
@@ -774,9 +777,9 @@ function onSessionStarted(data) {
         showDebugPanel();
     }
     
-    const startButton = document.querySelector('.start-session-btn');
-    const startButtonMethod2 = document.querySelector('.start-session-btn-method2');
-    const stopButton = document.querySelector('.stop-session-btn');
+    const startButton = document.getElementById('startSessionBtn');
+    const startButtonMethod2 = document.getElementById('startSessionBtnMethod2');
+    const stopButton = document.getElementById('stopSessionBtn');
     
     if (startButton) {
         startButton.disabled = true;
@@ -797,6 +800,9 @@ function onSessionStarted(data) {
     const methodLabel = data.method === 2 ? ' (Method 2 - Enhanced Diarization)' : '';
     showToast(`Sesja Real-time AI Assistant${methodLabel} rozpoczęta!`, 'success');
     isRecording = true;
+    
+    // Start session timer
+    startSessionTimer();
     
     // Start audio recording
     if (audioStream) {
@@ -1332,18 +1338,18 @@ function onSessionEnded(data) {
         lastStatus: 'Sesja zakończona'
     };
     
-    const startButton = document.querySelector('.start-session-btn');
-    const startButtonMethod2 = document.querySelector('.start-session-btn-method2');
-    const stopButton = document.querySelector('.stop-session-btn');
+    const startButton = document.getElementById('startSessionBtn');
+    const startButtonMethod2 = document.getElementById('startSessionBtnMethod2');
+    const stopButton = document.getElementById('stopSessionBtn');
     
     if (startButton) {
         startButton.disabled = false;
-        startButton.textContent = 'Rozpocznij sesję (Method 1)';
+        startButton.textContent = 'Rozpocznij nagrywanie (Metoda 1)';
     }
     
     if (startButtonMethod2) {
         startButtonMethod2.disabled = false;
-        startButtonMethod2.textContent = 'Rozpocznij sesję (Method 2)';
+        startButtonMethod2.textContent = 'Rozpocznij z diarization (Metoda 2)';
     }
     
     if (stopButton) {
@@ -1381,6 +1387,23 @@ function onSessionEnded(data) {
                 <p>Sugestie AI pojawią się tutaj...</p>
             </div>
         `;
+    }
+    
+    // Remove real-time interface and show setup form
+    const realtimeInterface = document.getElementById('realtimeInterface');
+    if (realtimeInterface) {
+        realtimeInterface.remove();
+    }
+    
+    // Show setup form and recent sessions again
+    const setupCard = document.querySelector('.setup-card');
+    const recentSessions = document.querySelector('.recent-sessions');
+    
+    if (setupCard) {
+        setupCard.style.display = 'block';
+    }
+    if (recentSessions) {
+        recentSessions.style.display = 'block';
     }
 }
 
