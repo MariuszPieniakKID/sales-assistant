@@ -140,12 +140,12 @@
 
 .session-suggestions-content-full {
     flex: 1;
-    background: #ffffff;
+    background: #f8fafc; /* Zmieniono z białego na jasno szary */
     padding: 20px; /* Zmniejszone z 24px na 20px */
     overflow-y: auto;
     line-height: 1.7; /* Zmniejszone z 1.8 na 1.7 */
-    font-size: 15px; /* Zmniejszone z 16px na 15px */
-    color: #1f2937;
+    font-size: 16px; /* Zwiększono z 15px na 16px dla lepszej czytelności */
+    color: #111827; /* Ciemniejszy tekst dla lepszego kontrastu */
     border: none;
     margin: 0;
 }
@@ -169,13 +169,14 @@
 
 /* Sugestie - bardziej kompaktowe */
 .suggestion-item-new {
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    border-left: 4px solid #667eea;
-    border-radius: 8px;
-    padding: 14px; /* Zmniejszone z 16px na 14px */
-    margin-bottom: 14px; /* Zmniejszone z 16px na 14px */
+    background: #ffffff; /* Zmieniono na białe tło dla lepszego kontrastu */
+    border: 2px solid #e2e8f0; /* Grubszy border dla lepszej widoczności */
+    border-left: 5px solid #667eea; /* Grubszy lewy border */
+    border-radius: 10px; /* Bardziej zaokrąglone rogi */
+    padding: 18px; /* Zwiększono padding dla lepszej czytelności */
+    margin-bottom: 16px; /* Zwiększono margines */
     transition: all 0.2s;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); /* Dodano delikatny cień */
 }
 
 .suggestion-item-new:hover {
@@ -206,21 +207,27 @@
 }
 
 .suggestion-item-new .suggestion-text {
-    font-size: 14px; /* Zmniejszone z 15px na 14px */
-    line-height: 1.5; /* Zmniejszone z 1.6 na 1.5 */
-    color: #374151;
+    font-size: 15px; /* Zwiększono z 14px na 15px dla lepszej czytelności */
+    line-height: 1.6; /* Zwiększono z 1.5 na 1.6 dla lepszej czytelności */
+    color: #1f2937; /* Ciemniejszy tekst dla lepszego kontrastu */
+    font-weight: 500; /* Dodano średnią grubość czcionki */
 }
 
-/* Panel transkrypcji - zwiększony rozmiar */
+/* Panel transkrypcji - UKRYTY, zastąpiony przez debug panel */
 .session-transcript-panel-bottom {
-    flex: 1.5; /* Zwiększone z 1 na 1.5 */
+    display: none; /* UKRYWAMY panel transkrypcji */
+}
+
+/* Debug panel w miejsce transkrypcji */
+.session-debug-panel-bottom {
+    flex: 1.5; /* Zajmuje miejsce transkrypcji */
     display: flex;
     flex-direction: column;
-    background: #f8fafc;
-    border-top: 1px solid #e2e8f0;
+    background: #1e293b; /* Ciemne tło dla debug panelu */
+    border-top: 3px solid #667eea;
     padding: 0;
     overflow: hidden;
-    min-height: 250px; /* Zwiększone minimum */
+    min-height: 250px;
 }
 
 .session-transcript-panel-bottom h4 {
@@ -870,6 +877,42 @@
     font-family: 'Courier New', monospace;
     max-height: 600px;
     overflow-y: auto;
+    display: block; /* ZAWSZE WIDOCZNY dla Method 2 */
+}
+
+/* Debug panel w głównym interfejsie - pełny rozmiar */
+.session-debug-panel-bottom .debug-panel {
+    background: #1e293b;
+    border: none;
+    margin: 0;
+    padding: 0;
+    max-height: none;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    border-radius: 0;
+}
+
+.session-debug-panel-bottom h4 {
+    font-size: 16px;
+    font-weight: 600;
+    color: #fbbf24;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    background: #1e293b;
+    padding: 16px 20px;
+    border-bottom: 2px solid #fbbf24;
+}
+
+.session-debug-panel-bottom .debug-content {
+    flex: 1;
+    background: #1e293b;
+    padding: 16px 20px;
+    overflow-y: auto;
+    margin: 0;
 }
 
 .debug-header {

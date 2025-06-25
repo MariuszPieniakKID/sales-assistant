@@ -958,16 +958,42 @@ function createRealtimeInterface() {
                 </div>
             </div>
             
-            <!-- Dolny panel - Transkrypcja (kompaktowa) -->
-            <div class="session-transcript-panel-bottom">
+            <!-- Dolny panel - Debug Panel (zamiast transkrypcji) -->
+            <div class="session-debug-panel-bottom">
                 <h4>
-                    <i class="fas fa-microphone"></i>
-                    Transkrypcja na żywo
+                    <i class="fas fa-bug"></i>
+                    🔬 Debug Panel - OpenAI Live Monitor
                 </h4>
-                <div class="session-transcript-content-bottom" id="transcriptContent">
-                    <div class="transcript-placeholder">
-                        <i class="fas fa-ear-listen"></i>
-                        <span>Rozpocznij rozmowę - asystent AI nasłuchuje...</span>
+                <div class="debug-panel" id="debugPanel">
+                    <div class="debug-content" id="debugContent">
+                        <!-- System Prompt Section -->
+                        <div class="debug-section">
+                            <h4><i class="fas fa-cog"></i> System Prompt (ChatGPT Context)</h4>
+                            <div class="debug-text" id="debugSystemPrompt">Oczekiwanie na pierwszy prompt...</div>
+                        </div>
+                        
+                        <!-- Request Section -->
+                        <div class="debug-section">
+                            <h4><i class="fas fa-arrow-up"></i> Ostatnie żądanie (Request → OpenAI)</h4>
+                            <div class="debug-text request" id="debugGptRequest">Oczekiwanie na pierwsze żądanie...</div>
+                        </div>
+                        
+                        <!-- Response Section -->
+                        <div class="debug-section">
+                            <h4><i class="fas fa-arrow-down"></i> Ostatnia odpowiedź (Response ← OpenAI)</h4>
+                            <div class="debug-text json" id="debugGptResponse">Oczekiwanie na pierwszą odpowiedź...</div>
+                        </div>
+                        
+                        <!-- Timing Section -->
+                        <div class="debug-section">
+                            <h4><i class="fas fa-clock"></i> Timing & Statistics</h4>
+                            <div class="debug-stats">
+                                <span>Ostatni czas odpowiedzi: <span id="debugResponseTime">-</span></span>
+                                <span>Liczba żądań: <span id="debugRequestCount">0</span></span>
+                                <span>Średni czas: <span id="debugAvgTime">-</span></span>
+                                <span>Status: <span id="debugLastStatus">Oczekiwanie...</span></span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
