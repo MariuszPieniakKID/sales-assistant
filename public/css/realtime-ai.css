@@ -140,12 +140,12 @@
 
 .session-suggestions-content-full {
     flex: 1;
-    background: #f8fafc; /* Zmieniono z białego na jasno szary */
-    padding: 20px; /* Zmniejszone z 24px na 20px */
+    background: #ffffff !important; /* BIAŁE TŁO - !important żeby przebić inne style */
+    padding: 20px; 
     overflow-y: auto;
-    line-height: 1.7; /* Zmniejszone z 1.8 na 1.7 */
-    font-size: 16px; /* Zwiększono z 15px na 16px dla lepszej czytelności */
-    color: #111827; /* Ciemniejszy tekst dla lepszego kontrastu */
+    line-height: 1.7;
+    font-size: 16px !important; 
+    color: #000000 !important; /* CZARNY TEKST dla maksymalnej czytelności */
     border: none;
     margin: 0;
 }
@@ -207,27 +207,22 @@
 }
 
 .suggestion-item-new .suggestion-text {
-    font-size: 15px; /* Zwiększono z 14px na 15px dla lepszej czytelności */
-    line-height: 1.6; /* Zwiększono z 1.5 na 1.6 dla lepszej czytelności */
-    color: #1f2937; /* Ciemniejszy tekst dla lepszego kontrastu */
-    font-weight: 500; /* Dodano średnią grubość czcionki */
+    font-size: 16px !important; /* Zwiększono rozmiar - !important żeby przebić inne style */
+    line-height: 1.6 !important; 
+    color: #000000 !important; /* CZARNY TEKST dla maksymalnej czytelności - !important */
+    font-weight: 600 !important; /* Grubsza czcionka dla lepszej czytelności */
 }
 
-/* Panel transkrypcji - UKRYTY, zastąpiony przez debug panel */
+/* Panel transkrypcji - przywrócony */
 .session-transcript-panel-bottom {
-    display: none; /* UKRYWAMY panel transkrypcji */
-}
-
-/* Debug panel w miejsce transkrypcji */
-.session-debug-panel-bottom {
-    flex: 1.5; /* Zajmuje miejsce transkrypcji */
+    flex: 1.5; /* Zwiększone z 1 na 1.5 */
     display: flex;
     flex-direction: column;
-    background: #1e293b; /* Ciemne tło dla debug panelu */
-    border-top: 3px solid #667eea;
+    background: #f8fafc;
+    border-top: 1px solid #e2e8f0;
     padding: 0;
     overflow: hidden;
-    min-height: 250px;
+    min-height: 250px; /* Zwiększone minimum */
 }
 
 .session-transcript-panel-bottom h4 {
@@ -877,43 +872,15 @@
     font-family: 'Courier New', monospace;
     max-height: 600px;
     overflow-y: auto;
-    display: block; /* ZAWSZE WIDOCZNY dla Method 2 */
+    display: block !important; /* ZAWSZE WIDOCZNY dla Method 2 - WAŻNE: !important żeby przebić inline style */
+    position: fixed; /* Pozycjonowanie stałe */
+    top: 100px; /* Od góry */
+    right: 20px; /* Od prawej */
+    width: 500px; /* Stała szerokość */
+    z-index: 1000; /* Na górze wszystkich elementów */
 }
 
-/* Debug panel w głównym interfejsie - pełny rozmiar */
-.session-debug-panel-bottom .debug-panel {
-    background: #1e293b;
-    border: none;
-    margin: 0;
-    padding: 0;
-    max-height: none;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    border-radius: 0;
-}
 
-.session-debug-panel-bottom h4 {
-    font-size: 16px;
-    font-weight: 600;
-    color: #fbbf24;
-    margin: 0;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-shrink: 0;
-    background: #1e293b;
-    padding: 16px 20px;
-    border-bottom: 2px solid #fbbf24;
-}
-
-.session-debug-panel-bottom .debug-content {
-    flex: 1;
-    background: #1e293b;
-    padding: 16px 20px;
-    overflow-y: auto;
-    margin: 0;
-}
 
 .debug-header {
     background: #fbbf24;
