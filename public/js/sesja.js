@@ -703,71 +703,104 @@ function startWebSpeechRecording() {
 
 // Show Real-time Interface
 function showRealtimeInterface() {
-    // Hide setup form
+    console.log('🎬 Showing real-time interface...');
+    
+    // Hide setup form and recent sessions
     const setupCard = document.querySelector('.setup-card');
+    const recentSessions = document.querySelector('.recent-sessions');
+    
     if (setupCard) {
         setupCard.style.display = 'none';
     }
+    if (recentSessions) {
+        recentSessions.style.display = 'none';
+    }
     
-    // Create and show real-time interface
+    // Create and show the real-time interface
+    const container = document.querySelector('.session-content');
     const realtimeInterface = createRealtimeInterface();
-    const container = document.querySelector('.session-container') || document.body;
+    
     container.appendChild(realtimeInterface);
 }
 
 // Create Real-time Interface
 function createRealtimeInterface() {
     const interface = document.createElement('div');
-    interface.className = 'realtime-interface';
+    interface.className = 'realtime-interface-new';
     interface.id = 'realtimeInterface';
     
     const selectedClient = clients.find(c => c.id == currentSession.clientId);
     const selectedProduct = products.find(p => p.id == currentSession.productId);
     
     interface.innerHTML = `
-        <div class="realtime-header">
-            <div class="session-info">
-                <h3>🤖 Asystent AI - Sesja na żywo</h3>
-                <div class="session-details">
-                    <span><strong>Klient:</strong> ${selectedClient ? selectedClient.name : 'Unknown'}</span>
-                    <span><strong>Produkt:</strong> ${selectedProduct ? selectedProduct.name : 'Unknown'}</span>
-                    <span><strong>Czas:</strong> <span id="sessionTimer">00:00:00</span></span>
+        <!-- Nagłówek sesji -->
+        <div class="session-header-new">
+            <div class="session-info-new">
+                <h3>
+                    <i class="fas fa-microphone-lines"></i>
+                    Sesja na żywo: ${selectedClient ? selectedClient.name : 'Unknown'} - ${selectedProduct ? selectedProduct.name : 'Unknown'}
+                </h3>
+                <div class="session-meta">
+                    <span class="session-time">
+                        <i class="fas fa-clock"></i>
+                        <span id="sessionTimer">00:00:00</span>
+                    </span>
+                    <span class="session-status">
+                        <div class="status-dot-live"></div>
+                        Na żywo
+                    </span>
                 </div>
             </div>
-            <div class="session-controls">
-                <button id="pauseBtn" class="btn btn-warning">
-                    <i class="fas fa-pause"></i> Wstrzymaj
+            <div class="session-controls-new">
+                <button id="pauseBtn" class="btn-session btn-warning">
+                    <i class="fas fa-pause"></i>
+                    Wstrzymaj
                 </button>
-                <button id="stopBtn" class="btn btn-danger">
-                    <i class="fas fa-stop"></i> Zakończ
+                <button id="stopBtn" class="btn-session btn-danger">
+                    <i class="fas fa-stop"></i>
+                    Zakończ
                 </button>
             </div>
         </div>
         
-        <div class="realtime-content">
-            <div class="transcript-panel">
-                <h4><i class="fas fa-microphone"></i> Transkrypcja na żywo</h4>
-                <div class="transcript-content" id="transcriptContent">
-                    <div class="transcript-placeholder">
-                        <i class="fas fa-ear-listen"></i>
-                        <span>Rozpocznij rozmowę - asystent AI nasłuchuje...</span>
+        <!-- Główna zawartość -->
+        <div class="session-main-content">
+            <!-- Lewy panel - Transkrypcja -->
+            <div class="session-left-panel">
+                <div class="session-transcript-panel">
+                    <h4>
+                        <i class="fas fa-microphone"></i>
+                        Transkrypcja na żywo
+                    </h4>
+                    <div class="session-transcript-content" id="transcriptContent">
+                        <div class="transcript-placeholder">
+                            <i class="fas fa-ear-listen"></i>
+                            <span>Rozpocznij rozmowę - asystent AI nasłuchuje...</span>
+                        </div>
                     </div>
                 </div>
             </div>
             
-            <div class="suggestions-panel">
-                <h4><i class="fas fa-brain"></i> Sugestie AI</h4>
-                <div class="suggestions-content" id="suggestionsContent">
-                    <div class="suggestion-placeholder">
+            <!-- Prawy panel - Sugestie AI (główne) -->
+            <div class="session-right-panel">
+                <div class="session-ai-panel">
+                    <h4>
                         <i class="fas fa-robot"></i>
-                        <span>Sugestie pojawią się podczas rozmowy...</span>
+                        Sugestie AI
+                    </h4>
+                    <div class="session-suggestions-content" id="suggestionsContent">
+                        <div class="suggestion-placeholder">
+                            <i class="fas fa-brain"></i>
+                            <span>Sugestie pojawią się podczas rozmowy...</span>
+                            <small>Asystent AI analizuje rozmowę w czasie rzeczywistym</small>
+                        </div>
                     </div>
-                </div>
-                
-                <div class="ai-status" id="aiStatus">
-                    <div class="status-indicator">
-                        <div class="status-dot active"></div>
-                        <span>AI Assistant aktywny</span>
+                    
+                    <div class="ai-status-new" id="aiStatus">
+                        <div class="status-indicator-new">
+                            <div class="status-dot active"></div>
+                            <span>AI Assistant aktywny</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -866,20 +899,20 @@ function onFinalTranscript(data) {
     
     // Add final transcript
     const finalElement = document.createElement('div');
-    finalElement.className = 'transcript-entry';
+    finalElement.className = 'transcript-entry-new';
     
     const timestamp = new Date().toLocaleTimeString('pl-PL');
     const sentiment = data.transcript.sentiment || 'neutral';
     const sentimentIcon = sentiment === 'positive' ? '😊' : sentiment === 'negative' ? '😐' : '😌';
     
     finalElement.innerHTML = `
-        <div class="transcript-line final">
-            <div class="transcript-meta">
-                <span class="timestamp">${timestamp}</span>
-                <span class="speaker ${data.transcript.speaker}">[${data.transcript.speaker.toUpperCase()}]</span>
-                <span class="sentiment" title="Sentiment: ${sentiment}">${sentimentIcon}</span>
+        <div class="transcript-line-new final">
+            <div class="transcript-meta-new">
+                <span class="timestamp-new">${timestamp}</span>
+                <span class="speaker-new ${data.transcript.speaker}">[${data.transcript.speaker.toUpperCase()}]</span>
+                <span class="sentiment-new" title="Sentiment: ${sentiment}">${sentimentIcon}</span>
             </div>
-            <div class="transcript-text">
+            <div class="transcript-text-new">
                 ${data.transcript.text}
             </div>
         </div>
@@ -912,76 +945,49 @@ function onAISuggestions(data) {
     // Clear old suggestions
     suggestionsContent.innerHTML = '';
     
-    const suggestions = data.suggestions;
-    
-    // Speaker Analysis
-    const speakerElement = document.createElement('div');
-    speakerElement.className = 'suggestion-item speaker-analysis';
-    speakerElement.innerHTML = `
-        <div class="suggestion-header">
-            <i class="fas fa-user-check"></i>
-            <span>Analiza mówcy</span>
-        </div>
-        <div class="suggestion-content">
-            <strong>Mówi:</strong> ${suggestions.speaker_analysis || 'unknown'}
-        </div>
-    `;
-    suggestionsContent.appendChild(speakerElement);
-    
-    // Intent & Emotion
-    const intentElement = document.createElement('div');
-    intentElement.className = 'suggestion-item intent-analysis';
-    intentElement.innerHTML = `
-        <div class="suggestion-header">
-            <i class="fas fa-brain"></i>
-            <span>Intencje i emocje</span>
-        </div>
-        <div class="suggestion-content">
-            <div><strong>Intencja:</strong> ${suggestions.intent || 'nieznana'}</div>
-            <div><strong>Emocja:</strong> ${suggestions.emotion || 'neutralna'}</div>
-        </div>
-    `;
-    suggestionsContent.appendChild(intentElement);
-    
-    // Suggestions
-    if (suggestions.suggestions && suggestions.suggestions.length > 0) {
-        suggestions.suggestions.forEach((suggestion, index) => {
-            const suggestionElement = document.createElement('div');
-            suggestionElement.className = 'suggestion-item action-suggestion';
-            suggestionElement.innerHTML = `
-                <div class="suggestion-header">
-                    <i class="fas fa-lightbulb"></i>
-                    <span>Sugestia ${index + 1}</span>
-                </div>
-                <div class="suggestion-content">
-                    ${suggestion}
-                </div>
-            `;
-            suggestionsContent.appendChild(suggestionElement);
-        });
-    }
-    
-    // Signals
-    if (suggestions.signals && suggestions.signals.length > 0) {
-        const signalsElement = document.createElement('div');
-        signalsElement.className = 'suggestion-item signals';
-        signalsElement.innerHTML = `
-            <div class="suggestion-header">
-                <i class="fas fa-exclamation-triangle"></i>
-                <span>Sygnały</span>
+    // Add new suggestions with improved styling
+    data.suggestions.forEach((suggestion, index) => {
+        const suggestionElement = document.createElement('div');
+        suggestionElement.className = `suggestion-item-new ${suggestion.type || 'general'}`;
+        
+        const typeIcon = {
+            'speaker-analysis': 'fa-user-tie',
+            'intent-analysis': 'fa-bullseye',
+            'action-suggestion': 'fa-lightbulb',
+            'signals': 'fa-chart-line',
+            'general': 'fa-comment-dots'
+        }[suggestion.type] || 'fa-comment-dots';
+        
+        const typeLabel = {
+            'speaker-analysis': 'Analiza rozmówcy',
+            'intent-analysis': 'Analiza intencji',
+            'action-suggestion': 'Sugestia działania',
+            'signals': 'Sygnały sprzedażowe',
+            'general': 'Ogólna sugestia'
+        }[suggestion.type] || 'Sugestia';
+        
+        suggestionElement.innerHTML = `
+            <div class="suggestion-header-new">
+                <i class="fas ${typeIcon}"></i>
+                <span>${typeLabel}</span>
+                <span class="suggestion-time">${new Date().toLocaleTimeString('pl-PL')}</span>
             </div>
-            <div class="suggestion-content">
-                ${suggestions.signals.map(signal => `<div>• ${signal}</div>`).join('')}
+            <div class="suggestion-content-new">
+                ${suggestion.content}
             </div>
         `;
-        suggestionsContent.appendChild(signalsElement);
-    }
+        
+        suggestionsContent.appendChild(suggestionElement);
+    });
     
-    // Add animation
-    suggestionsContent.classList.add('updated');
+    // Add updated animation
+    suggestionsContent.classList.add('updated-new');
     setTimeout(() => {
-        suggestionsContent.classList.remove('updated');
-    }, 1000);
+        suggestionsContent.classList.remove('updated-new');
+    }, 500);
+    
+    // Auto-scroll to bottom
+    suggestionsContent.scrollTop = suggestionsContent.scrollHeight;
 }
 
 // Pause Session
@@ -1104,10 +1110,15 @@ function onSessionEnded(data) {
         realtimeInterface.remove();
     }
     
-    // Show setup form again
+    // Show setup form and recent sessions again
     const setupCard = document.querySelector('.setup-card');
+    const recentSessions = document.querySelector('.recent-sessions');
+    
     if (setupCard) {
         setupCard.style.display = 'block';
+    }
+    if (recentSessions) {
+        recentSessions.style.display = 'block';
     }
     
     // Reset form
