@@ -210,6 +210,9 @@ function handleWebSocketMessage(data) {
             break;
         case 'AI_SUGGESTIONS':
             console.log('🤖 Frontend: Otrzymano AI suggestions:', data.suggestions);
+            if (data.speakerInfo) {
+                console.log('🔬 Frontend: Method 2 speaker info:', data.speakerInfo);
+            }
             onAISuggestions(data);
             break;
         case 'SESSION_ENDED':
@@ -268,10 +271,16 @@ function setupEventListeners() {
         productSelect.addEventListener('change', validateSessionForm);
     }
     
-    // Start session button
+    // Start session button (Method 1)
     const startBtn = document.getElementById('startSessionBtn');
     if (startBtn) {
         startBtn.addEventListener('click', startRealtimeSession);
+    }
+    
+    // Start session button (Method 2 - with diarization)
+    const startBtnMethod2 = document.getElementById('startSessionBtnMethod2');
+    if (startBtnMethod2) {
+        startBtnMethod2.addEventListener('click', startRealtimeSessionMethod2);
     }
     
     console.log('✅ Event listeners set up successfully');
@@ -385,6 +394,7 @@ function validateSessionForm() {
     const clientSelect = document.getElementById('sessionClient');
     const productSelect = document.getElementById('sessionProduct'); // POPRAWKA: sessionProduct
     const startBtn = document.getElementById('startSessionBtn');
+    const startBtnMethod2 = document.getElementById('startSessionBtnMethod2');
     
     if (!clientSelect || !productSelect || !startBtn) {
         console.error('❌ Elementy formularza nie istnieją podczas walidacji');
@@ -393,13 +403,18 @@ function validateSessionForm() {
     
     const clientSelected = clientSelect.value !== '';
     const productSelected = productSelect.value !== '';
+    const formValid = clientSelected && productSelected;
     
-    startBtn.disabled = !(clientSelected && productSelected);
+    startBtn.disabled = !formValid;
+    if (startBtnMethod2) {
+        startBtnMethod2.disabled = !formValid;
+    }
     
     console.log('🔍 Walidacja formularza:', {
         clientSelected,
         productSelected,
-        buttonEnabled: !startBtn.disabled
+        button1Enabled: !startBtn.disabled,
+        button2Enabled: startBtnMethod2 ? !startBtnMethod2.disabled : 'not found'
     });
 }
 
@@ -490,6 +505,98 @@ async function startRealtimeSession() {
             showToast('Dostęp do mikrofonu został odrzucony. Włącz mikrofon w ustawieniach przeglądarki.', 'error');
         } else {
             showToast('Błąd rozpoczynania sesji: ' + error.message, 'error');
+        }
+    }
+}
+
+// Start Real-time AI Assistant Session with Method 2 (Enhanced Diarization)
+async function startRealtimeSessionMethod2() {
+    console.log('🚀 Starting real-time AI assistant session with Method 2 (Enhanced Diarization)...');
+    
+    // Znajdź elementy na nowo
+    const clientSelect = document.getElementById('sessionClient');
+    const productSelect = document.getElementById('sessionProduct');
+    const notesTextarea = document.getElementById('sessionNotes');
+    
+    if (!clientSelect || !productSelect) {
+        showToast('Elementy formularza nie zostały znalezione', 'error');
+        return;
+    }
+    
+    const clientId = clientSelect.value;
+    const productId = productSelect.value;
+    const notes = notesTextarea ? notesTextarea.value : '';
+    
+    if (!clientId || !productId) {
+        showToast('Proszę wybierz klienta i produkt', 'error');
+        return;
+    }
+    
+    try {
+        console.log('🔍 Method 2: Getting user info...');
+        
+        // Get user info from current session
+        const userResponse = await fetchWithAuth('/api/user');
+        if (!userResponse || !userResponse.ok) {
+            throw new Error('Failed to get user info');
+        }
+        const user = await userResponse.json();
+        
+        console.log('🔍 Method 2: User info received:', user.user.id);
+        
+        // Request microphone access
+        console.log('🔍 Method 2: Requesting microphone access...');
+        audioStream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+                sampleRate: 16000,
+                channelCount: 1,
+                echoCancellation: true,
+                noiseSuppression: true
+            }
+        });
+        
+        console.log('🎤 Method 2: Microphone access granted');
+        
+        // Initialize session object
+        currentSession = {
+            clientId,
+            productId,
+            notes,
+            userId: user.user.id,
+            startTime: new Date(),
+            transcript: '',
+            suggestions: [],
+            method: 2 // Mark as Method 2
+        };
+        
+        console.log('🔍 Method 2: Session object created:', currentSession);
+        
+        // Wait for WebSocket connection
+        console.log('⏳ Method 2: Waiting for WebSocket connection...');
+        await waitForWebSocketConnection();
+        
+        console.log('🔍 Method 2: WebSocket ready, sending START_REALTIME_SESSION_METHOD2...');
+        
+        // Send Method 2 session start message
+        const startMessage = {
+            type: 'START_REALTIME_SESSION_METHOD2',
+            clientId,
+            productId,
+            notes,
+            userId: user.user.id
+        };
+        
+        console.log('📤 Method 2: Sending START_REALTIME_SESSION_METHOD2:', startMessage);
+        websocket.send(JSON.stringify(startMessage));
+        
+        console.log('✅ Method 2: Session start request sent, waiting for response...');
+        
+    } catch (error) {
+        console.error('❌ Method 2: Error starting real-time session:', error);
+        if (error.name === 'NotAllowedError') {
+            showToast('Dostęp do mikrofonu został odrzucony. Włącz mikrofon w ustawieniach przeglądarki.', 'error');
+        } else {
+            showToast('Błąd rozpoczynania sesji Method 2: ' + error.message, 'error');
         }
     }
 }
@@ -890,12 +997,28 @@ function onFinalTranscript(data) {
     const timestamp = new Date().toLocaleTimeString('pl-PL');
     const sentiment = data.transcript.sentiment || 'neutral';
     const sentimentIcon = sentiment === 'positive' ? '😊' : sentiment === 'negative' ? '😐' : '😌';
+    const isMethod2 = data.transcript.method === 2;
+    
+    // Enhanced speaker display for Method 2
+    let speakerDisplay = data.transcript.speaker.toUpperCase();
+    let speakerClass = data.transcript.speaker;
+    
+    if (isMethod2 && data.transcript.speakerRole) {
+        const roleEmoji = data.transcript.speakerRole === 'salesperson' ? '🔵' : 
+                        data.transcript.speakerRole === 'client' ? '🔴' : '🟡';
+        const roleText = data.transcript.speakerRole === 'salesperson' ? 'SPRZEDAWCA' : 
+                       data.transcript.speakerRole === 'client' ? 'KLIENT' : 
+                       data.transcript.speaker || 'NIEZNANY';
+        speakerDisplay = `${roleEmoji} ${roleText}`;
+        speakerClass = data.transcript.speakerRole;
+    }
     
     finalElement.innerHTML = `
-        <div class="transcript-line-new final">
+        <div class="transcript-line-new final ${isMethod2 ? 'method-2' : ''}">
             <div class="transcript-meta-new">
                 <span class="timestamp-new">${timestamp}</span>
-                <span class="speaker-new ${data.transcript.speaker}">[${data.transcript.speaker.toUpperCase()}]</span>
+                <span class="speaker-new ${speakerClass}">[${speakerDisplay}]</span>
+                ${isMethod2 ? '<span class="method-badge" title="Method 2 - Enhanced Diarization">M2</span>' : ''}
                 <span class="sentiment-new" title="Sentiment: ${sentiment}">${sentimentIcon}</span>
             </div>
             <div class="transcript-text-new">
@@ -922,6 +1045,10 @@ function onAISuggestions(data) {
     const suggestionsContent = document.getElementById('suggestionsContent');
     if (!suggestionsContent) return;
     
+    // Check if this is Method 2 with enhanced suggestions
+    const isMethod2 = data.speakerInfo?.method === 2;
+    const suggestions = data.suggestions;
+    
     // Remove placeholder
     const placeholder = suggestionsContent.querySelector('.suggestion-placeholder');
     if (placeholder) {
@@ -931,40 +1058,136 @@ function onAISuggestions(data) {
     // Clear old suggestions
     suggestionsContent.innerHTML = '';
     
-    // Add new suggestions with improved styling
-    data.suggestions.forEach((suggestion, index) => {
-        const suggestionElement = document.createElement('div');
-        suggestionElement.className = `suggestion-item-new ${suggestion.type || 'general'}`;
-        
-        const typeIcon = {
-            'speaker-analysis': 'fa-user-tie',
-            'intent-analysis': 'fa-bullseye',
-            'action-suggestion': 'fa-lightbulb',
-            'signals': 'fa-chart-line',
-            'general': 'fa-comment-dots'
-        }[suggestion.type] || 'fa-comment-dots';
-        
-        const typeLabel = {
-            'speaker-analysis': 'Analiza rozmówcy',
-            'intent-analysis': 'Analiza intencji',
-            'action-suggestion': 'Sugestia działania',
-            'signals': 'Sygnały sprzedażowe',
-            'general': 'Ogólna sugestia'
-        }[suggestion.type] || 'Sugestia';
-        
-        suggestionElement.innerHTML = `
-            <div class="suggestion-header-new">
-                <i class="fas ${typeIcon}"></i>
-                <span>${typeLabel}</span>
-                <span class="suggestion-time">${new Date().toLocaleTimeString('pl-PL')}</span>
+    // Method 2 enhanced display
+    if (isMethod2 && suggestions) {
+        // Add Method 2 header
+        const method2Header = document.createElement('div');
+        method2Header.className = 'method2-header';
+        method2Header.innerHTML = `
+            <div class="method2-badge">
+                <i class="fas fa-microscope"></i>
+                <span>Method 2 - Enhanced Diarization</span>
             </div>
-            <div class="suggestion-content-new">
-                ${suggestion.content}
+            <div class="speaker-context">
+                Ostatni mówca: ${data.speakerInfo.speakerRole === 'salesperson' ? '🔵 SPRZEDAWCA' : 
+                               data.speakerInfo.speakerRole === 'client' ? '🔴 KLIENT' : 
+                               '🟡 ' + (data.speakerInfo.speaker || 'NIEZNANY')}
             </div>
         `;
+        suggestionsContent.appendChild(method2Header);
         
-        suggestionsContent.appendChild(suggestionElement);
-    });
+        // Enhanced suggestions structure for Method 2
+        const enhancedSuggestions = [
+            { type: 'speaker-analysis', content: suggestions.speaker_analysis, icon: 'fa-user-analytics' },
+            { type: 'intent-analysis', content: suggestions.intent, icon: 'fa-bullseye' },
+            { type: 'emotion-analysis', content: suggestions.emotion, icon: 'fa-heart' },
+            { type: 'conversation-dynamics', content: suggestions.conversation_dynamics, icon: 'fa-exchange-alt' },
+            { type: 'next-action', content: suggestions.next_action, icon: 'fa-arrow-right' }
+        ];
+        
+        enhancedSuggestions.forEach(item => {
+            if (item.content) {
+                const suggestionElement = document.createElement('div');
+                suggestionElement.className = `suggestion-item-method2 ${item.type}`;
+                
+                const typeLabel = {
+                    'speaker-analysis': 'Analiza mówcy',
+                    'intent-analysis': 'Intencja',
+                    'emotion-analysis': 'Emocje',
+                    'conversation-dynamics': 'Dynamika rozmowy',
+                    'next-action': 'Następny krok'
+                }[item.type];
+                
+                suggestionElement.innerHTML = `
+                    <div class="suggestion-header-method2">
+                        <i class="fas ${item.icon}"></i>
+                        <span>${typeLabel}</span>
+                    </div>
+                    <div class="suggestion-content-method2">
+                        ${item.content}
+                    </div>
+                `;
+                
+                suggestionsContent.appendChild(suggestionElement);
+            }
+        });
+        
+        // Add main suggestions if available
+        if (suggestions.suggestions && Array.isArray(suggestions.suggestions)) {
+            const mainSuggestions = document.createElement('div');
+            mainSuggestions.className = 'main-suggestions-method2';
+            mainSuggestions.innerHTML = `
+                <div class="suggestion-header-method2">
+                    <i class="fas fa-lightbulb"></i>
+                    <span>Główne sugestie</span>
+                </div>
+                <div class="suggestion-content-method2">
+                    <ul>
+                        ${suggestions.suggestions.map(s => `<li>${s}</li>`).join('')}
+                    </ul>
+                </div>
+            `;
+            suggestionsContent.appendChild(mainSuggestions);
+        }
+        
+        // Add signals if available
+        if (suggestions.signals && Array.isArray(suggestions.signals) && suggestions.signals.length > 0) {
+            const signalsElement = document.createElement('div');
+            signalsElement.className = 'signals-method2';
+            signalsElement.innerHTML = `
+                <div class="suggestion-header-method2">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Sygnały sprzedażowe</span>
+                </div>
+                <div class="suggestion-content-method2">
+                    <ul>
+                        ${suggestions.signals.map(s => `<li>${s}</li>`).join('')}
+                    </ul>
+                </div>
+            `;
+            suggestionsContent.appendChild(signalsElement);
+        }
+        
+    } else {
+        // Legacy format for Method 1
+        const suggestionsList = Array.isArray(suggestions) ? suggestions : 
+                               suggestions.suggestions ? suggestions.suggestions : 
+                               [suggestions];
+        
+        suggestionsList.forEach((suggestion, index) => {
+            const suggestionElement = document.createElement('div');
+            suggestionElement.className = `suggestion-item-new ${suggestion.type || 'general'}`;
+            
+            const typeIcon = {
+                'speaker-analysis': 'fa-user-tie',
+                'intent-analysis': 'fa-bullseye',
+                'action-suggestion': 'fa-lightbulb',
+                'signals': 'fa-chart-line',
+                'general': 'fa-comment-dots'
+            }[suggestion.type] || 'fa-comment-dots';
+            
+            const typeLabel = {
+                'speaker-analysis': 'Analiza rozmówcy',
+                'intent-analysis': 'Analiza intencji',
+                'action-suggestion': 'Sugestia działania',
+                'signals': 'Sygnały sprzedażowe',
+                'general': 'Ogólna sugestia'
+            }[suggestion.type] || 'Sugestia';
+            
+            suggestionElement.innerHTML = `
+                <div class="suggestion-header-new">
+                    <i class="fas ${typeIcon}"></i>
+                    <span>${typeLabel}</span>
+                    <span class="suggestion-time">${new Date().toLocaleTimeString('pl-PL')}</span>
+                </div>
+                <div class="suggestion-content-new">
+                    ${suggestion.content || suggestion}
+                </div>
+            `;
+            
+            suggestionsContent.appendChild(suggestionElement);
+        });
+    }
     
     // Add updated animation
     suggestionsContent.classList.add('updated-new');

@@ -1803,6 +1803,17 @@ wss.on('connection', (ws, req) => {
                     await startRealtimeSession(ws, data);
                     break;
                     
+                case 'START_REALTIME_SESSION_METHOD2':
+                    console.log('🚀🔬 Processing START_REALTIME_SESSION_METHOD2 (Enhanced Diarization) 🚀🔬');
+                    console.log('🔬 Method 2 Data received:', {
+                        clientId: data.clientId,
+                        productId: data.productId,
+                        userId: data.userId,
+                        notes: data.notes?.substring(0, 50) + '...'
+                    });
+                    await startRealtimeSessionMethod2(ws, data);
+                    break;
+                    
                 case 'AUDIO_CHUNK':
                     // Log every 100th audio chunk to track activity
                     if (!ws.audioChunkCount) ws.audioChunkCount = 0;
@@ -1933,6 +1944,88 @@ async function startRealtimeSession(ws, data) {
     }
 }
 
+// Start Real-time AI Assistant Session with Method 2 (Enhanced Diarization)
+async function startRealtimeSessionMethod2(ws, data) {
+    const { clientId, productId, notes } = data;
+    const sessionId = `method2_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    console.log(`[${sessionId}] [METHOD2-KROK 1] 🔬 Rozpoczynanie sesji Method 2 z Enhanced Diarization.`);
+
+    try {
+        console.log(`[${sessionId}] [METHOD2-KROK 2] 🔬 Zapytanie do bazy o klienta i produkt.`);
+        const [clientResult, productResult] = await Promise.all([
+            safeQuery('SELECT * FROM clients WHERE id = $1', [clientId]),
+            safeQuery('SELECT * FROM products WHERE id = $1', [productId])
+        ]);
+        console.log(`[${sessionId}] [METHOD2-KROK 3] 🔬 Zapytanie do bazy zakończone.`);
+
+        if (clientResult.rows.length === 0 || productResult.rows.length === 0) {
+            console.error(`[${sessionId}] [METHOD2-BŁĄD] Nieprawidłowy ID klienta lub produktu.`);
+            ws.send(JSON.stringify({ type: 'ERROR', message: 'Invalid client or product ID' }));
+            return;
+        }
+        console.log(`[${sessionId}] [METHOD2-KROK 4] 🔬 Klient i produkt zweryfikowani.`);
+
+        const client = clientResult.rows[0];
+        const product = productResult.rows[0];
+
+        console.log(`[${sessionId}] [METHOD2-KROK 5] 🔬 Tworzenie sesji AssemblyAI Universal z diarization.`);
+        
+        // Method 2 uses POST request to create transcription with enhanced settings
+        const transcriptionConfig = {
+            audio_url: null, // We'll use realtime streaming
+            language_code: 'pl', // Polish language
+            speaker_labels: true, // Enable diarization
+            speech_model: 'nano', // Use fast model for realtime
+            auto_highlights: false,
+            // Note: sentiment_analysis is only available for English
+            punctuate: true,
+            format_text: true
+        };
+        
+        console.log(`[${sessionId}] [METHOD2-KROK 6] 🔬 Konfiguracja AssemblyAI Universal:`, transcriptionConfig);
+
+        // For Method 2, we still need WebSocket but with different handling
+        const assemblyAISession = await createAssemblyAISessionMethod2(sessionId, transcriptionConfig);
+        console.log(`[${sessionId}] [METHOD2-KROK 7] 🔬 Obiekt sesji AssemblyAI Method 2 utworzony.`);
+
+        const session = {
+            ws, sessionId, clientId, productId, notes, client, product,
+            method: 2, // Mark as Method 2
+            assemblyAISession: {
+                websocket: assemblyAISession.websocket,
+                isConfigured: false,
+                audioQueue: [],
+                config: transcriptionConfig
+            },
+            conversationHistory: [],
+            aiSuggestions: [],
+            startTime: new Date(),
+        };
+        console.log(`[${sessionId}] [METHOD2-KROK 8] 🔬 Obiekt sesji Method 2 utworzony.`);
+
+        activeSessions.set(sessionId, session);
+        console.log(`[${sessionId}] [METHOD2-KROK 9] 🔬 Sesja Method 2 zapisana w activeSessions. Liczba aktywnych: ${activeSessions.size}`);
+
+        setupAssemblyAIHandlerMethod2(sessionId, session);
+        console.log(`[${sessionId}] [METHOD2-KROK 10] 🔬 Handler AssemblyAI Method 2 skonfigurowany.`);
+
+        ws.send(JSON.stringify({
+            type: 'SESSION_STARTED',
+            sessionId,
+            method: 2,
+            message: 'Real-time session Method 2 started successfully with enhanced diarization'
+        }));
+        console.log(`[${sessionId}] [METHOD2-KROK 11] 🔬 Wysłano SESSION_STARTED Method 2 do klienta.`);
+
+    } catch (error) {
+        console.error(`[${sessionId}] [METHOD2-BŁĄD KRYTYCZNY] Błąd w startRealtimeSessionMethod2:`, error);
+        ws.send(JSON.stringify({
+            type: 'ERROR',
+            message: 'Failed to start real-time session Method 2: ' + error.message
+        }));
+    }
+}
+
 // Get temporary AssemblyAI token
 async function getAssemblyAIToken() {
     if (!ASSEMBLYAI_API_KEY) {
@@ -2003,6 +2096,47 @@ async function createAssemblyAISession(sessionId) {
     }
 }
 
+// Create AssemblyAI Universal Real-time Session for Method 2 (with enhanced diarization)
+async function createAssemblyAISessionMethod2(sessionId, config) {
+    console.log(`[${sessionId}] 🔬 Creating AssemblyAI Universal session with diarization...`);
+    
+    try {
+        const token = await getAssemblyAIToken();
+        // For Universal API with Polish and diarization, we need different URL params
+        const wsUrl = `wss://api.assemblyai.com/v2/realtime/ws?sample_rate=16000&token=${token}&language_code=pl&speaker_labels=true`;
+        
+        console.log(`[${sessionId}] 🔌 Connecting to AssemblyAI Universal WebSocket:`, wsUrl);
+        
+        const assemblySocket = new WebSocket(wsUrl);
+        
+        return new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+                console.error(`[${sessionId}] ❌ AssemblyAI Universal WebSocket connection timeout`);
+                reject(new Error('AssemblyAI Universal WebSocket connection timeout'));
+            }, 10000);
+            
+            assemblySocket.on('open', () => {
+                console.log(`[${sessionId}] ✅ AssemblyAI Universal WebSocket connected successfully`);
+                clearTimeout(timeout);
+                resolve({
+                    websocket: assemblySocket,
+                    isConfigured: false,
+                    audioQueue: []
+                });
+            });
+            
+            assemblySocket.on('error', (error) => {
+                console.error(`[${sessionId}] ❌ AssemblyAI Universal WebSocket connection error:`, error);
+                clearTimeout(timeout);
+                reject(error);
+            });
+        });
+    } catch (error) {
+        console.error(`[${sessionId}] ❌ Error creating AssemblyAI Universal session:`, error);
+        throw error;
+    }
+}
+
 // NOWE: Process Web Speech API Transcript (for Polish language)
 async function processWebSpeechTranscript(ws, data) {
     const { sessionId, transcript } = data;
@@ -2057,9 +2191,14 @@ async function processAudioChunk(ws, data) {
         const { assemblyAISession } = session;
 
         if (assemblyAISession.isConfigured && assemblyAISession.websocket.readyState === WebSocket.OPEN) {
-            // Send audio data in JSON format as expected by legacy API
+            // Send audio data in JSON format (works for both legacy and Universal API)
             const audioMessage = JSON.stringify({ audio_data: audioData });
             assemblyAISession.websocket.send(audioMessage);
+            
+            // Log Method 2 audio processing
+            if (session.method === 2 && ws.audioChunkCount % 500 === 0) {
+                console.log(`[${sessionId}] 🔬 Method 2 audio processing: chunk ${ws.audioChunkCount}`);
+            }
         } else {
             // Queue audio data if not ready
             console.log(`🎵 Queueing audio chunk for session ${sessionId} (isConfigured: ${assemblyAISession.isConfigured}, state: ${assemblyAISession.websocket.readyState})`);
@@ -2203,6 +2342,131 @@ function setupAssemblyAIHandler(sessionId, session) {
     });
 }
 
+// Setup AssemblyAI Universal Real-time Handler for Method 2 (with enhanced diarization)
+function setupAssemblyAIHandlerMethod2(sessionId, session) {
+    const assemblySocket = session.assemblyAISession.websocket;
+    
+    console.log(`[${sessionId}] 🔬 Setting up AssemblyAI Universal handlers for Method 2...`);
+    console.log(`[${sessionId}] 🔍 WebSocket readyState: ${assemblySocket.readyState} (0=CONNECTING, 1=OPEN, 2=CLOSING, 3=CLOSED)`);
+
+    // Function to send configuration and process queue for Universal API
+    const sendConfigurationAndProcessQueue = () => {
+        console.log(`[${sessionId}] ✅ AssemblyAI Universal WebSocket opened, processing queue...`);
+        
+        // Universal API: Configuration may be sent via WebSocket message
+        session.assemblyAISession.isConfigured = true;
+        
+        console.log(`[${sessionId}] ⚡ Universal API configured with Polish language and diarization`);
+        
+        // Process queued audio
+        const queue = session.assemblyAISession.audioQueue;
+        console.log(`[${sessionId}] 📦 Processing ${queue.length} queued audio chunks...`);
+        
+        while (queue.length > 0) {
+            const audioData = queue.shift();
+            try {
+                const audioMessage = JSON.stringify({ audio_data: audioData });
+                assemblySocket.send(audioMessage);
+            } catch (error) {
+                console.error(`[${sessionId}] ❌ Error sending queued audio:`, error);
+                break;
+            }
+        }
+        
+        console.log(`[${sessionId}] ✅ Audio queue processed for Universal API`);
+    };
+
+    // Check if WebSocket is already open
+    if (assemblySocket.readyState === WebSocket.OPEN) {
+        console.log(`[${sessionId}] 🔄 Universal WebSocket already open, sending configuration immediately`);
+        sendConfigurationAndProcessQueue();
+    }
+
+    assemblySocket.on('open', () => {
+        console.log(`[${sessionId}] 🔗 AssemblyAI Universal WebSocket 'open' event triggered`);
+        sendConfigurationAndProcessQueue();
+    });
+
+    assemblySocket.on('message', async (message) => {
+        try {
+            const parsedMessage = JSON.parse(message);
+            console.log(`[${sessionId}] 📨 AssemblyAI Universal message:`, parsedMessage.message_type || 'unknown', parsedMessage);
+            
+            if (parsedMessage.error) {
+                console.error(`[${sessionId}] ❌ AssemblyAI Universal error:`, parsedMessage.error);
+                session.ws.send(JSON.stringify({
+                    type: 'ASSEMBLYAI_ERROR',
+                    error: parsedMessage.error
+                }));
+                return;
+            }
+
+            // Handle different message types from Universal API
+            switch (parsedMessage.message_type) {
+                case 'SessionBegins':
+                    console.log(`[${sessionId}] 🎬 AssemblyAI Universal session began`);
+                    break;
+                    
+                case 'PartialTranscript':
+                    if (parsedMessage.text && parsedMessage.text.trim()) {
+                        console.log(`[${sessionId}] 📝 Universal Partial transcript:`, parsedMessage.text, 'Words:', parsedMessage.words?.length);
+                        
+                        // Extract speaker info from words if available
+                        let speakerInfo = 'unknown';
+                        if (parsedMessage.words && parsedMessage.words.length > 0) {
+                            // Get speaker from first word or most common speaker
+                            const speakers = parsedMessage.words.map(w => w.speaker).filter(s => s);
+                            speakerInfo = speakers[0] || 'unknown';
+                        }
+                        
+                        session.ws.send(JSON.stringify({
+                            type: 'PARTIAL_TRANSCRIPT',
+                            transcript: {
+                                text: parsedMessage.text,
+                                speaker: speakerInfo,
+                                confidence: parsedMessage.confidence,
+                                method: 2
+                            }
+                        }));
+                    }
+                    break;
+                    
+                case 'FinalTranscript':
+                    if (parsedMessage.text && parsedMessage.text.trim()) {
+                        console.log(`[${sessionId}] ✅ Universal Final transcript:`, parsedMessage.text);
+                        console.log(`[${sessionId}] 🔍 Words with speakers:`, parsedMessage.words);
+                        await processTranscriptMethod2(sessionId, parsedMessage);
+                    }
+                    break;
+                    
+                case 'SessionTerminated':
+                    console.log(`[${sessionId}] 🔚 AssemblyAI Universal session terminated`);
+                    break;
+                    
+                default:
+                    console.log(`[${sessionId}] ❓ Unknown AssemblyAI Universal message type:`, parsedMessage.message_type);
+            }
+        } catch (error) {
+            console.error(`[${sessionId}] ❌ Error parsing AssemblyAI Universal message:`, error, 'Raw message:', message.toString());
+        }
+    });
+
+    assemblySocket.on('close', (code, reason) => {
+        console.log(`[${sessionId}] 🔌 AssemblyAI Universal WebSocket closed. Code: ${code}, Reason: ${String(reason)}`);
+        if (session && session.assemblyAISession) {
+            session.assemblyAISession.isConfigured = false;
+        }
+    });
+
+    assemblySocket.on('error', (error) => {
+        console.error(`[${sessionId}] ❌ AssemblyAI Universal WebSocket error:`, error);
+        session.ws.send(JSON.stringify({
+            type: 'ASSEMBLYAI_ERROR',
+            error: error.message
+        }));
+    });
+}
+
 // Process Transcript and Generate AI Suggestions
 async function processTranscript(sessionId, transcript) {
     const session = activeSessions.get(sessionId);
@@ -2232,6 +2496,97 @@ async function processTranscript(sessionId, transcript) {
 
         // Generate and send AI suggestions
         await generateAISuggestions(session, newTranscript);
+    }
+}
+
+// Process Transcript for Method 2 with Enhanced Diarization
+async function processTranscriptMethod2(sessionId, transcript) {
+    const session = activeSessions.get(sessionId);
+    if (!session) {
+        console.error(`❌ Session not found for processTranscriptMethod2: ${sessionId}`);
+        return;
+    }
+
+    console.log(`[${sessionId}] 🔬 Processing Method 2 transcript with diarization:`, transcript.text);
+    console.log(`[${sessionId}] 🔬 Words data:`, transcript.words?.slice(0, 5)); // Show first 5 words
+
+    if (transcript.text && transcript.message_type === 'FinalTranscript') {
+        // Enhanced speaker detection from words array
+        let speakerInfo = 'unknown';
+        let speakerWords = {};
+        
+        if (transcript.words && transcript.words.length > 0) {
+            // Count words per speaker
+            transcript.words.forEach(word => {
+                if (word.speaker) {
+                    if (!speakerWords[word.speaker]) {
+                        speakerWords[word.speaker] = 0;
+                    }
+                    speakerWords[word.speaker]++;
+                }
+            });
+            
+            // Get dominant speaker for this transcript
+            if (Object.keys(speakerWords).length > 0) {
+                speakerInfo = Object.keys(speakerWords).reduce((a, b) => 
+                    speakerWords[a] > speakerWords[b] ? a : b);
+            }
+            
+            console.log(`[${sessionId}] 🔬 Speaker analysis:`, {
+                speakerWords,
+                dominantSpeaker: speakerInfo,
+                totalWords: transcript.words.length
+            });
+        }
+        
+        // Determine speaker role based on conversation context
+        let speakerRole = speakerInfo;
+        if (speakerInfo !== 'unknown') {
+            // Simple heuristic: if this is the first speaker or alternating pattern
+            const conversationLength = session.conversationHistory.length;
+            if (conversationLength === 0) {
+                speakerRole = 'salesperson'; // First speaker is usually salesperson
+            } else {
+                // Analyze conversation pattern to determine if speaker is salesperson or client
+                const lastSpeaker = session.conversationHistory[conversationLength - 1].speaker;
+                if (lastSpeaker === speakerInfo) {
+                    speakerRole = session.conversationHistory[conversationLength - 1].speakerRole || 'unknown';
+                } else {
+                    // Different speaker - alternate between salesperson and client
+                    const salespersonCount = session.conversationHistory.filter(t => t.speakerRole === 'salesperson').length;
+                    const clientCount = session.conversationHistory.filter(t => t.speakerRole === 'client').length;
+                    speakerRole = salespersonCount <= clientCount ? 'salesperson' : 'client';
+                }
+            }
+        }
+
+        const newTranscript = {
+            speaker: speakerInfo, // Raw speaker ID from AssemblyAI (A, B, C, etc.)
+            speakerRole: speakerRole, // Enhanced role (salesperson, client, unknown)
+            text: transcript.text,
+            timestamp: new Date().toISOString(),
+            confidence: transcript.confidence || 0,
+            wordsCount: transcript.words?.length || 0,
+            method: 2
+        };
+        
+        session.conversationHistory.push(newTranscript);
+        console.log(`[${sessionId}] 📚 Added Method 2 transcript to conversation history. Total: ${session.conversationHistory.length}`);
+        console.log(`[${sessionId}] 🔬 Transcript details:`, {
+            speaker: newTranscript.speaker,
+            speakerRole: newTranscript.speakerRole,
+            text: newTranscript.text.substring(0, 50) + '...',
+            wordsCount: newTranscript.wordsCount
+        });
+
+        // Send final transcript to frontend with enhanced info
+        session.ws.send(JSON.stringify({
+            type: 'FINAL_TRANSCRIPT',
+            transcript: newTranscript
+        }));
+
+        // Generate and send enhanced AI suggestions with speaker context
+        await generateAISuggestionsMethod2(session, newTranscript);
     }
 }
 
@@ -2289,6 +2644,110 @@ async function generateAISuggestions(session, newTranscript) {
     }
 }
 
+// Enhanced AI Suggestions for Method 2 with Speaker Diarization
+async function generateAISuggestionsMethod2(session, newTranscript) {
+    const sessionId = session.sessionId;
+    
+    try {
+        console.log(`[${sessionId}] 🔬🤖 Generating Method 2 AI suggestions for: "${newTranscript.text}"`);
+        console.log(`[${sessionId}] 🔬🤖 Speaker role: ${newTranscript.speakerRole}, Speaker ID: ${newTranscript.speaker}`);
+        
+        const gptContext = createGPTContextMethod2(session.client, session.product, session.notes);
+        
+        // Enhanced conversation history with speaker roles
+        const latestHistory = session.conversationHistory.slice(-5).map(t => {
+            const roleLabel = t.speakerRole === 'salesperson' ? '🔵SPRZEDAWCA' : 
+                            t.speakerRole === 'client' ? '🔴KLIENT' : 
+                            `🟡${t.speaker || 'NIEZNANY'}`;
+            return `[${roleLabel}] ${t.text}`;
+        }).join('\n');
+        
+        // Enhanced prompt with speaker context
+        const prompt = `ANALIZA ROZMOWY SPRZEDAŻOWEJ W CZASIE RZECZYWISTYM - METODA 2 (Enhanced Diarization)
+
+OSTATNIA WYPOWIEDŹ:
+Mówca: ${newTranscript.speakerRole === 'salesperson' ? '🔵 SPRZEDAWCA' : 
+       newTranscript.speakerRole === 'client' ? '🔴 KLIENT' : 
+       '🟡 ' + (newTranscript.speaker || 'NIEZNANY')}
+Tekst: "${newTranscript.text}"
+
+KONTEKST ROZMOWY (ostatnie 5 wypowiedzi):
+${latestHistory}
+
+UWAGI:
+- Rozpoznano ${session.conversationHistory.length} wypowiedzi
+- Obecny mówca: ${newTranscript.speakerRole}
+- Analiza w języku polskim z rozpoznaniem mówców
+- Skoncentruj się na dynamice sprzedaży i interakcji między mówcami`;
+
+        const completion = await openai.chat.completions.create({
+            model: "gpt-4-turbo",
+            messages: [
+                { role: "system", content: gptContext },
+                { role: "user", content: prompt }
+            ],
+            response_format: { type: "json_object" },
+        });
+
+        const aiSuggestions = JSON.parse(completion.choices[0].message.content);
+        console.log(`[${sessionId}] 🔬🎯 Method 2 AI suggestions generated:`, aiSuggestions);
+
+        // Enhanced suggestion object with Method 2 data
+        const enhancedSuggestion = {
+            transcript: newTranscript.text,
+            speaker: newTranscript.speaker,
+            speakerRole: newTranscript.speakerRole,
+            suggestions: aiSuggestions,
+            timestamp: new Date().toISOString(),
+            method: 2
+        };
+
+        session.aiSuggestions.push(enhancedSuggestion);
+
+        // Send AI suggestions to frontend with enhanced info
+        session.ws.send(JSON.stringify({
+            type: 'AI_SUGGESTIONS',
+            suggestions: aiSuggestions,
+            speakerInfo: {
+                speaker: newTranscript.speaker,
+                speakerRole: newTranscript.speakerRole,
+                method: 2
+            }
+        }));
+        
+        console.log(`[${sessionId}] 🔬📤 Method 2 AI suggestions sent to frontend`);
+        
+    } catch (error) {
+        console.error(`[${sessionId}] 🔬❌ Error generating Method 2 AI suggestions:`, error);
+        
+        // Send fallback suggestions with Method 2 context
+        const fallbackSuggestions = {
+            speaker_analysis: newTranscript.speakerRole || "unknown",
+            intent: "Continue conversation",
+            emotion: "neutral",
+            suggestions: [
+                newTranscript.speakerRole === 'client' ? 
+                    "Klient wypowiedział się - przeanalizuj jego potrzeby" : 
+                    "Kontynuuj rozmowę zgodnie z technikami sprzedaży",
+                "Zadaj pytania odkrywcze",
+                "Słuchaj aktywnie i dopasuj ofertę"
+            ],
+            signals: [],
+            method2_note: "Rozpoznano mówcę z diarization"
+        };
+        
+        session.ws.send(JSON.stringify({
+            type: 'AI_SUGGESTIONS',
+            suggestions: fallbackSuggestions,
+            speakerInfo: {
+                speaker: newTranscript.speaker,
+                speakerRole: newTranscript.speakerRole,
+                method: 2
+            }
+        }));
+    }
+}
+
 // Create GPT Context
 function createGPTContext(client, product, notes) {
     return `Jesteś zaawansowanym asystentem sprzedażowym AI słuchającym rozmowy w CZASIE RZECZYWISTYM.
@@ -2317,6 +2776,52 @@ WSKAZÓWKI:
 - Sentiment z AssemblyAI: positive/negative/neutral
 - Dawaj praktyczne, natychmiastowe sugestie
 - Wykrywaj momenty na zamknięcie sprzedaży`;
+}
+
+// Create Enhanced GPT Context for Method 2 with Speaker Diarization
+function createGPTContextMethod2(client, product, notes) {
+    return `Jesteś zaawansowanym asystentem sprzedażowym AI słuchającym rozmowy w CZASIE RZECZYWISTYM z ROZPOZNANIEM MÓWCÓW (Enhanced Diarization).
+
+TWOJA ROZSZERZONA ROLA (Method 2):
+- Analizujesz każdą wypowiedź natychmiastowo Z INFORMACJĄ O MÓWCY
+- Rozpoznajesz kto jest SPRZEDAWCĄ a kto KLIENTEM
+- Śledzisz dynamikę rozmowy między uczestnikami
+- Podpowiadasz sprzedawcy jak reagować na wypowiedzi klienta
+- Wykrywasz wzorce komunikacyjne i emocje obu stron
+- Odpowiadasz w formacie JSON z uwzględnieniem ról mówców
+
+INFORMACJE O KLIENCIE:
+- Nazwa: ${client.name}
+- Opis: ${client.description || 'Brak'}
+- Notatki: ${client.comment || 'Brak'}
+
+INFORMACJE O PRODUKCIE:
+- Nazwa: ${product.name}
+- Opis: ${product.description || 'Brak'}
+- Notatki: ${product.comment || 'Brak'}
+
+NOTATKI SESJI: ${notes || 'Brak'}
+
+ZAAWANSOWANE WSKAZÓWKI DLA METHOD 2:
+- Rozpoznajesz mówców: 🔵SPRZEDAWCA vs 🔴KLIENT
+- Analizujesz reakcje klienta na propozycje sprzedawcy
+- Wykrywasz obiekcje klienta i sugerujesz kontragumenty
+- Monitorujesz tempo rozmowy i zaangażowanie stron
+- Podpowiadasz kiedy sprzedawca ma zadać pytanie zamykające
+- Zauważasz sygnały kupna ze strony klienta
+- Ostrzegasz przed mówienie za dużo przez sprzedawcę
+- Sugerujesz aktywne słuchanie i dopasowanie stylu komunikacji
+
+FORMAT ODPOWIEDZI JSON:
+{
+  "speaker_analysis": "salesperson|client|unknown",
+  "intent": "opis intencji wypowiedzi",
+  "emotion": "pozytywne|negatywne|neutralne",
+  "suggestions": ["konkretne sugestie dla sprzedawcy"],
+  "signals": ["sygnały kupna lub oporu"],
+  "conversation_dynamics": "analiza dynamiki rozmowy",
+  "next_action": "konkretna rekomendacja następnego kroku"
+}`;
 }
 
 // End Real-time Session
@@ -2392,8 +2897,17 @@ async function saveRealtimeSession(session) {
         console.log(`--- DEBUG: aiSuggestions length: ${session.aiSuggestions.length} ---`);
         
         const transcription = session.conversationHistory.length > 0 
-            ? session.conversationHistory.map(t => `[${t.speaker}] ${t.text}`).join('\\n\\n')
-            : 'Sesja Real-time AI Assistant - brak transkrypcji (możliwy problem z mikrofonem lub AssemblyAI)';
+            ? session.conversationHistory.map(t => {
+                if (session.method === 2 && t.speakerRole) {
+                    const roleLabel = t.speakerRole === 'salesperson' ? '🔵SPRZEDAWCA' : 
+                                    t.speakerRole === 'client' ? '🔴KLIENT' : 
+                                    `🟡${t.speaker || 'NIEZNANY'}`;
+                    return `[${roleLabel}] ${t.text}`;
+                } else {
+                    return `[${t.speaker}] ${t.text}`;
+                }
+            }).join('\\n\\n')
+            : `Sesja Real-time AI Assistant${session.method === 2 ? ' Method 2 (Enhanced Diarization)' : ''} - brak transkrypcji (możliwy problem z mikrofonem lub AssemblyAI)`;
         
         // Create AI suggestions summary
         const aiSuggestionsText = session.aiSuggestions.length > 0 
