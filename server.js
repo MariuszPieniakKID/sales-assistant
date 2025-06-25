@@ -2678,13 +2678,19 @@ async function processPartialTranscriptMethod2(sessionId, partialTranscript) {
 
         console.log(`[${sessionId}] 🔬⚡ Live partial transcript - Speaker: ${speakerRole}, Words: ${partialTranscript.wordsCount || partialTranscript.text.split(' ').length}`);
 
-        // Generate live AI suggestions for longer partial transcripts (8+ words)
+        // Generate live AI suggestions for partial transcripts - niższy próg na początku rozmowy
         const wordCount = partialTranscript.wordsCount || partialTranscript.text.split(' ').length;
-        if (wordCount >= 8) {
-            console.log(`[${sessionId}] 🔬⚡ Generating live AI suggestions for partial transcript (${wordCount} words)...`);
+        const conversationLength = session.conversationHistory.length;
+        
+        // Dla pierwszych wypowiedzi w rozmowie - niższy próg (5 słów)
+        // Dla późniejszych wypowiedzi - wyższy próg (8 słów)
+        const wordThreshold = conversationLength < 3 ? 5 : 8;
+        
+        if (wordCount >= wordThreshold) {
+            console.log(`[${sessionId}] 🔬⚡ Generating live AI suggestions for partial transcript (${wordCount} words, threshold: ${wordThreshold})...`);
             await generateLiveAISuggestionsMethod2(session, tempTranscript);
         } else {
-            console.log(`[${sessionId}] 🔬⚡ Partial transcript too short (${wordCount} words), waiting for more content...`);
+            console.log(`[${sessionId}] 🔬⚡ Partial transcript too short (${wordCount} words), waiting for ${wordThreshold} words...`);
         }
         
     } catch (error) {
@@ -3043,18 +3049,21 @@ async function generateLiveAISuggestionsMethod2(session, partialTranscript) {
     try {
         console.log(`[${sessionId}] 🔬⚡ Generating LIVE Method 2 AI suggestions for partial: "${partialTranscript.text.substring(0, 30)}..."`);
         
-        // Shorter, faster context for live suggestions
-        const quickContext = `Jesteś asystentem sprzedażowym AI analizującym rozmowę NA ŻYWO z rozpoznaniem mówców.
-
-KLIENT: ${session.client.name}
-PRODUKT: ${session.product.name}
+        // Użyj conversation history z ChatGPT dla lepszego kontekstu
+        const livePrompt = `ANALIZA NA ŻYWO - WYPOWIEDŹ W TRAKCIE:
 
 OBECNY MÓWCA: ${partialTranscript.speakerRole === 'salesperson' ? '🔵 SPRZEDAWCA' : 
                 partialTranscript.speakerRole === 'client' ? '🔴 KLIENT' : '🟡 NIEZNANY'}
 
-WYPOWIEDŹ W TRAKCIE (${partialTranscript.wordsCount || partialTranscript.text.split(' ').length} słów): "${partialTranscript.text}"
+WYPOWIEDŹ W TRAKCIE (${partialTranscript.wordsCount || partialTranscript.text.split(' ').length} słów): 
+"${partialTranscript.text}"
 
-Odpowiedz SZYBKO w formacie JSON po polsku z natychmiastowymi sugestiami:
+⚡ POTRZEBUJĘ SZYBKICH SUGESTII NA ŻYWO:
+- Co może być intencją tej wypowiedzi?
+- Jakie sygnały wykrywasz?
+- Co sprzedawca powinien przygotować jako odpowiedź?
+
+Odpowiedz SZYBKO w formacie JSON po polsku:
 {
   "analiza_mowcy": "sprzedawca|klient|nieznany",
   "sugestie": ["2-3 szybkie sugestie"],
@@ -3068,25 +3077,45 @@ Odpowiedz SZYBKO w formacie JSON po polsku z natychmiastowymi sugestiami:
             debugType: 'request',
             debugData: {
                 prompt: `LIVE REQUEST (${partialTranscript.wordsCount || partialTranscript.text.split(' ').length} słów): ${partialTranscript.text.substring(0, 100)}...`,
-                context: 'Szybki kontekst live',
+                context: 'ChatGPT Conversation History',
                 speaker: partialTranscript.speakerRole,
                 timestamp: new Date().toISOString(),
-                isLive: true
+                isLive: true,
+                historyLength: session.chatGPTHistory ? session.chatGPTHistory.length : 0
             }
         }));
 
+        // Użyj conversation history zamiast krótkiego kontekstu
+        const messages = [
+            ...session.chatGPTHistory, // Pełna historia z system promptem
+            { role: "user", content: livePrompt }
+        ];
+
+        // Ogranicz historię dla szybkości (system + ostatnie 10 wiadomości)
+        const maxMessages = 11; // system + 10 wiadomości
+        const trimmedMessages = messages.length > maxMessages 
+            ? [messages[0], ...messages.slice(-maxMessages + 1)] // Zachowaj system prompt + ostatnie wiadomości
+            : messages;
+
+        console.log(`[${sessionId}] 🔬⚡ LIVE suggestions using conversation history: ${trimmedMessages.length} messages`);
+
         const completion = await openai.chat.completions.create({
-            model: "gpt-4-turbo",
-            messages: [
-                { role: "system", content: quickContext }
-            ],
+            model: "gpt-4o-mini", // Szybszy model dla live suggestions
+            messages: trimmedMessages,
             response_format: { type: "json_object" },
-            max_tokens: 300, // Limit for faster response
+            max_tokens: 200, // Jeszcze mniej tokenów dla szybkości
         });
 
         const responseTime = Date.now() - startTime;
         const liveAISuggestions = JSON.parse(completion.choices[0].message.content);
+        const assistantMessage = { role: "assistant", content: completion.choices[0].message.content };
+        
+        // Dodaj live prompt i response do conversation history (dla kontekstu następnych sugestii)
+        const userMessage = { role: "user", content: livePrompt };
+        session.chatGPTHistory.push(userMessage, assistantMessage);
+        
         console.log(`[${sessionId}] 🔬⚡ LIVE Method 2 AI suggestions generated in ${responseTime}ms:`, liveAISuggestions);
+        console.log(`[${sessionId}] 🔬⚡💾 LIVE conversation history updated: ${session.chatGPTHistory.length} total messages`);
 
         // Send debug info - live response
         session.ws.send(JSON.stringify({
@@ -3096,7 +3125,8 @@ Odpowiedz SZYBKO w formacie JSON po polsku z natychmiastowymi sugestiami:
                 suggestions: liveAISuggestions,
                 responseTime: responseTime,
                 timestamp: new Date().toISOString(),
-                isLive: true
+                isLive: true,
+                historyLength: session.chatGPTHistory.length
             }
         }));
 
