@@ -1818,6 +1818,16 @@ wss.on('connection', (ws, req) => {
                     await processAudioChunk(ws, data);
                     break;
                     
+                case 'WEB_SPEECH_TRANSCRIPT':
+                    console.log('🇵🇱 Processing WEB_SPEECH_TRANSCRIPT:', {
+                        sessionId: data.sessionId,
+                        text: data.transcript.text,
+                        language: data.transcript.language,
+                        confidence: data.transcript.confidence
+                    });
+                    await processWebSpeechTranscript(ws, data);
+                    break;
+                    
                 case 'END_REALTIME_SESSION':
                     console.log('🛑 Processing END_REALTIME_SESSION:', data.sessionId);
                     await endRealtimeSession(ws, data);
@@ -1990,6 +2000,41 @@ async function createAssemblyAISession(sessionId) {
     } catch (error) {
         console.error(`[${sessionId}] ❌ Error creating AssemblyAI session:`, error);
         throw error;
+    }
+}
+
+// NOWE: Process Web Speech API Transcript (for Polish language)
+async function processWebSpeechTranscript(ws, data) {
+    const { sessionId, transcript } = data;
+    
+    const session = activeSessions.get(sessionId);
+    if (!session) {
+        console.error(`❌ Session not found for processWebSpeechTranscript: ${sessionId}`);
+        return;
+    }
+    
+    try {
+        console.log(`[${sessionId}] 🇵🇱 Processing Web Speech transcript: "${transcript.text}"`);
+        
+        // Create transcript object similar to AssemblyAI format
+        const processedTranscript = {
+            text: transcript.text,
+            message_type: 'FinalTranscript', // Web Speech API provides final transcripts
+            confidence: transcript.confidence || 0.9,
+            language: transcript.language || 'pl'
+        };
+        
+        // Process the transcript (same as AssemblyAI)
+        await processTranscript(sessionId, processedTranscript);
+        
+        console.log(`[${sessionId}] ✅ Web Speech transcript processed successfully`);
+        
+    } catch (error) {
+        console.error(`[${sessionId}] ❌ Error processing Web Speech transcript:`, error);
+        session.ws.send(JSON.stringify({
+            type: 'WEB_SPEECH_ERROR',
+            error: error.message
+        }));
     }
 }
 
@@ -2429,4 +2474,4 @@ server.listen(PORT, '::', async () => {
 });
 
 // Export dla Vercel
-module.exports = server; 
+module.exports = server;

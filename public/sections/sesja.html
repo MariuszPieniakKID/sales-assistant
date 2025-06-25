@@ -18,6 +18,18 @@
                 
                 <div class="setup-form">
                     <div class="form-group">
+                        <label for="sessionLanguage">Język rozpoznawania mowy *</label>
+                        <select id="sessionLanguage" required>
+                            <option value="pl">🇵🇱 Polski (Web Speech API - zalecane)</option>
+                            <option value="en">🇺🇸 Angielski (AssemblyAI)</option>
+                        </select>
+                        <small class="form-help">
+                            Polski: Używa Web Speech API przeglądarki (szybsze, dokładniejsze dla polskiego)<br>
+                            Angielski: Używa AssemblyAI (profesjonalne rozpoznawanie)
+                        </small>
+                    </div>
+                    
+                    <div class="form-group">
                         <label for="sessionClient">Wybierz klienta *</label>
                         <select id="sessionClient" required>
                             <option value="">-- Wybierz klienta --</option>
@@ -193,6 +205,14 @@
 .form-group textarea {
     resize: vertical;
     min-height: 100px;
+}
+
+.form-help {
+    display: block;
+    margin-top: 6px;
+    font-size: 12px;
+    color: #6b7280;
+    line-height: 1.4;
 }
 
 .session-actions {

@@ -1,7 +1,7 @@
 // 🚀 REAL-TIME AI ASSISTANT - AssemblyAI + ChatGPT Integration
-// Nowa wersja z prawdziwym real-time processing
+// Nowa wersja z prawdziwym real-time processing + Web Speech API dla języka polskiego
 
-console.log('🚀 START - Real-time AI Assistant v2.0');
+console.log('🚀 START - Real-time AI Assistant v3.0 - Multi-language');
 
 // Global variables
 let clients = [];
@@ -15,6 +15,11 @@ let sessionStartTime = null;
 let isRecording = false;
 let realtimeTranscript = '';
 let aiSuggestions = [];
+
+// NOWE: Language selection variables
+let selectedLanguage = 'pl'; // Default: Polish
+let webSpeechRecognition = null;
+let useWebSpeech = true; // Default: use Web Speech API for Polish
 
 // DOM Elements - będą wyszukiwane dynamicznie bo AJAX może je zmieniać
 
@@ -37,6 +42,9 @@ async function initRealtimeAssistant() {
     try {
         // Sprawdź czy DOM jest gotowy
         await waitForDOMElements();
+        
+        // NOWE: Initialize Web Speech API
+        initWebSpeechAPI();
         
         // Ładuj dane w odpowiedniej kolejności
         await loadClients();
@@ -221,36 +229,52 @@ function handleWebSocketMessage(data) {
 
 // Setup Event Listeners
 function setupEventListeners() {
-    console.log('🔧 Konfiguracja event listenerów...');
+    console.log('🔧 Setting up event listeners...');
     
-    // Znajdź elementy na nowo (mogą się zmienić przy AJAX)
-    const clientSelect = document.getElementById('sessionClient');
-    const productSelect = document.getElementById('sessionProduct'); // POPRAWKA: sessionProduct
-    const startBtn = document.getElementById('startSessionBtn');
-    
-    // Sprawdź czy elementy istnieją
-    if (!clientSelect || !productSelect || !startBtn) {
-        console.error('❌ Brak wymaganych elementów DOM dla event listenerów');
-        console.log('🔍 Debug - elementy:', {
-            clientSelect: !!clientSelect,
-            productSelect: !!productSelect,
-            startBtn: !!startBtn
+    // NOWE: Language selection handler
+    const languageSelect = document.getElementById('sessionLanguage');
+    if (languageSelect) {
+        languageSelect.addEventListener('change', (e) => {
+            selectedLanguage = e.target.value;
+            useWebSpeech = (selectedLanguage === 'pl' && webSpeechRecognition);
+            
+            console.log('🌐 Language changed:', {
+                selectedLanguage,
+                useWebSpeech,
+                hasWebSpeech: !!webSpeechRecognition
+            });
+            
+            // Update Web Speech API language if needed
+            if (webSpeechRecognition && selectedLanguage === 'pl') {
+                webSpeechRecognition.lang = 'pl-PL';
+            }
+            
+            showToast(`Język zmieniony na: ${selectedLanguage === 'pl' ? '🇵🇱 Polski' : '🇺🇸 Angielski'}`, 'info');
         });
-        return;
+        
+        // Set default language
+        languageSelect.value = selectedLanguage;
     }
     
-    // Wybór klienta i produktu
-    clientSelect.addEventListener('change', validateSessionForm);
-    productSelect.addEventListener('change', validateSessionForm);
+    // Client select change handler
+    const clientSelect = document.getElementById('sessionClient');
+    if (clientSelect) {
+        clientSelect.addEventListener('change', validateSessionForm);
+    }
     
-    // Rozpoczęcie sesji
-    startBtn.addEventListener('click', startRealtimeSession);
+    // Product select change handler  
+    const productSelect = document.getElementById('sessionProduct');
+    if (productSelect) {
+        productSelect.addEventListener('change', validateSessionForm);
+    }
     
-    // Kontrola sesji
-    document.getElementById('pauseSessionBtn')?.addEventListener('click', pauseSession);
-    document.getElementById('stopSessionBtn')?.addEventListener('click', stopRealtimeSession);
+    // Start session button
+    const startBtn = document.getElementById('startSessionBtn');
+    if (startBtn) {
+        startBtn.addEventListener('click', startRealtimeSession);
+    }
     
-    console.log('✅ Event listenery skonfigurowane');
+    console.log('✅ Event listeners set up successfully');
 }
 
 // Load Clients
@@ -641,9 +665,14 @@ function onSessionStarted(data) {
         return;
     }
     
-    // Setup audio recording now that session is confirmed
-    console.log('🎤 Setting up audio recording...');
-    setupAudioRecording();
+    // NOWE: Choose audio recording method based on language
+    if (useWebSpeech && selectedLanguage === 'pl' && webSpeechRecognition) {
+        console.log('🇵🇱 Using Web Speech API for Polish language...');
+        startWebSpeechRecording();
+    } else {
+        console.log('🇺🇸 Using AssemblyAI for English language...');
+        setupAudioRecording();
+    }
     
     // Show real-time interface
     showRealtimeInterface();
@@ -651,7 +680,25 @@ function onSessionStarted(data) {
     // Start session timer
     startSessionTimer();
     
-    showToast('🤖 Asystent AI rozpoczął nasłuchiwanie!', 'success');
+    const languageFlag = selectedLanguage === 'pl' ? '🇵🇱' : '🇺🇸';
+    showToast(`🤖 ${languageFlag} Asystent AI rozpoczął nasłuchiwanie!`, 'success');
+}
+
+// NOWE: Start Web Speech API recording for Polish
+function startWebSpeechRecording() {
+    if (!webSpeechRecognition) {
+        console.error('❌ Web Speech API not available');
+        return;
+    }
+    
+    try {
+        isRecording = true;
+        webSpeechRecognition.start();
+        console.log('🎤🇵🇱 Web Speech API recording started for Polish');
+    } catch (error) {
+        console.error('❌ Error starting Web Speech API:', error);
+        showToast('Błąd uruchamiania rozpoznawania mowy: ' + error.message, 'error');
+    }
 }
 
 // Show Real-time Interface
@@ -984,7 +1031,17 @@ async function stopRealtimeSession() {
         // Stop recording
         isRecording = false;
         
-        // Clean up audio processing
+        // NOWE: Stop Web Speech API if using it
+        if (useWebSpeech && webSpeechRecognition) {
+            try {
+                webSpeechRecognition.stop();
+                console.log('🇵🇱 Web Speech API stopped');
+            } catch (error) {
+                console.error('❌ Error stopping Web Speech API:', error);
+            }
+        }
+        
+        // Clean up audio processing (for AssemblyAI)
         if (currentSession) {
             if (currentSession.audioProcessor) {
                 currentSession.audioProcessor.disconnect();
@@ -1190,6 +1247,114 @@ function showToast(message, type = 'info') {
         toast.classList.remove('show');
         setTimeout(() => toast.remove(), 300);
     }, 4000);
+}
+
+// NOWE: Initialize Web Speech API for Polish language
+function initWebSpeechAPI() {
+    console.log('🇵🇱 Initializing Web Speech API for Polish...');
+    
+    // Check if Web Speech API is supported
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+        console.warn('⚠️ Web Speech API not supported, falling back to AssemblyAI only');
+        useWebSpeech = false;
+        selectedLanguage = 'en';
+        return;
+    }
+    
+    try {
+        // Create Speech Recognition instance
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        webSpeechRecognition = new SpeechRecognition();
+        
+        // Configure for Polish
+        webSpeechRecognition.lang = 'pl-PL';
+        webSpeechRecognition.continuous = true;
+        webSpeechRecognition.interimResults = true;
+        webSpeechRecognition.maxAlternatives = 1;
+        
+        console.log('✅ Web Speech API initialized for Polish language');
+        
+        // Setup event handlers
+        setupWebSpeechHandlers();
+        
+    } catch (error) {
+        console.error('❌ Error initializing Web Speech API:', error);
+        useWebSpeech = false;
+        selectedLanguage = 'en';
+    }
+}
+
+// NOWE: Setup Web Speech API event handlers
+function setupWebSpeechHandlers() {
+    if (!webSpeechRecognition) return;
+    
+    webSpeechRecognition.onstart = () => {
+        console.log('🎤 Web Speech API started listening...');
+    };
+    
+    webSpeechRecognition.onresult = (event) => {
+        console.log('📝 Web Speech API result:', event);
+        
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            const result = event.results[i];
+            const transcript = result[0].transcript;
+            const confidence = result[0].confidence;
+            const isFinal = result.isFinal;
+            
+            console.log(`🇵🇱 ${isFinal ? 'Final' : 'Partial'} transcript (PL):`, transcript);
+            
+            if (isFinal) {
+                // Send final transcript via WebSocket
+                if (websocket && websocket.readyState === WebSocket.OPEN && currentSession?.sessionId) {
+                    websocket.send(JSON.stringify({
+                        type: 'WEB_SPEECH_TRANSCRIPT',
+                        sessionId: currentSession.sessionId,
+                        transcript: {
+                            text: transcript,
+                            confidence: confidence || 0.9,
+                            language: 'pl'
+                        }
+                    }));
+                }
+                
+                // Update UI with final transcript
+                onFinalTranscript({
+                    transcript: {
+                        text: transcript,
+                        speaker: 'user',
+                        confidence: confidence || 0.9
+                    }
+                });
+            } else {
+                // Update UI with partial transcript
+                onPartialTranscript({
+                    transcript: {
+                        text: transcript,
+                        speaker: 'user',
+                        confidence: confidence || 0.9
+                    }
+                });
+            }
+        }
+    };
+    
+    webSpeechRecognition.onerror = (event) => {
+        console.error('❌ Web Speech API error:', event.error);
+        showToast(`Błąd rozpoznawania mowy: ${event.error}`, 'error');
+    };
+    
+    webSpeechRecognition.onend = () => {
+        console.log('🔚 Web Speech API ended');
+        if (isRecording && currentSession?.sessionId) {
+            // Restart if still recording
+            setTimeout(() => {
+                if (isRecording) {
+                    console.log('🔄 Restarting Web Speech API...');
+                    webSpeechRecognition.start();
+                }
+            }, 100);
+        }
+    };
 }
 
 console.log('✅ Real-time AI Assistant loaded successfully'); 
