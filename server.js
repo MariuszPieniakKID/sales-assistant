@@ -2011,6 +2011,7 @@ async function startRealtimeSessionMethod2(ws, data) {
             },
             conversationHistory: [],
             aiSuggestions: [],
+            chatGPTHistory: [], // Nowe pole dla conversation history z ChatGPT
             startTime: new Date(),
         };
         console.log(`[${sessionId}] [METHOD2-KROK 8] 🔬 Obiekt sesji Method 2 utworzony.`);
@@ -2028,6 +2029,11 @@ async function startRealtimeSessionMethod2(ws, data) {
             message: 'Real-time session Method 2 started successfully with enhanced diarization'
         }));
         console.log(`[${sessionId}] [METHOD2-KROK 11] 🔬 Wysłano SESSION_STARTED Method 2 do klienta.`);
+
+        // Inicjalizujemy conversation history z system promptem zaraz po utworzeniu sesji
+        console.log(`[${sessionId}] [METHOD2-KROK 12] 🤖 Inicjalizacja ChatGPT conversation history...`);
+        await initializeChatGPTConversation(session);
+        console.log(`[${sessionId}] [METHOD2-KROK 13] 🤖 ChatGPT conversation history zainicjalizowana - gotowy do rozmowy!`);
 
     } catch (error) {
         console.error(`[${sessionId}] [METHOD2-BŁĄD KRYTYCZNY] Błąd w startRealtimeSessionMethod2:`, error);
@@ -2916,18 +2922,38 @@ UWAGI:
             }
         }));
 
+        // Dodaj nową wypowiedź do conversation history
+        const userMessage = { role: "user", content: prompt };
+        
+        // Używamy conversation history zamiast wysyłania system prompt za każdym razem
+        const messages = [
+            ...session.chatGPTHistory, // Zawiera system prompt + poprzednie rozmowy
+            userMessage
+        ];
+
+        // Ogranicz historię do ostatnich 20 wiadomości (+ system prompt) dla performance
+        const maxMessages = 21; // system + 20 wiadomości
+        const trimmedMessages = messages.length > maxMessages 
+            ? [messages[0], ...messages.slice(-maxMessages + 1)] // Zachowaj system prompt + ostatnie wiadomości
+            : messages;
+
+        console.log(`[${sessionId}] 🔬📊 Using conversation history: ${trimmedMessages.length} messages (system + ${trimmedMessages.length - 1} conversation)`);
+
         const completion = await openai.chat.completions.create({
             model: "gpt-4-turbo",
-            messages: [
-                { role: "system", content: gptContext },
-                { role: "user", content: prompt }
-            ],
+            messages: trimmedMessages,
             response_format: { type: "json_object" },
         });
 
         const responseTime = Date.now() - startTime;
         const aiSuggestions = JSON.parse(completion.choices[0].message.content);
+        const assistantMessage = { role: "assistant", content: completion.choices[0].message.content };
+        
+        // Dodaj user message i assistant response do conversation history
+        session.chatGPTHistory.push(userMessage, assistantMessage);
+        
         console.log(`[${sessionId}] 🔬🎯 Method 2 AI suggestions generated in ${responseTime}ms:`, aiSuggestions);
+        console.log(`[${sessionId}] 🔬💾 Conversation history updated: ${session.chatGPTHistory.length} total messages`);
 
         // Send debug info - response
         session.ws.send(JSON.stringify({
@@ -3332,6 +3358,75 @@ async function saveRealtimeSession(session) {
     } catch (error) {
         console.error('❌ Error saving real-time session:', error);
         // Nie rzucaj błędu - pozwól sesji się zakończyć
+    }
+}
+
+// Initialize ChatGPT Conversation History - wysyła system prompt na początku sesji
+async function initializeChatGPTConversation(session) {
+    const startTime = Date.now();
+    console.log(`[${session.sessionId}] 🤖 Initializing ChatGPT conversation with system prompt...`);
+    
+    try {
+        const systemPrompt = createGPTContextMethod2(session.client, session.product, session.notes);
+        
+        // Inicjalizujemy conversation history z system promptem
+        session.chatGPTHistory = [
+            { role: "system", content: systemPrompt }
+        ];
+        
+        // Wysyłamy pierwszy "testowy" request żeby ChatGPT był gotowy
+        const welcomePrompt = `Sesja sprzedażowa rozpoczęta. Klient: ${session.client.name}, Produkt: ${session.product.name}. 
+        
+Jestem gotowy do analizy rozmowy w czasie rzeczywistym. Oczekuję na pierwsze wypowiedzi z rozpoznaniem mówców.
+
+Odpowiedz krótko że jesteś gotowy do analizy rozmowy sprzedażowej.`;
+
+        const completion = await openai.chat.completions.create({
+            model: "gpt-4o-mini", // Szybszy model dla inicjalizacji
+            messages: [
+                ...session.chatGPTHistory,
+                { role: "user", content: welcomePrompt }
+            ],
+            max_tokens: 100, // Krótka odpowiedź
+            temperature: 0.7
+        });
+
+        const responseTime = Date.now() - startTime;
+        const aiResponse = completion.choices[0].message.content;
+        
+        // Dodajemy do historii
+        session.chatGPTHistory.push(
+            { role: "user", content: welcomePrompt },
+            { role: "assistant", content: aiResponse }
+        );
+        
+        console.log(`[${session.sessionId}] 🤖 ChatGPT initialized in ${responseTime}ms. Response: "${aiResponse.substring(0, 50)}..."`);
+        
+        // Wysyłamy potwierdzenie do frontend
+        session.ws.send(JSON.stringify({
+            type: 'CHATGPT_READY',
+            sessionId: session.sessionId,
+            message: aiResponse,
+            responseTime: responseTime,
+            timestamp: new Date().toISOString()
+        }));
+
+    } catch (error) {
+        console.error(`[${session.sessionId}] ❌ Error initializing ChatGPT conversation:`, error);
+        
+        // Fallback - przynajmniej system prompt
+        const systemPrompt = createGPTContextMethod2(session.client, session.product, session.notes);
+        session.chatGPTHistory = [
+            { role: "system", content: systemPrompt }
+        ];
+        
+        session.ws.send(JSON.stringify({
+            type: 'CHATGPT_READY',
+            sessionId: session.sessionId,
+            message: "ChatGPT gotowy do analizy rozmowy (fallback mode)",
+            error: error.message,
+            timestamp: new Date().toISOString()
+        }));
     }
 }
 

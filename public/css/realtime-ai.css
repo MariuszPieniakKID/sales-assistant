@@ -1181,3 +1181,96 @@
     50% { box-shadow: 0 0 15px rgba(239, 68, 68, 0.6); }
     100% { box-shadow: 0 0 5px rgba(239, 68, 68, 0.3); }
 } 
+
+/* ChatGPT Ready Styles */
+.chatgpt-ready-container {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
+    color: white;
+    box-shadow: 0 6px 24px rgba(16, 185, 129, 0.3);
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    position: relative;
+    overflow: hidden;
+}
+
+.chatgpt-ready-container::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+    animation: readyShimmer 1.5s ease-in-out;
+}
+
+.chatgpt-ready-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    font-size: 16px;
+    font-weight: 700;
+}
+
+.chatgpt-ready-header i {
+    font-size: 20px;
+    margin-right: 10px;
+    color: #fbbf24;
+    animation: brainPulse 2s ease-in-out infinite;
+}
+
+.ready-time {
+    font-size: 12px;
+    opacity: 0.8;
+    font-weight: 400;
+}
+
+.chatgpt-ready-content {
+    font-size: 14px;
+    line-height: 1.5;
+    margin-bottom: 12px;
+    color: white !important;
+    font-weight: 500 !important;
+}
+
+.chatgpt-ready-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+    font-size: 12px;
+}
+
+.chatgpt-ready-footer small {
+    color: #fbbf24;
+    font-weight: 600;
+}
+
+.ready-animation {
+    animation: readySlideIn 0.6s ease-out;
+}
+
+@keyframes readyShimmer {
+    0% { left: -100%; }
+    100% { left: 100%; }
+}
+
+@keyframes brainPulse {
+    0%, 100% { transform: scale(1); color: #fbbf24; }
+    50% { transform: scale(1.1); color: #f59e0b; }
+}
+
+@keyframes readySlideIn {
+    0% {
+        opacity: 0;
+        transform: translateY(-15px) scale(0.98);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}

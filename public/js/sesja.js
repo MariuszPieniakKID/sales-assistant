@@ -232,6 +232,10 @@ function handleWebSocketMessage(data) {
         case 'SESSION_ERROR':
             onSessionError(data);
             break;
+        case 'CHATGPT_READY':
+            console.log('🤖 Frontend: ChatGPT ready:', data.message);
+            onChatGPTReady(data);
+            break;
         case 'ASSEMBLYAI_ERROR':
             console.error('❌ Frontend: AssemblyAI error:', data.error);
             showToast('Błąd AssemblyAI: ' + data.error, 'error');
@@ -1437,6 +1441,61 @@ function onAISuggestions(data) {
     
     // Auto-scroll to bottom
     suggestionsContent.scrollTop = suggestionsContent.scrollHeight;
+}
+
+// ChatGPT Ready Handler
+function onChatGPTReady(data) {
+    console.log('🤖 ChatGPT ready received:', data.message);
+    
+    const suggestionsContent = document.getElementById('suggestionsContent');
+    if (!suggestionsContent) {
+        console.log('🤖 No suggestions content element found');
+        return;
+    }
+    
+    // Remove placeholder if exists
+    const placeholder = suggestionsContent.querySelector('.suggestion-placeholder');
+    if (placeholder) {
+        placeholder.remove();
+    }
+    
+    // Create ChatGPT ready message
+    const readyElement = document.createElement('div');
+    readyElement.className = 'chatgpt-ready-container';
+    readyElement.innerHTML = `
+        <div class="chatgpt-ready-header">
+            <i class="fas fa-brain"></i>
+            <span>ChatGPT - Gotowy do analizy!</span>
+            <span class="ready-time">${new Date().toLocaleTimeString('pl-PL')}</span>
+        </div>
+        <div class="chatgpt-ready-content">
+            ${data.message}
+        </div>
+        <div class="chatgpt-ready-footer">
+            <small>🚀 System prompt załadowany - rozpocznij rozmowę!</small>
+            ${data.responseTime ? `<small>⚡ Inicjalizacja: ${data.responseTime}ms</small>` : ''}
+        </div>
+    `;
+    
+    suggestionsContent.appendChild(readyElement);
+    
+    // Add ready animation
+    readyElement.classList.add('ready-animation');
+    setTimeout(() => {
+        readyElement.classList.remove('ready-animation');
+    }, 1000);
+    
+    // Update debug panel
+    if (data.responseTime) {
+        updateDebugInfo('chatgpt-ready', {
+            responseTime: data.responseTime,
+            timestamp: data.timestamp,
+            message: data.message
+        });
+    }
+    
+    // Show success toast
+    showToast('ChatGPT gotowy do analizy rozmowy!', 'success');
 }
 
 // Pause Session
