@@ -958,16 +958,36 @@ function createRealtimeInterface() {
                 </div>
             </div>
             
-            <!-- Dolny panel - Transkrypcja (kompaktowa) -->
-            <div class="session-transcript-panel-bottom">
-                <h4>
-                    <i class="fas fa-microphone"></i>
-                    Transkrypcja na żywo
-                </h4>
-                <div class="session-transcript-content-bottom" id="transcriptContent">
-                    <div class="transcript-placeholder">
-                        <i class="fas fa-ear-listen"></i>
-                        <span>Rozpocznij rozmowę - asystent AI nasłuchuje...</span>
+            <!-- Dolny panel - Debug Panel (w miejsce transkrypcji) -->
+            <div class="session-debug-panel-main">
+                <div class="debug-header">
+                    <h3>🔬 Method 2 - Debug Panel</h3>
+                    <button id="toggleDebugMain" class="debug-toggle">Ukryj Debug</button>
+                </div>
+                <div class="debug-content">
+                    <div class="debug-section">
+                        <h4>🧠 System Prompt (Główny kontekst):</h4>
+                        <div id="debugSystemPromptMain" class="debug-text"></div>
+                    </div>
+                    <div class="debug-section">
+                        <h4>📤 Ostatnie zapytanie do ChatGPT:</h4>
+                        <div id="debugGptRequestMain" class="debug-text"></div>
+                    </div>
+                    <div class="debug-section">
+                        <h4>📥 Ostatnia odpowiedź ChatGPT:</h4>
+                        <div id="debugGptResponseMain" class="debug-text"></div>
+                    </div>
+                    <div class="debug-section">
+                        <h4>⏱️ Czas odpowiedzi:</h4>
+                        <div id="debugResponseTimeMain" class="debug-time"></div>
+                    </div>
+                    <div class="debug-section">
+                        <h4>📊 Statystyki:</h4>
+                        <div id="debugStatsMain" class="debug-stats">
+                            <span>Zapytania: <span id="debugRequestCountMain">0</span></span>
+                            <span>Średni czas: <span id="debugAvgTimeMain">0ms</span></span>
+                            <span>Ostatni status: <span id="debugLastStatusMain">Oczekuje...</span></span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1968,16 +1988,16 @@ function initializeDebugPanel() {
     }
 }
 
-// Update debug info
+// Update debug info - używamy nowych elementów z głównego panelu
 function updateDebugInfo(type, data) {
     console.log('🔬 updateDebugInfo called:', type, data);
     
-    const requestDiv = document.getElementById('debugGptRequest');
-    const responseDiv = document.getElementById('debugGptResponse');
-    const timeDiv = document.getElementById('debugResponseTime');
-    const countSpan = document.getElementById('debugRequestCount');
-    const avgTimeSpan = document.getElementById('debugAvgTime');
-    const statusSpan = document.getElementById('debugLastStatus');
+    const requestDiv = document.getElementById('debugGptRequestMain');
+    const responseDiv = document.getElementById('debugGptResponseMain');
+    const timeDiv = document.getElementById('debugResponseTimeMain');
+    const countSpan = document.getElementById('debugRequestCountMain');
+    const avgTimeSpan = document.getElementById('debugAvgTimeMain');
+    const statusSpan = document.getElementById('debugLastStatusMain');
     
     console.log('🔬 Debug elements found:', {
         requestDiv: !!requestDiv,
@@ -1998,8 +2018,8 @@ function updateDebugInfo(type, data) {
             debugStats.lastStatus = 'Wysyłanie zapytania...';
             console.log('🔬 Updating request debug info:', data);
             
-            // Show system prompt
-            const systemPromptDiv = document.getElementById('debugSystemPrompt');
+            // Show system prompt - używamy nowego elementu z głównego panelu
+            const systemPromptDiv = document.getElementById('debugSystemPromptMain');
             if (systemPromptDiv && data.context) {
                 systemPromptDiv.className = 'debug-text';
                 systemPromptDiv.textContent = data.context;
@@ -2078,11 +2098,9 @@ function showDebugPanel() {
 
 // Hide debug panel
 function hideDebugPanel() {
-    const debugPanel = document.getElementById('debugPanel');
-    if (debugPanel) {
-        debugPanel.style.display = 'none';
-        debugPanel.classList.remove('active');
-    }
+    console.log('🔬 Debug panel pozostaje widoczny - nie ukrywamy głównego panelu');
+    // NIE UKRYWAMY debug panelu - pozostaje zawsze widoczny w głównym interfejsie
+    // Oryginalny floating panel jest już ukryty przez CSS
 }
 
 console.log('✅ Real-time AI Assistant loaded successfully'); 

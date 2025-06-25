@@ -150,6 +150,12 @@
     margin: 0;
 }
 
+/* WZMOCNIENIE - wszystkie elementy w panelu AI suggestions */
+.session-suggestions-content-full * {
+    color: #000000 !important; /* CZARNY TEKST dla WSZYSTKICH elementów */
+    font-weight: 600 !important; /* GRUBA CZCIONKA dla WSZYSTKICH elementów */
+}
+
 .session-suggestions-content-full::-webkit-scrollbar {
     width: 10px; /* Zmniejszone z 12px na 10px */
 }
@@ -207,48 +213,120 @@
 }
 
 .suggestion-item-new .suggestion-text {
-    font-size: 16px !important; /* Zwiększono rozmiar - !important żeby przebić inne style */
+    font-size: 18px !important; /* WIĘKSZY rozmiar - 18px */
     line-height: 1.6 !important; 
     color: #000000 !important; /* CZARNY TEKST dla maksymalnej czytelności - !important */
-    font-weight: 600 !important; /* Grubsza czcionka dla lepszej czytelności */
+    font-weight: 700 !important; /* BARDZO GRUBA czcionka - 700 */
+    text-shadow: 0 0 1px #000000 !important; /* CIEŃ TEKSTU dla jeszcze większej czytelności */
 }
 
-/* Panel transkrypcji - przywrócony */
-.session-transcript-panel-bottom {
-    flex: 1.5; /* Zwiększone z 1 na 1.5 */
+/* Panel debug w głównym interfejsie - zastąpił transkrypcję */
+.session-debug-panel-main {
+    flex: 1.5; /* Zajmuje miejsce transkrypcji */
     display: flex;
     flex-direction: column;
-    background: #f8fafc;
-    border-top: 1px solid #e2e8f0;
+    background: rgba(15, 15, 15, 0.95); /* Ciemne tło jak debug panel */
+    border-top: 3px solid #fbbf24; /* Żółty border */
     padding: 0;
     overflow: hidden;
-    min-height: 250px; /* Zwiększone minimum */
+    min-height: 250px;
 }
 
-.session-transcript-panel-bottom h4 {
-    font-size: 16px;
-    font-weight: 600;
-    color: #1e293b;
+/* Style dla debug panelu w głównym interfejsie */
+.session-debug-panel-main .debug-header {
+    background: #fbbf24;
+    color: #000;
+    padding: 12px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+    border-bottom: 2px solid #fbbf24;
+}
+
+.session-debug-panel-main .debug-header h3 {
     margin: 0;
+    font-size: 16px;
+    font-weight: bold;
+    color: #000;
+}
+
+.session-debug-panel-main .debug-toggle {
+    background: rgba(0, 0, 0, 0.2);
+    border: none;
+    color: #000;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.session-debug-panel-main .debug-content {
+    flex: 1;
+    background: rgba(15, 15, 15, 0.95);
+    padding: 16px 20px;
+    overflow-y: auto;
+    color: #e5e7eb;
+}
+
+/* Style dla sekcji debug w głównym panelu */
+.session-debug-panel-main .debug-section {
+    margin-bottom: 20px;
+    border-bottom: 1px solid rgba(251, 191, 36, 0.3);
+    padding-bottom: 15px;
+}
+
+.session-debug-panel-main .debug-section:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+.session-debug-panel-main .debug-section h4 {
+    color: #fbbf24;
+    font-size: 14px;
+    margin: 0 0 10px 0;
     display: flex;
     align-items: center;
     gap: 8px;
-    flex-shrink: 0;
-    background: #f1f5f9;
-    padding: 12px 20px; /* Zwiększone z 12px 24px */
-    border-bottom: 1px solid #e2e8f0;
 }
 
-.session-transcript-content-bottom {
-    flex: 1;
-    background: #ffffff;
-    padding: 16px 20px; /* Zwiększone z 16px 24px */
+.session-debug-panel-main .debug-text {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(251, 191, 36, 0.2);
+    border-radius: 6px;
+    padding: 12px;
+    font-size: 12px;
+    line-height: 1.4;
+    color: #e5e7eb;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    max-height: 150px;
     overflow-y: auto;
-    line-height: 1.6;
-    color: #374151;
+    font-family: 'Courier New', monospace;
+}
+
+.session-debug-panel-main .debug-time {
+    color: #10b981;
     font-size: 14px;
-    border: none;
-    margin: 0;
+    font-weight: bold;
+    font-family: 'Courier New', monospace;
+}
+
+.session-debug-panel-main .debug-stats {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    font-size: 13px;
+}
+
+.session-debug-panel-main .debug-stats span {
+    color: #9ca3af;
+}
+
+.session-debug-panel-main .debug-stats span span {
+    color: #fbbf24;
+    font-weight: bold;
 }
 
 .session-transcript-content-bottom::-webkit-scrollbar {
@@ -862,22 +940,9 @@
     }
 }
 
-/* Debug Panel Styles for Method 2 */
+/* Debug Panel Styles for Method 2 - UKRYTY, zastąpiony przez główny panel */
 .debug-panel {
-    background: rgba(15, 15, 15, 0.95);
-    border: 2px solid #fbbf24;
-    border-radius: 12px;
-    margin: 20px 0;
-    padding: 0;
-    font-family: 'Courier New', monospace;
-    max-height: 600px;
-    overflow-y: auto;
-    display: block !important; /* ZAWSZE WIDOCZNY dla Method 2 - WAŻNE: !important żeby przebić inline style */
-    position: fixed; /* Pozycjonowanie stałe */
-    top: 100px; /* Od góry */
-    right: 20px; /* Od prawej */
-    width: 500px; /* Stała szerokość */
-    z-index: 1000; /* Na górze wszystkich elementów */
+    display: none !important; /* UKRYWAMY oryginalny floating panel */
 }
 
 
