@@ -2197,9 +2197,15 @@ async function processAudioChunk(ws, data) {
             const audioMessage = JSON.stringify({ audio_data: audioData });
             assemblyAISession.websocket.send(audioMessage);
             
-            // Log Method 2 audio processing
-            if (session.method === 2 && ws.audioChunkCount % 500 === 0) {
-                console.log(`[${sessionId}] 🔬 Method 2 audio processing: chunk ${ws.audioChunkCount}`);
+            // Enhanced logging for debugging
+            if (session.method === 2) {
+                if (ws.audioChunkCount % 500 === 0) {
+                    console.log(`[${sessionId}] 🔬 Method 2 audio processing: chunk ${ws.audioChunkCount}, WebSocket state: ${assemblyAISession.websocket.readyState}`);
+                }
+            } else {
+                if (ws.audioChunkCount % 1000 === 0) {
+                    console.log(`[${sessionId}] 🔧 Method 1 audio processing: chunk ${ws.audioChunkCount}`);
+                }
             }
         } else {
             // Queue audio data if not ready
@@ -2211,14 +2217,28 @@ async function processAudioChunk(ws, data) {
                 assemblyAISession.websocket.readyState === WebSocket.CLOSING) {
                 console.log(`🔄 WebSocket for session ${sessionId} is closed. Attempting to recreate...`);
                 try {
-                    const newAssemblyAISession = await createAssemblyAISession(sessionId);
+                    // Use correct session creation method based on session method
+                    let newAssemblyAISession;
+                    if (session.method === 2) {
+                        newAssemblyAISession = await createAssemblyAISessionMethod2(sessionId, session.assemblyAISession.config);
+                        console.log(`🔬 Recreating Method 2 session for ${sessionId}`);
+                    } else {
+                        newAssemblyAISession = await createAssemblyAISession(sessionId);
+                        console.log(`🔧 Recreating Method 1 session for ${sessionId}`);
+                    }
+                    
                     // Update the session with new WebSocket but preserve queue
                     assemblyAISession.websocket = newAssemblyAISession.websocket;
                     assemblyAISession.isConfigured = false;
                     
-                    // Setup handlers for the new WebSocket
-                    setupAssemblyAIHandler(sessionId, session); 
-                    console.log(`✅ New WebSocket for session ${sessionId} created and waiting for connection.`);
+                    // Setup correct handlers based on session method
+                    if (session.method === 2) {
+                        setupAssemblyAIHandlerMethod2(sessionId, session);
+                        console.log(`✅ New Method 2 WebSocket for session ${sessionId} created with diarization handlers`);
+                    } else {
+                        setupAssemblyAIHandler(sessionId, session);
+                        console.log(`✅ New Method 1 WebSocket for session ${sessionId} created with legacy handlers`);
+                    }
                 } catch (error) {
                     console.error(`❌ Error recreating WebSocket for session ${sessionId}:`, error);
                 }
@@ -2355,21 +2375,9 @@ function setupAssemblyAIHandlerMethod2(sessionId, session) {
     const sendConfigurationAndProcessQueue = () => {
         console.log(`[${sessionId}] ✅ AssemblyAI Universal WebSocket opened, processing queue...`);
         
-        // Universal API: Send configuration message for enhanced features
-        try {
-            const configMessage = {
-                sample_rate: 16000,
-                speaker_labels: true,
-                // language_code: 'pl', // Removed for testing - English first
-                word_boost: ['sales', 'product', 'price', 'offer', 'deal', 'buy', 'purchase']
-            };
-            
-            console.log(`[${sessionId}] 🔧 Sending Universal API configuration:`, configMessage);
-            assemblySocket.send(JSON.stringify(configMessage));
-            
-        } catch (configError) {
-            console.error(`[${sessionId}] ❌ Error sending Universal API configuration:`, configError);
-        }
+        // Universal API: Skip sending configuration - parameters are in URL  
+        // The configuration is already set via URL parameters (?speaker_labels=true)
+        console.log(`[${sessionId}] ⚡ Universal API: Configuration set via URL parameters, not WebSocket message`);
         
         session.assemblyAISession.isConfigured = true;
         console.log(`[${sessionId}] ⚡ Universal API configured with English language and diarization`);
@@ -2406,7 +2414,18 @@ function setupAssemblyAIHandlerMethod2(sessionId, session) {
     assemblySocket.on('message', async (message) => {
         try {
             const parsedMessage = JSON.parse(message);
-            console.log(`[${sessionId}] 📨 AssemblyAI Universal message:`, parsedMessage.message_type || 'unknown', parsedMessage);
+            console.log(`[${sessionId}] 📨 Method 2 AssemblyAI Universal message:`, parsedMessage.message_type || 'unknown');
+            
+            // Enhanced debugging for Method 2
+            if (parsedMessage.message_type === 'PartialTranscript' || parsedMessage.message_type === 'FinalTranscript') {
+                console.log(`[${sessionId}] 🔬 Method 2 transcript:`, {
+                    type: parsedMessage.message_type,
+                    text: parsedMessage.text,
+                    hasWords: !!parsedMessage.words,
+                    wordsCount: parsedMessage.words?.length || 0,
+                    confidence: parsedMessage.confidence
+                });
+            }
             
             if (parsedMessage.error) {
                 console.error(`[${sessionId}] ❌ AssemblyAI Universal error:`, parsedMessage.error);
