@@ -1254,6 +1254,122 @@ app.put('/api/sales/:id/notes', requireAuth, async (req, res) => {
   }
 });
 
+// Eksport spotkania do PDF
+app.post('/api/meetings/export-pdf', requireAuth, async (req, res) => {
+  try {
+    const {
+      meetingId, clientName, productName, meetingDate,
+      transcription, aiSuggestions, chatgptHistory, finalSummary,
+      positiveFindings, negativeFindings, recommendations, ownNotes
+    } = req.body;
+    
+    console.log('Generowanie PDF dla spotkania:', meetingId);
+    
+    // Przygotuj zawartość PDF jako HTML
+    const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>Spotkanie ${clientName} - ${meetingId}</title>
+        <style>
+            body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; color: #333; }
+            .header { border-bottom: 2px solid #667eea; padding-bottom: 20px; margin-bottom: 30px; }
+            .header h1 { color: #667eea; margin: 0; }
+            .header .meta { color: #666; margin-top: 10px; }
+            .section { margin-bottom: 30px; page-break-inside: avoid; }
+            .section h2 { color: #667eea; border-bottom: 1px solid #e2e8f0; padding-bottom: 5px; }
+            .transcription { background: #f8fafc; padding: 15px; border-radius: 5px; white-space: pre-wrap; }
+            .speaker-highlight { font-weight: bold; }
+            .ai-suggestions { background: #f0fff4; padding: 15px; border-radius: 5px; }
+            .summary { background: #fff5f5; padding: 15px; border-radius: 5px; }
+            .findings { display: flex; gap: 20px; }
+            .findings > div { flex: 1; }
+            .positive { background: #f0fff4; padding: 10px; border-radius: 5px; }
+            .negative { background: #fef5e7; padding: 10px; border-radius: 5px; }
+            .notes { background: #f7fafc; padding: 15px; border-radius: 5px; }
+            @media print { 
+                body { margin: 0; }
+                .section { page-break-inside: avoid; }
+            }
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h1>Raport ze spotkania sprzedażowego</h1>
+            <div class="meta">
+                <strong>Klient:</strong> ${clientName}<br>
+                <strong>Produkt:</strong> ${productName}<br>
+                <strong>Data spotkania:</strong> ${meetingDate}<br>
+                <strong>ID spotkania:</strong> ${meetingId}
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>📝 Transkrypcja rozmowy</h2>
+            <div class="transcription">${transcription.replace(/\n/g, '<br>')}</div>
+        </div>
+        
+        ${aiSuggestions && aiSuggestions !== 'Brak sugestii AI - prawdopodobnie nie otrzymano transkrypcji z AssemblyAI' ? `
+        <div class="section">
+            <h2>🤖 Sugestie AI z sesji</h2>
+            <div class="ai-suggestions">${aiSuggestions.replace(/\n/g, '<br>')}</div>
+        </div>
+        ` : ''}
+        
+        ${finalSummary ? `
+        <div class="section">
+            <h2>📊 Podsumowanie spotkania</h2>
+            <div class="summary">${finalSummary.replace(/\n/g, '<br>')}</div>
+        </div>
+        ` : ''}
+        
+        <div class="section">
+            <h2>📋 Wnioski i rekomendacje</h2>
+            <div class="findings">
+                <div>
+                    <h3>✅ Pozytywne wnioski</h3>
+                    <div class="positive">${positiveFindings || 'Brak'}</div>
+                </div>
+                <div>
+                    <h3>⚠️ Obszary do poprawy</h3>
+                    <div class="negative">${negativeFindings || 'Brak'}</div>
+                </div>
+            </div>
+            <h3>💡 Rekomendacje</h3>
+            <div class="notes">${recommendations || 'Brak rekomendacji'}</div>
+        </div>
+        
+        ${ownNotes ? `
+        <div class="section">
+            <h2>📓 Własne notatki</h2>
+            <div class="notes">${ownNotes.replace(/\n/g, '<br>')}</div>
+        </div>
+        ` : ''}
+        
+        <div class="section">
+            <small style="color: #666;">
+                Raport wygenerowany automatycznie przez Asystenta Sprzedaży<br>
+                Data wygenerowania: ${new Date().toLocaleString('pl-PL')}
+            </small>
+        </div>
+    </body>
+    </html>
+    `;
+    
+    // Użyj prostego podejścia - zwróć HTML jako PDF (przeglądarka może to wydrukować)
+    // W przyszłości można dodać bibliotekę jak puppeteer do generowania prawdziwego PDF
+    
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="spotkanie_${clientName.replace(/[^a-zA-Z0-9]/g, '_')}_${meetingId}.html"`);
+    res.send(htmlContent);
+    
+  } catch (error) {
+    console.error('Błąd generowania PDF:', error);
+    res.status(500).json({ success: false, message: 'Błąd generowania PDF' });
+  }
+});
+
 // API dla profilu użytkownika
 app.get('/api/profile', requireAuth, async (req, res) => {
   try {

@@ -77,6 +77,12 @@ function setupEventListeners() {
     if (backToListBtn) {
         backToListBtn.addEventListener('click', backToMeetingsList);
     }
+    
+    // Przycisk eksportu do PDF
+    const exportPdfBtn = document.getElementById('exportPdfBtn');
+    if (exportPdfBtn) {
+        exportPdfBtn.addEventListener('click', exportMeetingToPDF);
+    }
 }
 
 // Ładowanie spotkań z API
@@ -237,6 +243,9 @@ async function openMeetingDetails(meetingId) {
 // Renderowanie szczegółów spotkania w sekcji
 function renderMeetingDetailsInSection(meeting) {
     console.log('Renderowanie szczegółów spotkania:', meeting);
+    
+    // Zapisz spotkanie do eksportu PDF
+    currentMeetingForExport = meeting;
     
     // Ustaw tytuł
     const titleElement = document.getElementById('meetingDetailsTitle');
@@ -612,7 +621,7 @@ function formatSummary(summary) {
     return `<div class="summary-formatted">${formatted}</div>`;
 }
 
-// Formatowanie transkrypcji dla widoku szczegółów
+// Formatowanie transkrypcji dla widoku szczegółów - wyświetla całą transkrypcję jako ciągły tekst
 function formatTranscriptionForDetails(transcription) {
     if (!transcription || transcription.trim() === '') {
         return '<div class="empty-state-detail"><i class="fas fa-microphone-slash"></i><h4>Brak transkrypcji</h4></div>';
@@ -620,61 +629,22 @@ function formatTranscriptionForDetails(transcription) {
     
     console.log('DEBUG: formatTranscriptionForDetails input length:', transcription.length);
     
-    // Podziel transkrypcję na linie
-    const lines = transcription.split('\n').filter(line => line.trim() !== '');
+    // Wyświetl całą transkrypcję jako ciągły tekst z podstawowym formatowaniem
+    let formattedText = escapeHtml(transcription);
     
-    if (lines.length === 0) {
-        return '<div class="empty-state-detail"><i class="fas fa-microphone-slash"></i><h4>Transkrypcja jest pusta</h4></div>';
-    }
+    // Zamień nowe linie na <br> dla lepszego wyświetlania
+    formattedText = formattedText.replace(/\n/g, '<br>');
     
-    return lines.map(line => {
-        const trimmedLine = line.trim();
-        
-        // Sprawdź czy linia zawiera znacznik roli
-        if (trimmedLine.includes('🔵') || trimmedLine.includes('🔴') || trimmedLine.includes('🟡')) {
-            // Linia z rolą mówcy
-            let role = 'unknown';
-            let badgeText = '🟡 NIEZNANY';
-            let text = trimmedLine;
-            
-            if (trimmedLine.includes('🔵')) {
-                role = 'salesperson';
-                badgeText = '🔵 SPRZEDAWCA';
-                text = trimmedLine.replace(/🔵[^:]*:?\s*/, '');
-            } else if (trimmedLine.includes('🔴')) {
-                role = 'client';
-                badgeText = '🔴 KLIENT';
-                text = trimmedLine.replace(/🔴[^:]*:?\s*/, '');
-            } else if (trimmedLine.includes('🟡')) {
-                role = 'unknown';
-                badgeText = '🟡 NIEZNANY';
-                text = trimmedLine.replace(/🟡[^:]*:?\s*/, '');
-            }
-            
-            return `
-                <div class="speaker-line-detail">
-                    <div class="speaker-badge-detail ${role}">
-                        ${escapeHtml(badgeText)}
-                    </div>
-                    <div class="speaker-text-detail">
-                        ${escapeHtml(text)}
-                    </div>
-                </div>
-            `;
-        } else {
-            // Linia bez znacznika roli - traktuj jako tekst ogólny
-            return `
-                <div class="speaker-line-detail">
-                    <div class="speaker-badge-detail unknown">
-                        🟡 NIEZNANY
-                    </div>
-                    <div class="speaker-text-detail">
-                        ${escapeHtml(trimmedLine)}
-                    </div>
-                </div>
-            `;
-        }
-    }).join('');
+    // Podświetl znaczniki ról jeśli istnieją
+    formattedText = formattedText.replace(/\[🔵[^\]]*\]/g, '<span class="speaker-highlight salesperson">$&</span>');
+    formattedText = formattedText.replace(/\[🔴[^\]]*\]/g, '<span class="speaker-highlight client">$&</span>');
+    formattedText = formattedText.replace(/\[🟡[^\]]*\]/g, '<span class="speaker-highlight unknown">$&</span>');
+    
+    return `
+        <div class="transcription-full-text">
+            ${formattedText}
+        </div>
+    `;
 }
 
 // Formatowanie sugestii AI dla widoku szczegółów
@@ -818,7 +788,81 @@ function formatSummaryForDetails(summary) {
     return formatted;
 }
 
+// Globalna zmienna do przechowywania aktualnego spotkania dla eksportu PDF
+let currentMeetingForExport = null;
+
+// Funkcja eksportu spotkania do PDF
+async function exportMeetingToPDF() {
+    if (!currentMeetingForExport) {
+        showError('Brak danych spotkania do eksportu');
+        return;
+    }
+    
+    try {
+        console.log('Eksportowanie spotkania do PDF:', currentMeetingForExport.id);
+        
+        // Przygotuj dane do eksportu
+        const meeting = currentMeetingForExport;
+        const clientName = meeting.client_name || 'Nieznany klient';
+        const productName = meeting.product_name || 'Nieznany produkt';
+        const meetingDate = new Date(meeting.meeting_datetime).toLocaleString('pl-PL');
+        
+        // Przygotuj zawartość PDF
+        const pdfContent = {
+            meetingId: meeting.id,
+            clientName: clientName,
+            productName: productName,
+            meetingDate: meetingDate,
+            transcription: meeting.transcription || 'Brak transkrypcji',
+            aiSuggestions: meeting.ai_suggestions || 'Brak sugestii AI',
+            chatgptHistory: meeting.chatgpt_history || null,
+            finalSummary: meeting.final_summary || 'Brak podsumowania',
+            positiveFindings: meeting.positive_findings || '',
+            negativeFindings: meeting.negative_findings || '',
+            recommendations: meeting.recommendations || '',
+            ownNotes: meeting.own_notes || ''
+        };
+        
+        // Wyślij żądanie do backendu o wygenerowanie PDF
+        const response = await fetch('/api/meetings/export-pdf', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            credentials: 'include',
+            body: JSON.stringify(pdfContent)
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        // Pobierz HTML jako blob
+        const blob = await response.blob();
+        
+        // Utwórz link do pobrania
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = `spotkanie_${clientName.replace(/[^a-zA-Z0-9]/g, '_')}_${meeting.id}.html`;
+        
+        // Dodaj do DOM, kliknij i usuń
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        showSuccess('Raport HTML został pobrany pomyślnie. Możesz go otworzyć w przeglądarce i wydrukować jako PDF.');
+        
+    } catch (error) {
+        console.error('Błąd eksportu do PDF:', error);
+        showError('Nie udało się wyeksportować do PDF: ' + error.message);
+    }
+}
+
 // Eksport funkcji dla dostępu globalnego
 window.openMeetingDetails = openMeetingDetails;
 window.saveMeetingNotes = saveMeetingNotes;
-window.switchTab = switchTab; 
+window.switchTab = switchTab;
+window.exportMeetingToPDF = exportMeetingToPDF; 

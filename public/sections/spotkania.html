@@ -37,6 +37,10 @@
                 Powrót do listy spotkań
             </button>
             <h2 id="meetingDetailsTitle">Szczegóły spotkania</h2>
+            <button class="export-pdf-btn" id="exportPdfBtn">
+                <i class="fas fa-file-pdf"></i>
+                Pobierz PDF
+            </button>
         </div>
 
         <div class="meeting-details-content" id="meetingDetailsContent">
@@ -75,6 +79,27 @@
 .back-to-list-btn:hover {
     background: #5a6268;
     transform: translateX(-2px);
+}
+
+.export-pdf-btn {
+    background: #dc3545;
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+    transition: all 0.3s ease;
+}
+
+.export-pdf-btn:hover {
+    background: #c82333;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(220, 53, 69, 0.3);
 }
 
 .meeting-details-content {
@@ -119,6 +144,35 @@
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     font-size: 14px;
     line-height: 1.6;
+}
+
+/* Nowe formatowanie dla pełnej transkrypcji */
+.transcription-full-text {
+    line-height: 1.8;
+    color: #2d3748;
+    word-wrap: break-word;
+}
+
+.speaker-highlight {
+    font-weight: bold;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-right: 8px;
+}
+
+.speaker-highlight.salesperson {
+    background: rgba(102, 126, 234, 0.1);
+    color: #667eea;
+}
+
+.speaker-highlight.client {
+    background: rgba(245, 101, 101, 0.1);
+    color: #f56565;
+}
+
+.speaker-highlight.unknown {
+    background: rgba(237, 137, 54, 0.1);
+    color: #ed8936;
 }
 
 .transcription-detail::-webkit-scrollbar {
