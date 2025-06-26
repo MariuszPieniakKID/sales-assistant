@@ -11,6 +11,7 @@ const bcrypt = require('bcryptjs');
 const { OpenAI } = require('openai');
 const WebSocket = require('ws');
 const http = require('http');
+const puppeteer = require('puppeteer');
 
 // Initialize OpenAI globally
 const openai = new OpenAI({
@@ -1256,6 +1257,8 @@ app.put('/api/sales/:id/notes', requireAuth, async (req, res) => {
 
 // Eksport spotkania do PDF
 app.post('/api/meetings/export-pdf', requireAuth, async (req, res) => {
+  let browser = null;
+  
   try {
     const {
       meetingId, clientName, productName, meetingDate,
@@ -1263,7 +1266,7 @@ app.post('/api/meetings/export-pdf', requireAuth, async (req, res) => {
       positiveFindings, negativeFindings, recommendations, ownNotes
     } = req.body;
     
-    console.log('Generowanie PDF dla spotkania:', meetingId);
+    console.log('🎯 Generowanie prawdziwego PDF dla spotkania:', meetingId);
     
     // Przygotuj zawartość PDF jako HTML
     const htmlContent = `
@@ -1273,35 +1276,128 @@ app.post('/api/meetings/export-pdf', requireAuth, async (req, res) => {
         <meta charset="UTF-8">
         <title>Spotkanie ${clientName} - ${meetingId}</title>
         <style>
-            body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; color: #333; }
-            .header { border-bottom: 2px solid #667eea; padding-bottom: 20px; margin-bottom: 30px; }
-            .header h1 { color: #667eea; margin: 0; }
-            .header .meta { color: #666; margin-top: 10px; }
-            .section { margin-bottom: 30px; page-break-inside: avoid; }
-            .section h2 { color: #667eea; border-bottom: 1px solid #e2e8f0; padding-bottom: 5px; }
-            .transcription { background: #f8fafc; padding: 15px; border-radius: 5px; white-space: pre-wrap; }
-            .speaker-highlight { font-weight: bold; }
-            .ai-suggestions { background: #f0fff4; padding: 15px; border-radius: 5px; }
-            .summary { background: #fff5f5; padding: 15px; border-radius: 5px; }
-            .findings { display: flex; gap: 20px; }
-            .findings > div { flex: 1; }
-            .positive { background: #f0fff4; padding: 10px; border-radius: 5px; }
-            .negative { background: #fef5e7; padding: 10px; border-radius: 5px; }
-            .notes { background: #f7fafc; padding: 15px; border-radius: 5px; }
+            body { 
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+                margin: 0; 
+                padding: 20px; 
+                line-height: 1.6; 
+                color: #333; 
+                background: white;
+            }
+            .header { 
+                border-bottom: 3px solid #667eea; 
+                padding-bottom: 20px; 
+                margin-bottom: 30px; 
+                text-align: center;
+            }
+            .header h1 { 
+                color: #667eea; 
+                margin: 0; 
+                font-size: 28px;
+                font-weight: 700;
+            }
+            .header .meta { 
+                color: #666; 
+                margin-top: 15px; 
+                font-size: 16px;
+                line-height: 1.8;
+            }
+            .section { 
+                margin-bottom: 35px; 
+                page-break-inside: avoid; 
+            }
+            .section h2 { 
+                color: #667eea; 
+                border-bottom: 2px solid #e2e8f0; 
+                padding-bottom: 8px; 
+                margin-bottom: 15px;
+                font-size: 20px;
+                font-weight: 600;
+            }
+            .transcription { 
+                background: #f8fafc; 
+                padding: 20px; 
+                border-radius: 8px; 
+                white-space: pre-wrap; 
+                border-left: 4px solid #667eea;
+                font-size: 14px;
+                max-height: none;
+                overflow: visible;
+            }
+            .speaker-highlight { 
+                font-weight: bold; 
+                color: #667eea;
+            }
+            .ai-suggestions { 
+                background: #f0fff4; 
+                padding: 20px; 
+                border-radius: 8px; 
+                border-left: 4px solid #48bb78;
+                font-size: 14px;
+            }
+            .summary { 
+                background: #fff5f5; 
+                padding: 20px; 
+                border-radius: 8px; 
+                border-left: 4px solid #f56565;
+                font-size: 14px;
+            }
+            .findings { 
+                display: grid; 
+                grid-template-columns: 1fr 1fr; 
+                gap: 20px; 
+                margin-bottom: 20px;
+            }
+            .findings > div { 
+                page-break-inside: avoid;
+            }
+            .findings h3 {
+                margin-top: 0;
+                font-size: 16px;
+                font-weight: 600;
+            }
+            .positive { 
+                background: #f0fff4; 
+                padding: 15px; 
+                border-radius: 8px; 
+                border-left: 4px solid #48bb78;
+            }
+            .negative { 
+                background: #fef5e7; 
+                padding: 15px; 
+                border-radius: 8px; 
+                border-left: 4px solid #ed8936;
+            }
+            .notes { 
+                background: #f7fafc; 
+                padding: 20px; 
+                border-radius: 8px; 
+                border-left: 4px solid #4299e1;
+                font-size: 14px;
+            }
+            .footer {
+                margin-top: 40px;
+                padding-top: 20px;
+                border-top: 1px solid #e2e8f0;
+                text-align: center;
+                font-size: 12px;
+                color: #666;
+            }
             @media print { 
-                body { margin: 0; }
+                body { margin: 0; padding: 15px; }
                 .section { page-break-inside: avoid; }
+                .findings { page-break-inside: avoid; }
             }
         </style>
     </head>
     <body>
         <div class="header">
-            <h1>Raport ze spotkania sprzedażowego</h1>
+            <h1>📊 Raport ze spotkania sprzedażowego</h1>
             <div class="meta">
-                <strong>Klient:</strong> ${clientName}<br>
-                <strong>Produkt:</strong> ${productName}<br>
-                <strong>Data spotkania:</strong> ${meetingDate}<br>
-                <strong>ID spotkania:</strong> ${meetingId}
+                <strong>👤 Klient:</strong> ${clientName}<br>
+                <strong>📦 Produkt:</strong> ${productName}<br>
+                <strong>📅 Data spotkania:</strong> ${meetingDate}<br>
+                <strong>🆔 ID spotkania:</strong> ${meetingId}
             </div>
         </div>
         
@@ -1329,11 +1425,11 @@ app.post('/api/meetings/export-pdf', requireAuth, async (req, res) => {
             <div class="findings">
                 <div>
                     <h3>✅ Pozytywne wnioski</h3>
-                    <div class="positive">${positiveFindings || 'Brak'}</div>
+                    <div class="positive">${positiveFindings || 'Brak pozytywnych wniosków'}</div>
                 </div>
                 <div>
                     <h3>⚠️ Obszary do poprawy</h3>
-                    <div class="negative">${negativeFindings || 'Brak'}</div>
+                    <div class="negative">${negativeFindings || 'Brak obszarów do poprawy'}</div>
                 </div>
             </div>
             <h3>💡 Rekomendacje</h3>
@@ -1347,26 +1443,88 @@ app.post('/api/meetings/export-pdf', requireAuth, async (req, res) => {
         </div>
         ` : ''}
         
-        <div class="section">
-            <small style="color: #666;">
-                Raport wygenerowany automatycznie przez Asystenta Sprzedaży<br>
-                Data wygenerowania: ${new Date().toLocaleString('pl-PL')}
-            </small>
+        <div class="footer">
+            <p>
+                🤖 Raport wygenerowany automatycznie przez <strong>Asystenta Sprzedaży</strong><br>
+                📅 Data wygenerowania: ${new Date().toLocaleString('pl-PL')}<br>
+                🔗 System wspierający doradców handlowych
+            </p>
         </div>
     </body>
     </html>
     `;
     
-    // Użyj prostego podejścia - zwróć HTML jako PDF (przeglądarka może to wydrukować)
-    // W przyszłości można dodać bibliotekę jak puppeteer do generowania prawdziwego PDF
+    console.log('🚀 Uruchamianie Puppeteer...');
     
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="spotkanie_${clientName.replace(/[^a-zA-Z0-9]/g, '_')}_${meetingId}.html"`);
-    res.send(htmlContent);
+    // Uruchom Puppeteer z optymalnymi ustawieniami
+    browser = await puppeteer.launch({
+      headless: 'new',
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--disable-gpu',
+        '--window-size=1920x1080'
+      ]
+    });
+    
+    const page = await browser.newPage();
+    
+    // Ustaw viewport i content
+    await page.setViewport({ width: 1920, height: 1080 });
+    await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+    
+    console.log('📄 Generowanie PDF...');
+    
+    // Generuj PDF z optymalnymi ustawieniami
+    const pdfBuffer = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      margin: {
+        top: '20mm',
+        right: '15mm',
+        bottom: '20mm',
+        left: '15mm'
+      },
+      displayHeaderFooter: true,
+      headerTemplate: '<div></div>',
+      footerTemplate: `
+        <div style="font-size: 10px; color: #666; text-align: center; width: 100%; margin: 0 15mm;">
+          <span>Strona <span class="pageNumber"></span> z <span class="totalPages"></span></span>
+        </div>
+      `
+    });
+    
+    await browser.close();
+    browser = null;
+    
+    console.log('✅ PDF wygenerowany pomyślnie');
+    
+    // Wyślij PDF jako odpowiedź
+    const fileName = `spotkanie_${clientName.replace(/[^a-zA-Z0-9]/g, '_')}_${meetingId}.pdf`;
+    
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.send(pdfBuffer);
     
   } catch (error) {
-    console.error('Błąd generowania PDF:', error);
-    res.status(500).json({ success: false, message: 'Błąd generowania PDF' });
+    console.error('❌ Błąd generowania PDF:', error);
+    
+    // Zamknij browser w przypadku błędu
+    if (browser) {
+      try {
+        await browser.close();
+      } catch (closeError) {
+        console.error('❌ Błąd zamykania Puppeteer:', closeError);
+      }
+    }
+    
+    res.status(500).json({ 
+      success: false, 
+      message: 'Błąd generowania PDF: ' + error.message 
+    });
   }
 });
 

@@ -837,15 +837,21 @@ async function exportMeetingToPDF() {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         
-        // Pobierz HTML jako blob
+        // Pobierz PDF jako blob
         const blob = await response.blob();
+        
+        // Sprawdź czy to rzeczywiście PDF
+        if (blob.type !== 'application/pdf') {
+            console.error('Otrzymano nieprawidłowy typ pliku:', blob.type);
+            throw new Error('Serwer nie zwrócił pliku PDF');
+        }
         
         // Utwórz link do pobrania
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.style.display = 'none';
         a.href = url;
-        a.download = `spotkanie_${clientName.replace(/[^a-zA-Z0-9]/g, '_')}_${meeting.id}.html`;
+        a.download = `spotkanie_${clientName.replace(/[^a-zA-Z0-9]/g, '_')}_${meeting.id}.pdf`;
         
         // Dodaj do DOM, kliknij i usuń
         document.body.appendChild(a);
@@ -853,7 +859,7 @@ async function exportMeetingToPDF() {
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
         
-        showSuccess('Raport HTML został pobrany pomyślnie. Możesz go otworzyć w przeglądarce i wydrukować jako PDF.');
+        showSuccess('📄 PDF został pobrany pomyślnie!');
         
     } catch (error) {
         console.error('Błąd eksportu do PDF:', error);
