@@ -51,21 +51,32 @@ function setupEventListeners() {
     searchInput.addEventListener('input', handleSearch);
     
     // Zamykanie modala
-    closeMeetingModal.addEventListener('click', closeMeetingDetailsModal);
+    const closeMeetingModal = document.getElementById('closeMeetingModal');
+    if (closeMeetingModal) {
+        closeMeetingModal.addEventListener('click', closeMeetingDetailsModal);
+    }
     
     // Zamykanie modala przez kliknięcie w tło
-    meetingDetailsModal.addEventListener('click', function(e) {
-        if (e.target === meetingDetailsModal) {
-            closeMeetingDetailsModal();
-        }
-    });
+    if (meetingDetailsModal) {
+        meetingDetailsModal.addEventListener('click', function(e) {
+            if (e.target === meetingDetailsModal) {
+                closeMeetingDetailsModal();
+            }
+        });
+    }
     
     // Zamykanie modala przez ESC
     document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape' && meetingDetailsModal.classList.contains('active')) {
+        if (e.key === 'Escape' && meetingDetailsModal && meetingDetailsModal.classList.contains('active')) {
             closeMeetingDetailsModal();
         }
     });
+    
+    // Przycisk powrotu do listy spotkań
+    const backToListBtn = document.getElementById('backToListBtn');
+    if (backToListBtn) {
+        backToListBtn.addEventListener('click', backToMeetingsList);
+    }
 }
 
 // Ładowanie spotkań z API
@@ -74,7 +85,9 @@ async function loadMeetings() {
         console.log('🔄 Ładowanie spotkań z API...');
         showLoading();
         
-        const response = await fetch('/api/sales');
+        const response = await fetch('/api/sales', {
+            credentials: 'include'
+        });
         console.log('📡 Odpowiedź API:', response.status, response.statusText);
         
         if (!response.ok) {
@@ -193,19 +206,111 @@ function handleSearch() {
     renderMeetingsTable();
 }
 
-// Otwieranie szczegółów spotkania - przekierowanie na dedykowaną stronę
+// Otwieranie szczegółów spotkania w tej samej sekcji
 async function openMeetingDetails(meetingId) {
-    console.log('Przekierowanie do szczegółów spotkania ID:', meetingId);
+    console.log('Otwieranie szczegółów spotkania ID:', meetingId);
     
-    // Przekieruj na dedykowaną stronę szczegółów spotkania
-    window.location.href = `sections/spotkanie-szczegoly.html?id=${meetingId}`;
-    return;
+    try {
+        // Znajdź spotkanie w lokalnych danych
+        const meeting = meetings.find(m => m.id === meetingId);
+        if (!meeting) {
+            console.error('Nie znaleziono spotkania w lokalnych danych');
+            showError('Nie znaleziono spotkania');
+            return;
+        }
+        
+        console.log('Dane spotkania znalezione:', meeting);
+        
+        // Ukryj widok listy i pokaż widok szczegółów
+        document.getElementById('meetingsListView').style.display = 'none';
+        document.getElementById('meetingDetailsView').style.display = 'block';
+        
+        // Renderuj szczegóły spotkania
+        renderMeetingDetailsInSection(meeting);
+        
+    } catch (error) {
+        console.error('Błąd otwierania szczegółów spotkania:', error);
+        showError('Nie udało się załadować szczegółów spotkania');
+    }
+}
+
+// Renderowanie szczegółów spotkania w sekcji
+function renderMeetingDetailsInSection(meeting) {
+    console.log('Renderowanie szczegółów spotkania:', meeting);
+    
+    // Ustaw tytuł
+    const titleElement = document.getElementById('meetingDetailsTitle');
+    if (titleElement) {
+        const clientName = meeting.client_name || 'Nieznany klient';
+        titleElement.textContent = `Spotkanie z ${clientName}`;
+    }
+    
+    // Generuj HTML dla szczegółów
+    const detailsHTML = `
+        <!-- Transkrypcja -->
+        <div class="meeting-detail-section">
+            <h3>
+                <i class="fas fa-microphone"></i>
+                Transkrypcja rozmowy
+            </h3>
+            <div class="transcription-detail">
+                ${meeting.transcription ? 
+                    formatTranscriptionForDetails(meeting.transcription) : 
+                    '<div class="empty-state-detail"><i class="fas fa-microphone-slash"></i><h4>Brak transkrypcji</h4><p>Transkrypcja nie jest dostępna dla tego spotkania</p></div>'
+                }
+            </div>
+        </div>
+        
+        <!-- Sugestie AI -->
+        <div class="meeting-detail-section">
+            <h3>
+                <i class="fas fa-robot"></i>
+                Sugestie AI z sesji
+            </h3>
+            <div class="ai-suggestions-detail">
+                ${formatAISuggestionsForDetails(meeting.chatgpt_history, meeting.ai_suggestions)}
+            </div>
+        </div>
+        
+        <!-- Podsumowanie - pełna szerokość -->
+        <div class="meeting-detail-section summary-detail">
+            <h3>
+                <i class="fas fa-chart-line"></i>
+                Podsumowanie spotkania
+            </h3>
+            <div class="summary-content-detail">
+                ${meeting.final_summary ? 
+                    formatSummaryForDetails(meeting.final_summary) : 
+                    '<div class="empty-state-detail"><i class="fas fa-chart-bar"></i><h4>Brak podsumowania</h4><p>Podsumowanie nie jest dostępne dla tego spotkania</p></div>'
+                }
+            </div>
+        </div>
+    `;
+    
+    // Wstaw HTML do kontenera
+    const contentContainer = document.getElementById('meetingDetailsContent');
+    if (contentContainer) {
+        contentContainer.innerHTML = detailsHTML;
+    }
+}
+
+// Powrót do listy spotkań
+function backToMeetingsList() {
+    console.log('Powrót do listy spotkań');
+    
+    // Ukryj widok szczegółów i pokaż widok listy
+    document.getElementById('meetingDetailsView').style.display = 'none';
+    document.getElementById('meetingsListView').style.display = 'block';
 }
 
 // Zamykanie modala szczegółów
 function closeMeetingDetailsModal() {
-    meetingDetailsModal.classList.remove('active');
-    meetingDetails.innerHTML = '';
+    if (meetingDetailsModal) {
+        meetingDetailsModal.classList.remove('active');
+    }
+    if (meetingDetails) {
+        meetingDetails.innerHTML = '';
+    }
     
     // Resetuj tytuł modala do stanu domyślnego
     const modalTitle = document.querySelector('#meetingDetailsModal .modal-header h3');
@@ -505,6 +610,212 @@ function formatSummary(summary) {
     formatted = formatted.replace(/(<li>.*<\/li>)/g, '<ul>$1</ul>');
     
     return `<div class="summary-formatted">${formatted}</div>`;
+}
+
+// Formatowanie transkrypcji dla widoku szczegółów
+function formatTranscriptionForDetails(transcription) {
+    if (!transcription || transcription.trim() === '') {
+        return '<div class="empty-state-detail"><i class="fas fa-microphone-slash"></i><h4>Brak transkrypcji</h4></div>';
+    }
+    
+    console.log('DEBUG: formatTranscriptionForDetails input length:', transcription.length);
+    
+    // Podziel transkrypcję na linie
+    const lines = transcription.split('\n').filter(line => line.trim() !== '');
+    
+    if (lines.length === 0) {
+        return '<div class="empty-state-detail"><i class="fas fa-microphone-slash"></i><h4>Transkrypcja jest pusta</h4></div>';
+    }
+    
+    return lines.map(line => {
+        const trimmedLine = line.trim();
+        
+        // Sprawdź czy linia zawiera znacznik roli
+        if (trimmedLine.includes('🔵') || trimmedLine.includes('🔴') || trimmedLine.includes('🟡')) {
+            // Linia z rolą mówcy
+            let role = 'unknown';
+            let badgeText = '🟡 NIEZNANY';
+            let text = trimmedLine;
+            
+            if (trimmedLine.includes('🔵')) {
+                role = 'salesperson';
+                badgeText = '🔵 SPRZEDAWCA';
+                text = trimmedLine.replace(/🔵[^:]*:?\s*/, '');
+            } else if (trimmedLine.includes('🔴')) {
+                role = 'client';
+                badgeText = '🔴 KLIENT';
+                text = trimmedLine.replace(/🔴[^:]*:?\s*/, '');
+            } else if (trimmedLine.includes('🟡')) {
+                role = 'unknown';
+                badgeText = '🟡 NIEZNANY';
+                text = trimmedLine.replace(/🟡[^:]*:?\s*/, '');
+            }
+            
+            return `
+                <div class="speaker-line-detail">
+                    <div class="speaker-badge-detail ${role}">
+                        ${escapeHtml(badgeText)}
+                    </div>
+                    <div class="speaker-text-detail">
+                        ${escapeHtml(text)}
+                    </div>
+                </div>
+            `;
+        } else {
+            // Linia bez znacznika roli - traktuj jako tekst ogólny
+            return `
+                <div class="speaker-line-detail">
+                    <div class="speaker-badge-detail unknown">
+                        🟡 NIEZNANY
+                    </div>
+                    <div class="speaker-text-detail">
+                        ${escapeHtml(trimmedLine)}
+                    </div>
+                </div>
+            `;
+        }
+    }).join('');
+}
+
+// Formatowanie sugestii AI dla widoku szczegółów
+function formatAISuggestionsForDetails(historyJSON, aiSuggestions) {
+    console.log('DEBUG: formatAISuggestionsForDetails called');
+    
+    // Spróbuj najpierw chatgpt_history
+    if (historyJSON) {
+        try {
+            let history;
+            if (typeof historyJSON === 'string') {
+                history = JSON.parse(historyJSON);
+            } else {
+                history = historyJSON;
+            }
+            
+            if (Array.isArray(history) && history.length > 0) {
+                const aiResponses = history.filter(message => message.role === 'assistant');
+                
+                if (aiResponses.length > 0) {
+                    console.log('DEBUG: Using chatgpt_history, found', aiResponses.length, 'AI responses');
+                    return aiResponses.map((message, index) => {
+                        const timestamp = `Odpowiedź AI #${index + 1}`;
+                        
+                        return `
+                            <div class="ai-response-block-detail">
+                                <div class="response-badge-detail">
+                                    🤖 ${escapeHtml(timestamp)}
+                                </div>
+                                <div class="response-content-detail">
+                                    ${formatAIResponseForDetails(message.content)}
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                }
+            }
+        } catch (error) {
+            console.error('Error parsing ChatGPT history:', error);
+        }
+    }
+    
+    // Fallback: Użyj ai_suggestions
+    if (aiSuggestions) {
+        console.log('DEBUG: Falling back to ai_suggestions field');
+        try {
+            const blocks = aiSuggestions.split('\n---\n');
+            
+            if (blocks.length > 0 && blocks[0].trim() !== '') {
+                return blocks.map((block, index) => {
+                    const lines = block.split('\n');
+                    const timestamp = lines[0]?.match(/\[(.*?)\]/)?.[1] || `Sugestia #${index + 1}`;
+                    const content = lines.slice(1).join('\n').trim();
+                    
+                    if (content) {
+                        return `
+                            <div class="ai-response-block-detail">
+                                <div class="response-badge-detail">
+                                    🤖 ${escapeHtml(timestamp)}
+                                </div>
+                                <div class="response-content-detail">
+                                    ${escapeHtml(content).replace(/\n/g, '<br>')}
+                                </div>
+                            </div>
+                        `;
+                    }
+                    return '';
+                }).filter(block => block !== '').join('');
+            }
+        } catch (error) {
+            console.error('Error parsing ai_suggestions:', error);
+        }
+    }
+    
+    // Jeśli oba nie działają
+    console.log('DEBUG: Both chatgpt_history and ai_suggestions are empty or invalid');
+    return '<div class="empty-state-detail"><i class="fas fa-robot"></i><h4>Brak sugestii AI</h4><p>Sugestie AI nie są dostępne dla tego spotkania</p></div>';
+}
+
+// Formatowanie odpowiedzi AI dla widoku szczegółów
+function formatAIResponseForDetails(content) {
+    if (!content) return '';
+    
+    try {
+        // Spróbuj sparsować jako JSON
+        const parsed = JSON.parse(content);
+        
+        let formatted = '';
+        
+        if (parsed.czy_kompletna) {
+            formatted += `<div><strong>Status:</strong> ${escapeHtml(parsed.czy_kompletna)}</div>`;
+        }
+        
+        if (parsed.akcja) {
+            formatted += `<div><strong>Akcja:</strong> ${escapeHtml(parsed.akcja)}</div>`;
+        }
+        
+        if (parsed.sugestie && Array.isArray(parsed.sugestie)) {
+            formatted += `<div><strong>Sugestie:</strong></div>`;
+            formatted += '<ul>';
+            parsed.sugestie.forEach(suggestion => {
+                formatted += `<li>${escapeHtml(suggestion)}</li>`;
+            });
+            formatted += '</ul>';
+        }
+        
+        if (parsed.uwagi) {
+            formatted += `<div><strong>Uwagi:</strong> ${escapeHtml(parsed.uwagi)}</div>`;
+        }
+        
+        return formatted || escapeHtml(content);
+        
+    } catch (error) {
+        // Jeśli nie jest JSONem, wyświetl jako tekst
+        return escapeHtml(content).replace(/\n/g, '<br>');
+    }
+}
+
+// Formatowanie podsumowania dla widoku szczegółów
+function formatSummaryForDetails(summary) {
+    if (!summary) return '';
+    
+    // Podstawowe formatowanie tekstu
+    let formatted = escapeHtml(summary);
+    
+    // Formatowanie list
+    formatted = formatted.replace(/\*\s+(.+)/g, '<li>$1</li>');
+    formatted = formatted.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
+    
+    // Formatowanie nagłówków
+    formatted = formatted.replace(/^### (.+)$/gm, '<h4>$1</h4>');
+    formatted = formatted.replace(/^## (.+)$/gm, '<h3>$1</h3>');
+    formatted = formatted.replace(/^# (.+)$/gm, '<h2>$1</h2>');
+    
+    // Formatowanie pogrubienia
+    formatted = formatted.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    
+    // Formatowanie nowych linii
+    formatted = formatted.replace(/\n/g, '<br>');
+    
+    return formatted;
 }
 
 // Eksport funkcji dla dostępu globalnego

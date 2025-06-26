@@ -1,51 +1,280 @@
 <div class="meetings-section">
-    <div class="section-header">
-        <h2>Historia Spotkań</h2>
-        <div class="header-actions">
-            <div class="search-box">
-                <i class="fas fa-search"></i>
-                <input type="text" id="searchMeetings" placeholder="Szukaj spotkań...">
+    <!-- Widok listy spotkań -->
+    <div class="meetings-list-view" id="meetingsListView">
+        <div class="section-header">
+            <h2>Historia Spotkań</h2>
+            <div class="header-actions">
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="searchMeetings" placeholder="Szukaj spotkań...">
+                </div>
             </div>
         </div>
-    </div>
 
-    <div class="meetings-table-container">
-        <table class="meetings-table" id="meetingsTable">
-            <thead>
-                <tr>
-                    <th>Klient</th>
-                    <th>Produkt</th>
-                    <th>Data spotkania</th>
-                    <th>Status</th>
-                    <th>Akcje</th>
-                </tr>
-            </thead>
-            <tbody id="meetingsTableBody">
-                <!-- Spotkania będą ładowane dynamicznie -->
-            </tbody>
-        </table>
-    </div>
-</div>
-
-<!-- Modal szczegółów spotkania -->
-<div class="modal" id="meetingDetailsModal">
-    <div class="modal-content large">
-        <div class="modal-header">
-            <h3>Szczegóły spotkania</h3>
-            <button class="modal-close" id="closeMeetingModal">
-                <i class="fas fa-times"></i>
-            </button>
+        <div class="meetings-table-container">
+            <table class="meetings-table" id="meetingsTable">
+                <thead>
+                    <tr>
+                        <th>Klient</th>
+                        <th>Produkt</th>
+                        <th>Data spotkania</th>
+                        <th>Status</th>
+                        <th>Akcje</th>
+                    </tr>
+                </thead>
+                <tbody id="meetingsTableBody">
+                    <!-- Spotkania będą ładowane dynamicznie -->
+                </tbody>
+            </table>
         </div>
-        
-        <div class="modal-body" id="meetingDetails">
+    </div>
+
+    <!-- Widok szczegółów spotkania -->
+    <div class="meeting-details-view" id="meetingDetailsView" style="display: none;">
+        <div class="section-header">
+            <button class="back-to-list-btn" id="backToListBtn">
+                <i class="fas fa-arrow-left"></i>
+                Powrót do listy spotkań
+            </button>
+            <h2 id="meetingDetailsTitle">Szczegóły spotkania</h2>
+        </div>
+
+        <div class="meeting-details-content" id="meetingDetailsContent">
             <!-- Szczegóły będą ładowane dynamicznie -->
         </div>
     </div>
 </div>
 
+
+
 <style>
 .meetings-section {
     padding: 0;
+}
+
+/* Widok szczegółów spotkania */
+.meeting-details-view {
+    padding: 0;
+}
+
+.back-to-list-btn {
+    background: #6c757d;
+    color: white;
+    border: none;
+    padding: 12px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 20px;
+    transition: all 0.3s ease;
+}
+
+.back-to-list-btn:hover {
+    background: #5a6268;
+    transform: translateX(-2px);
+}
+
+.meeting-details-content {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-top: 20px;
+}
+
+.meeting-detail-section {
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    border: 1px solid #e2e8f0;
+}
+
+.meeting-detail-section h3 {
+    margin: 0 0 16px 0;
+    color: #1e293b;
+    font-size: 18px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 2px solid #e2e8f0;
+    padding-bottom: 12px;
+}
+
+.meeting-detail-section h3 i {
+    color: #667eea;
+}
+
+/* Transkrypcja w widoku szczegółów */
+.transcription-detail {
+    height: 500px;
+    overflow-y: scroll;
+    padding: 16px;
+    background: #f8fafc;
+    border: 2px solid #e2e8f0;
+    border-radius: 8px;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+.transcription-detail::-webkit-scrollbar {
+    width: 12px;
+}
+
+.transcription-detail::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 6px;
+}
+
+.transcription-detail::-webkit-scrollbar-thumb {
+    background: #667eea;
+    border-radius: 6px;
+}
+
+.transcription-detail::-webkit-scrollbar-thumb:hover {
+    background: #5a67d8;
+}
+
+/* Speaker lines w widoku szczegółów */
+.speaker-line-detail {
+    margin-bottom: 16px;
+    padding: 12px;
+    background: white;
+    border-radius: 8px;
+    border-left: 4px solid #e2e8f0;
+}
+
+.speaker-badge-detail {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 16px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+}
+
+.speaker-badge-detail.salesperson {
+    background: #667eea;
+    color: white;
+    border-left-color: #667eea;
+}
+
+.speaker-badge-detail.client {
+    background: #f56565;
+    color: white;
+}
+
+.speaker-badge-detail.unknown {
+    background: #ed8936;
+    color: white;
+}
+
+.speaker-text-detail {
+    display: block;
+    color: #2d3748;
+    line-height: 1.5;
+}
+
+/* AI Suggestions w widoku szczegółów */
+.ai-suggestions-detail {
+    height: 500px;
+    overflow-y: scroll;
+    padding: 16px;
+    background: #f8fafc;
+    border: 2px solid #e2e8f0;
+    border-radius: 8px;
+}
+
+.ai-suggestions-detail::-webkit-scrollbar {
+    width: 12px;
+}
+
+.ai-suggestions-detail::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 6px;
+}
+
+.ai-suggestions-detail::-webkit-scrollbar-thumb {
+    background: #48bb78;
+    border-radius: 6px;
+}
+
+.ai-response-block-detail {
+    margin-bottom: 16px;
+    padding: 16px;
+    background: white;
+    border-radius: 8px;
+    border-left: 4px solid #48bb78;
+}
+
+.response-badge-detail {
+    background: #48bb78;
+    color: white;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    display: inline-block;
+}
+
+.response-content-detail {
+    color: #2d3748;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+/* Podsumowanie - pełna szerokość */
+.summary-detail {
+    grid-column: 1 / -1;
+}
+
+.summary-content-detail {
+    height: 300px;
+    overflow-y: scroll;
+    padding: 16px;
+    background: #f8fafc;
+    border: 2px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 14px;
+    line-height: 1.6;
+    color: #2d3748;
+}
+
+/* Empty states */
+.empty-state-detail {
+    text-align: center;
+    padding: 40px 20px;
+    color: #718096;
+}
+
+.empty-state-detail i {
+    font-size: 48px;
+    color: #cbd5e0;
+    margin-bottom: 16px;
+}
+
+.empty-state-detail h4 {
+    margin: 16px 0 8px 0;
+    color: #4a5568;
+    font-size: 16px;
+}
+
+.empty-state-detail p {
+    margin: 0;
+    font-size: 14px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .meeting-details-content {
+        grid-template-columns: 1fr;
+    }
 }
 
 .section-header {
