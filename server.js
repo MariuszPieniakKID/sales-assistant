@@ -2043,7 +2043,7 @@ async function startRealtimeSessionMethod2(ws, data) {
 
         // Inicjalizujemy conversation history z system promptem zaraz po utworzeniu sesji
         console.log(`[${sessionId}] [METHOD2-KROK 12] 🤖 Inicjalizacja ChatGPT conversation history...`);
-        await initializeChatGPTConversation(session);
+        initializeChatGPTConversation(session);
         console.log(`[${sessionId}] [METHOD2-KROK 13] 🤖 ChatGPT conversation history zainicjalizowana - gotowy do rozmowy!`);
 
     } catch (error) {
@@ -3409,15 +3409,26 @@ async function saveRealtimeSession(session) {
             : 'Brak sugestii AI - prawdopodobnie nie otrzymano transkrypcji z AssemblyAI';
         
         // Przygotuj historię ChatGPT do zapisania
-        const chatGPTHistoryJSON = session.chatGPTHistory && session.chatGPTHistory.length > 0 
-            ? JSON.stringify(session.chatGPTHistory)
-            : null;
+        console.log('--- DEBUG: chatGPTHistory type:', typeof session.chatGPTHistory);
+        console.log('--- DEBUG: chatGPTHistory length:', session.chatGPTHistory?.length || 0);
+        console.log('--- DEBUG: chatGPTHistory sample:', session.chatGPTHistory?.slice(0, 2));
         
-        // Generuj podsumowanie końcowe rozmowy (tylko jeśli mamy transkrypcję)
+        let chatGPTHistoryJSON = null;
+        if (session.chatGPTHistory && session.chatGPTHistory.length > 0) {
+            try {
+                chatGPTHistoryJSON = JSON.stringify(session.chatGPTHistory);
+                console.log('--- DEBUG: JSON.stringify successful, length:', chatGPTHistoryJSON.length);
+            } catch (error) {
+                console.error('--- DEBUG: JSON.stringify failed:', error);
+                chatGPTHistoryJSON = null;
+            }
+        }
+        
+        // Generuj proste podsumowanie z istniejących danych (bez wywołania OpenAI)
         let finalSummary = null;
         if (session.conversationHistory.length > 0) {
-            console.log('🤖 Generowanie podsumowania końcowej rozmowy...');
-            finalSummary = await generateFinalSummary(session, transcription);
+            console.log('📝 Generowanie prostego podsumowania z danych sesji...');
+            finalSummary = generateSimpleSummary(session, transcription);
         }
         
         // Generate summary for positive/negative findings
@@ -3479,6 +3490,72 @@ async function saveRealtimeSession(session) {
     } catch (error) {
         console.error('❌ Error saving real-time session:', error);
         // Nie rzucaj błędu - pozwól sesji się zakończyć
+    }
+}
+
+// Generate simple summary without OpenAI API call
+function generateSimpleSummary(session, transcription) {
+    const startTime = Date.now();
+    console.log(`[${session.sessionId}] 📝 Generating simple session summary...`);
+    
+    try {
+        const duration = Math.round((Date.now() - session.startTime.getTime()) / 1000 / 60);
+        const wordCount = transcription.split(' ').length;
+        const aiSuggestionsCount = session.aiSuggestions.length;
+        
+        // Analyze conversation for basic insights
+        const hasPositiveSignals = transcription.toLowerCase().includes('tak') || 
+                                   transcription.toLowerCase().includes('dobrze') ||
+                                   transcription.toLowerCase().includes('zainteresow');
+        
+        const hasQuestions = transcription.includes('?') || 
+                           transcription.toLowerCase().includes('pytanie') ||
+                           transcription.toLowerCase().includes('jak');
+        
+        const summary = `## 📊 PODSUMOWANIE SESJI
+
+**Podstawowe informacje:**
+- Klient: ${session.client.name}
+- Produkt: ${session.product.name}
+- Data: ${session.startTime.toLocaleString('pl-PL')}
+- Czas trwania: ${duration} minut
+- Liczba słów w transkrypcji: ${wordCount}
+- Liczba sugestii AI: ${aiSuggestionsCount}
+
+## 🎯 ANALIZA ROZMOWY
+
+**Poziom zaangażowania:** ${hasQuestions ? 'Wysoki - klient zadawał pytania' : 'Średni - podstawowa rozmowa'}
+
+**Sygnały pozytywne:** ${hasPositiveSignals ? 'Wykryto pozytywne reakcje klienta' : 'Brak wyraźnych sygnałów pozytywnych'}
+
+**Aktywność AI:** ${aiSuggestionsCount > 5 ? 'Wysoka - wiele sugestii podczas rozmowy' : 'Umiarkowana - podstawowe wsparcie AI'}
+
+## 📋 NASTĘPNE KROKI
+
+${aiSuggestionsCount > 0 ? 
+'- Przejrzyj sugestie AI z zakładki "Sugestie AI z sesji"' : 
+'- Rozmowa była krótka - rozważ kolejne spotkanie'}
+- Skontaktuj się z klientem w ciągu 24-48 godzin
+- Przygotuj materiały na podstawie poruszonych tematów
+- ${hasQuestions ? 'Odpowiedz na zadane pytania' : 'Przedstaw dodatkowe korzyści produktu'}
+
+## 💡 REKOMENDACJE
+
+- Wykorzystaj zebrane informacje do personalizacji oferty
+- ${duration > 10 ? 'Długa rozmowa - dobry znak zaangażowania' : 'Krótka rozmowa - możliwość rozszerzenia w przyszłości'}
+- Monitoruj rozwój relacji z klientem
+
+---
+*Podsumowanie wygenerowane automatycznie na podstawie danych sesji*`;
+
+        const responseTime = Date.now() - startTime;
+        console.log(`[${session.sessionId}] 📝 Simple summary generated in ${responseTime}ms`);
+        
+        return summary;
+        
+    } catch (error) {
+        console.error(`[${session.sessionId}] ❌ Error generating simple summary:`, error);
+        return `Błąd podczas generowania podsumowania: ${error.message}`;
     }
 }
 
@@ -3551,52 +3628,28 @@ Bądź szczegółowy, konkretny i konstruktywny w swojej analizie.`;
     }
 }
 
-// Initialize ChatGPT Conversation History - wysyła system prompt na początku sesji
-async function initializeChatGPTConversation(session) {
+// Initialize ChatGPT Conversation History - bez wywołania API żeby uniknąć błędu 429
+function initializeChatGPTConversation(session) {
     const startTime = Date.now();
-    console.log(`[${session.sessionId}] 🤖 Initializing ChatGPT conversation with system prompt...`);
+    console.log(`[${session.sessionId}] 🤖 Initializing ChatGPT conversation with system prompt (no API call)...`);
     
     try {
         const systemPrompt = createGPTContextMethod2(session.client, session.product, session.notes);
         
-        // Inicjalizujemy conversation history z system promptem
+        // Inicjalizujemy conversation history z system promptem (bez wywołania API)
         session.chatGPTHistory = [
             { role: "system", content: systemPrompt }
         ];
         
-        // Wysyłamy pierwszy "testowy" request żeby ChatGPT był gotowy
-        const welcomePrompt = `Sesja sprzedażowa rozpoczęta. Klient: ${session.client.name}, Produkt: ${session.product.name}. 
-        
-Jestem gotowy do analizy rozmowy w czasie rzeczywistym. Oczekuję na pierwsze wypowiedzi z rozpoznaniem mówców.
-
-Odpowiedz krótko że jesteś gotowy do analizy rozmowy sprzedażowej.`;
-
-        const completion = await openai.chat.completions.create({
-            model: "gpt-4o-mini", // Szybszy model dla inicjalizacji
-            messages: [
-                ...session.chatGPTHistory,
-                { role: "user", content: welcomePrompt }
-            ],
-            max_tokens: 100, // Krótka odpowiedź
-            temperature: 0.7
-        });
-
         const responseTime = Date.now() - startTime;
-        const aiResponse = completion.choices[0].message.content;
-        
-        // Dodajemy do historii
-        session.chatGPTHistory.push(
-            { role: "user", content: welcomePrompt },
-            { role: "assistant", content: aiResponse }
-        );
-        
-        console.log(`[${session.sessionId}] 🤖 ChatGPT initialized in ${responseTime}ms. Response: "${aiResponse.substring(0, 50)}..."`);
+        console.log(`[${session.sessionId}] 🤖 ChatGPT initialized in ${responseTime}ms (system prompt only)`);
+        console.log(`[${session.sessionId}] 🤖 ChatGPT history length: ${session.chatGPTHistory.length}`);
         
         // Wysyłamy potwierdzenie do frontend
         session.ws.send(JSON.stringify({
             type: 'CHATGPT_READY',
             sessionId: session.sessionId,
-            message: aiResponse,
+            message: "ChatGPT gotowy do analizy rozmowy",
             responseTime: responseTime,
             timestamp: new Date().toISOString()
         }));

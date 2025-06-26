@@ -255,16 +255,12 @@ async function openMeetingDetails(meetingId) {
                     Transkrypcja
                 </button>
                 <button class="tab-button" onclick="switchTab('chatgpt-history')">
-                    <i class="fas fa-comments"></i>
-                    Historia ChatGPT
+                    <i class="fas fa-robot"></i>
+                    Sugestie AI z sesji
                 </button>
                 <button class="tab-button" onclick="switchTab('summary')">
                     <i class="fas fa-chart-line"></i>
                     Podsumowanie
-                </button>
-                <button class="tab-button" onclick="switchTab('ai-suggestions')">
-                    <i class="fas fa-robot"></i>
-                    Sugestie AI
                 </button>
             </div>
             
@@ -290,14 +286,11 @@ async function openMeetingDetails(meetingId) {
                 <div id="chatgpt-history-tab" class="tab-content">
                     <div class="chatgpt-history-panel">
                         <h4>
-                            <i class="fas fa-comments"></i>
-                            Historia rozmowy z ChatGPT
+                            <i class="fas fa-robot"></i>
+                            Sugestie AI z sesji
                         </h4>
                         <div class="chatgpt-history-content">
-                            ${meeting.chatgpt_history ? 
-                                formatChatGPTHistory(meeting.chatgpt_history) : 
-                                '<div class="empty-state-message"><i class="fas fa-robot"></i>Brak historii ChatGPT dla tego spotkania<br><small>Historia ChatGPT jest dostępna tylko dla nowych sesji</small></div>'
-                            }
+                            ${formatChatGPTHistory(meeting.chatgpt_history, meeting.ai_suggestions)}
                         </div>
                     </div>
                 </div>
@@ -313,22 +306,6 @@ async function openMeetingDetails(meetingId) {
                             ${meeting.final_summary ? 
                                 formatSummary(meeting.final_summary) : 
                                 '<div class="empty-state-message"><i class="fas fa-chart-bar"></i>Brak podsumowania dla tego spotkania<br><small>Podsumowania są generowane automatycznie na końcu sesji</small></div>'
-                            }
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Sugestie AI Tab -->
-                <div id="ai-suggestions-tab" class="tab-content">
-                    <div class="ai-suggestions-panel">
-                        <h4>
-                            <i class="fas fa-robot"></i>
-                            Sugestie AI z sesji
-                        </h4>
-                        <div class="ai-suggestions-content">
-                            ${meeting.ai_suggestions ? 
-                                formatAISuggestions(meeting.ai_suggestions) : 
-                                '<div class="empty-state-message"><i class="fas fa-brain"></i>Brak sugestii AI dla tego spotkania<br><small>Sugestie AI pojawiają się podczas sesji na żywo</small></div>'
                             }
                         </div>
                     </div>
@@ -512,8 +489,13 @@ function switchTab(tabName) {
 function formatTranscription(transcription) {
     if (!transcription) return '';
     
+    console.log('DEBUG: formatTranscription input length:', transcription.length);
+    console.log('DEBUG: formatTranscription first 200 chars:', transcription.substring(0, 200));
+    
     // Split by lines and format each speaker line
     const lines = transcription.split('\n');
+    console.log('DEBUG: formatTranscription lines count:', lines.length);
+    
     return lines.map(line => {
         if (line.trim() === '') return '<br>';
         
@@ -557,73 +539,84 @@ function formatTranscription(transcription) {
     }).join('');
 }
 
-// Format ChatGPT conversation history
-function formatChatGPTHistory(historyJSON) {
-    try {
-        if (!historyJSON) {
-            return '<div class="empty-state-message"><i class="fas fa-comments"></i>Brak historii rozmowy z ChatGPT</div>';
-        }
-        
-        let history;
-        if (typeof historyJSON === 'string') {
-            history = JSON.parse(historyJSON);
-        } else {
-            history = historyJSON;
-        }
-        
-        if (!Array.isArray(history) || history.length === 0) {
-            return '<div class="empty-state-message"><i class="fas fa-comments"></i>Historia rozmowy z ChatGPT jest pusta</div>';
-        }
-        
-        return history.map((message, index) => {
-            const timestamp = new Date().toLocaleTimeString('pl-PL'); // Placeholder timestamp
-            
-            if (message.role === 'system') {
-                return `<div class="chatgpt-message system">
-                    <div class="message-header">
-                        <span class="role-badge system">🔧 SYSTEM PROMPT</span>
-                        <span class="timestamp">${timestamp}</span>
-                    </div>
-                    <div class="message-content">
-                        <details>
-                            <summary>Pokaż system prompt</summary>
-                            <pre>${escapeHtml(message.content)}</pre>
-                        </details>
-                    </div>
-                </div>`;
-            } else if (message.role === 'user') {
-                return `<div class="chatgpt-message user">
-                    <div class="message-header">
-                        <span class="role-badge user">👤 PYTANIE DO AI</span>
-                        <span class="timestamp">${timestamp}</span>
-                    </div>
-                    <div class="message-content">
-                        ${escapeHtml(message.content).replace(/\n/g, '<br>')}
-                    </div>
-                </div>`;
-            } else if (message.role === 'assistant') {
-                return `<div class="chatgpt-message assistant">
-                    <div class="message-header">
-                        <span class="role-badge assistant">🤖 ODPOWIEDŹ AI</span>
-                        <span class="timestamp">${timestamp}</span>
-                    </div>
-                    <div class="message-content">
-                        ${formatAIResponse(message.content)}
-                    </div>
-                </div>`;
+// Format ChatGPT conversation history - show AI suggestions from ai_suggestions field as fallback
+function formatChatGPTHistory(historyJSON, aiSuggestions) {
+    console.log('DEBUG: formatChatGPTHistory called with:', { 
+        historyJSON: historyJSON ? 'present' : 'null', 
+        aiSuggestions: aiSuggestions ? 'present' : 'null' 
+    });
+    
+    // Try to parse chatgpt_history first
+    if (historyJSON) {
+        try {
+            let history;
+            if (typeof historyJSON === 'string') {
+                history = JSON.parse(historyJSON);
+            } else {
+                history = historyJSON;
             }
-            return '';
-        }).join('');
-        
-    } catch (error) {
-        console.error('Error parsing ChatGPT history:', error);
-        console.error('Raw historyJSON:', historyJSON);
-        return `<div class="error-message">
-            <i class="fas fa-exclamation-triangle"></i>
-            Błąd parsowania historii ChatGPT: ${error.message}
-            <br><small>Sprawdź konsolę deweloperską dla szczegółów</small>
-        </div>`;
+            
+            if (Array.isArray(history) && history.length > 0) {
+                // Filter only assistant responses (AI suggestions) and skip system prompts
+                const aiResponses = history.filter(message => message.role === 'assistant');
+                
+                if (aiResponses.length > 0) {
+                    console.log('DEBUG: Using chatgpt_history, found', aiResponses.length, 'AI responses');
+                    return aiResponses.map((message, index) => {
+                        const timestamp = `Odpowiedź AI #${index + 1}`;
+                        
+                        return `<div class="ai-response-block">
+                            <div class="response-header">
+                                <span class="response-badge">🤖 ${timestamp}</span>
+                            </div>
+                            <div class="response-content">
+                                ${formatAIResponse(message.content)}
+                            </div>
+                        </div>`;
+                    }).join('');
+                }
+            }
+        } catch (error) {
+            console.error('Error parsing ChatGPT history:', error);
+        }
     }
+    
+    // Fallback: Use ai_suggestions field if chatgpt_history is empty or invalid
+    if (aiSuggestions) {
+        console.log('DEBUG: Falling back to ai_suggestions field');
+        try {
+            // ai_suggestions is usually a text field with suggestions separated by ---
+            const blocks = aiSuggestions.split('\n---\n');
+            
+            if (blocks.length > 0 && blocks[0].trim() !== '') {
+                return blocks.map((block, index) => {
+                    const lines = block.split('\n');
+                    const timestamp = lines[0]?.match(/\[(.*?)\]/)?.[1] || `Sugestia #${index + 1}`;
+                    const content = lines.slice(1).join('\n').trim();
+                    
+                    if (content) {
+                        return `<div class="ai-response-block">
+                            <div class="response-header">
+                                <span class="response-badge">🤖 ${escapeHtml(timestamp)}</span>
+                            </div>
+                            <div class="response-content">
+                                <div class="ai-suggestion-content">
+                                    ${escapeHtml(content).replace(/\n/g, '<br>')}
+                                </div>
+                            </div>
+                        </div>`;
+                    }
+                    return '';
+                }).filter(block => block !== '').join('');
+            }
+        } catch (error) {
+            console.error('Error parsing ai_suggestions:', error);
+        }
+    }
+    
+    // If both fail, show empty state
+    console.log('DEBUG: Both chatgpt_history and ai_suggestions are empty or invalid');
+    return '<div class="empty-state-message"><i class="fas fa-robot"></i>Brak sugestii AI w tej sesji<br><small>Sugestie AI pojawiają się podczas sesji na żywo</small></div>';
 }
 
 // Format AI response (try to parse JSON or show as text)
@@ -679,26 +672,6 @@ function formatSummary(summary) {
     formatted = formatted.replace(/(<li>.*<\/li>)/g, '<ul>$1</ul>');
     
     return `<div class="summary-formatted">${formatted}</div>`;
-}
-
-// Format AI suggestions with better structure
-function formatAISuggestions(suggestions) {
-    if (!suggestions) return '';
-    
-    // Split by separator and format each suggestion block
-    const blocks = suggestions.split('\n---\n');
-    
-    return blocks.map(block => {
-        const lines = block.split('\n');
-        const timestamp = lines[0]?.match(/\[(.*?)\]/)?.[1] || 'Nieznany czas';
-        
-        return `<div class="ai-suggestion-block">
-            <div class="suggestion-timestamp">${escapeHtml(timestamp)}</div>
-            <div class="suggestion-content">
-                ${lines.slice(1).map(line => escapeHtml(line)).join('<br>')}
-            </div>
-        </div>`;
-    }).join('');
 }
 
 // Eksport funkcji dla dostępu globalnego
