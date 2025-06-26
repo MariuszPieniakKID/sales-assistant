@@ -879,4 +879,83 @@ body {
 
 .ai-suggestion-content br {
     margin-bottom: 8px;
+}
+
+/* Empty state messages for fullscreen pages */
+.empty-state-message {
+    text-align: center;
+    padding: 40px 20px;
+    color: #666;
+}
+
+.empty-state-message i {
+    font-size: 48px;
+    color: #ccc;
+    margin-bottom: 16px;
+}
+
+.empty-state-message h3 {
+    margin: 16px 0 8px 0;
+    color: #333;
+    font-size: 18px;
+}
+
+.empty-state-message p {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.empty-state-message small {
+    color: #999;
+    font-size: 12px;
+}
+
+/* Loading state */
+.loading-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: #666;
+}
+
+.loading-state i {
+    font-size: 24px;
+    color: #007bff;
+    margin-bottom: 12px;
+}
+
+/* Error message */
+.error-message {
+    text-align: center;
+    padding: 40px 20px;
+    color: #dc3545;
+    background: #f8d7da;
+    border: 1px solid #f5c6cb;
+    border-radius: 8px;
+}
+
+.error-message i {
+    font-size: 48px;
+    margin-bottom: 16px;
+}
+
+.error-message h3 {
+    margin: 16px 0 8px 0;
+    color: #721c24;
+}
+
+/* AI field styling for fullscreen */
+.ai-field {
+    margin-bottom: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid #eee;
+}
+
+.ai-field:last-child {
+    border-bottom: none;
+}
+
+.ai-field strong {
+    color: #333;
+    font-weight: 600;
 } 
