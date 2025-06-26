@@ -1213,7 +1213,7 @@ function onFinalTranscriptMethod2(data) {
     }, 500);
 }
 
-// AI Suggestions Handler
+// AI Suggestions Handler - PRZEPROJEKTOWANE
 function onAISuggestions(data) {
     console.log('💡 AI Suggestions received:', data.suggestions);
     console.log('💡 Speaker info:', data.speakerInfo);
@@ -1226,174 +1226,177 @@ function onAISuggestions(data) {
         return;
     }
     
-    // Check if this is Method 2 with enhanced suggestions
-    const isMethod2 = data.speakerInfo?.method === 2;
-    const isLive = data.speakerInfo?.isLive === true;
-    const suggestions = data.suggestions;
-    
-    // Remove placeholder
+    // Remove placeholder if exists
     const placeholder = suggestionsContent.querySelector('.suggestion-placeholder');
     if (placeholder) {
         placeholder.remove();
     }
     
-    // Clear old suggestions
-    suggestionsContent.innerHTML = '';
-    
-    // Method 2 enhanced display
-    if (isMethod2 && suggestions) {
-        // Add Method 2 header with live indicator
-        const method2Header = document.createElement('div');
-        method2Header.className = 'method2-header';
-        method2Header.innerHTML = `
-            <div class="method2-badge">
-                <i class="fas fa-microscope"></i>
-                <span>Method 2 - Enhanced Diarization</span>
-                ${isLive ? '<span class="live-indicator">🔴 LIVE</span>' : ''}
-            </div>
-            <div class="speaker-context">
-                ${isLive ? 'Mówca w trakcie: ' : 'Ostatni mówca: '}${data.speakerInfo.speakerRole === 'salesperson' ? '🔵 SPRZEDAWCA' : 
-                               data.speakerInfo.speakerRole === 'client' ? '🔴 KLIENT' : 
-                               '🟡 ' + (data.speakerInfo.speaker || 'NIEZNANY')}
-            </div>
-        `;
-        suggestionsContent.appendChild(method2Header);
-        
-        // Enhanced suggestions structure for Method 2 (support both Polish and English keys + new fields)
-        const enhancedSuggestions = [
-            { type: 'speaker-analysis', content: suggestions.analiza_mowcy || suggestions.speaker_analysis, icon: 'fa-user-analytics' },
-            { type: 'intent-analysis', content: suggestions.intencja || suggestions.intent, icon: 'fa-bullseye' },
-            { type: 'emotion-analysis', content: suggestions.emocje || suggestions.emotion, icon: 'fa-heart' },
-            { type: 'conversation-dynamics', content: suggestions.dynamika_rozmowy || suggestions.conversation_dynamics, icon: 'fa-exchange-alt' },
-            { type: 'next-action', content: suggestions.nastepny_krok || suggestions.natychmiastowa_akcja || suggestions.akcja || suggestions.next_action, icon: 'fa-arrow-right' },
-            { type: 'suggestions', content: suggestions.sugestie || suggestions.suggestions, icon: 'fa-lightbulb' },
-            { type: 'signals', content: suggestions.sygnaly || suggestions.signals, icon: 'fa-chart-line' },
-            // New field for live suggestions
-            { type: 'completeness', content: suggestions.czy_kompletna, icon: 'fa-check-circle' }
-        ];
-        
-        enhancedSuggestions.forEach(item => {
-            if (item.content) {
-                const suggestionElement = document.createElement('div');
-                suggestionElement.className = `suggestion-item-method2 ${item.type}${isLive ? ' live' : ''}`;
-                
-                const typeLabel = {
-                    'speaker-analysis': 'Analiza mówcy',
-                    'intent-analysis': 'Intencja',
-                    'emotion-analysis': 'Emocje',
-                    'conversation-dynamics': 'Dynamika rozmowy',
-                    'next-action': isLive ? 'Akcja' : 'Następny krok',
-                    'suggestions': 'Sugestie',
-                    'signals': 'Sygnały',
-                    'completeness': 'Kompletność wypowiedzi'
-                }[item.type];
-                
-                // Format content - handle arrays
-                let formattedContent = item.content;
-                if (Array.isArray(item.content)) {
-                    formattedContent = item.content.map(c => `• ${c}`).join('<br>');
-                }
-                
-                suggestionElement.innerHTML = `
-                    <div class="suggestion-header-method2">
-                        <i class="fas ${item.icon}"></i>
-                        <span>${typeLabel}</span>
-                        ${isLive ? '<span class="live-pulse">⚡</span>' : ''}
-                    </div>
-                    <div class="suggestion-content-method2">
-                        ${formattedContent}
-                    </div>
-                `;
-                
-                suggestionsContent.appendChild(suggestionElement);
-            }
-        });
-        
-        // Add main suggestions if available
-        if (suggestions.suggestions && Array.isArray(suggestions.suggestions)) {
-            const mainSuggestions = document.createElement('div');
-            mainSuggestions.className = 'main-suggestions-method2';
-            mainSuggestions.innerHTML = `
-                <div class="suggestion-header-method2">
-                    <i class="fas fa-lightbulb"></i>
-                    <span>Główne sugestie</span>
-                </div>
-                <div class="suggestion-content-method2">
-                    <ul>
-                        ${suggestions.suggestions.map(s => `<li>${s}</li>`).join('')}
-                    </ul>
-                </div>
-            `;
-            suggestionsContent.appendChild(mainSuggestions);
-        }
-        
-        // Add signals if available
-        if (suggestions.signals && Array.isArray(suggestions.signals) && suggestions.signals.length > 0) {
-            const signalsElement = document.createElement('div');
-            signalsElement.className = 'signals-method2';
-            signalsElement.innerHTML = `
-                <div class="suggestion-header-method2">
-                    <i class="fas fa-chart-line"></i>
-                    <span>Sygnały sprzedażowe</span>
-                </div>
-                <div class="suggestion-content-method2">
-                    <ul>
-                        ${suggestions.signals.map(s => `<li>${s}</li>`).join('')}
-                    </ul>
-                </div>
-            `;
-            suggestionsContent.appendChild(signalsElement);
-        }
-        
-    } else {
-        // Legacy format for Method 1
-        const suggestionsList = Array.isArray(suggestions) ? suggestions : 
-                               suggestions.suggestions ? suggestions.suggestions : 
-                               [suggestions];
-        
-        suggestionsList.forEach((suggestion, index) => {
-            const suggestionElement = document.createElement('div');
-            suggestionElement.className = `suggestion-item-new ${suggestion.type || 'general'}`;
-            
-            const typeIcon = {
-                'speaker-analysis': 'fa-user-tie',
-                'intent-analysis': 'fa-bullseye',
-                'action-suggestion': 'fa-lightbulb',
-                'signals': 'fa-chart-line',
-                'general': 'fa-comment-dots'
-            }[suggestion.type] || 'fa-comment-dots';
-            
-            const typeLabel = {
-                'speaker-analysis': 'Analiza rozmówcy',
-                'intent-analysis': 'Analiza intencji',
-                'action-suggestion': 'Sugestia działania',
-                'signals': 'Sygnały sprzedażowe',
-                'general': 'Ogólna sugestia'
-            }[suggestion.type] || 'Sugestia';
-            
-            suggestionElement.innerHTML = `
-                <div class="suggestion-header-new">
-                    <i class="fas ${typeIcon}"></i>
-                    <span>${typeLabel}</span>
-                    <span class="suggestion-time">${new Date().toLocaleTimeString('pl-PL')}</span>
-                </div>
-                <div class="suggestion-content-new">
-                    ${suggestion.content || suggestion}
-                </div>
-            `;
-            
-            suggestionsContent.appendChild(suggestionElement);
-        });
+    const suggestions = data.suggestions;
+    if (!suggestions) {
+        console.log('💡 No suggestions data');
+        return;
     }
     
-    // Add updated animation
+    // Create new suggestion card
+    const suggestionCard = document.createElement('div');
+    suggestionCard.className = 'suggestion-card new-suggestion';
+    
+    // Determine suggestion type and content
+    let suggestionType = 'Sugestia AI';
+    let suggestionIcon = 'fa-lightbulb';
+    let suggestionContent = '';
+    let suggestionClass = '';
+    
+    // Handle different suggestion formats
+    if (typeof suggestions === 'string') {
+        suggestionContent = suggestions;
+    } else if (suggestions.sugestie && Array.isArray(suggestions.sugestie)) {
+        suggestionContent = suggestions.sugestie.join('<br>• ');
+        suggestionContent = '• ' + suggestionContent;
+        suggestionType = 'Główne sugestie';
+        suggestionIcon = 'fa-bullseye';
+        suggestionClass = 'main-suggestion';
+    } else if (suggestions.nastepny_krok || suggestions.akcja) {
+        suggestionContent = suggestions.nastepny_krok || suggestions.akcja;
+        suggestionType = 'Następny krok';
+        suggestionIcon = 'fa-arrow-right';
+        suggestionClass = 'action-needed';
+    } else if (suggestions.analiza_mowcy) {
+        suggestionContent = suggestions.analiza_mowcy;
+        suggestionType = 'Analiza rozmówcy';
+        suggestionIcon = 'fa-user-tie';
+    } else if (suggestions.intencja) {
+        suggestionContent = suggestions.intencja;
+        suggestionType = 'Intencja klienta';
+        suggestionIcon = 'fa-bullseye';
+    } else if (suggestions.sygnaly && Array.isArray(suggestions.sygnaly)) {
+        suggestionContent = suggestions.sygnaly.join('<br>• ');
+        suggestionContent = '• ' + suggestionContent;
+        suggestionType = 'Sygnały sprzedażowe';
+        suggestionIcon = 'fa-chart-line';
+        suggestionClass = 'positive-signal';
+    } else {
+        // Fallback - try to extract any meaningful content
+        const keys = Object.keys(suggestions);
+        for (const key of keys) {
+            if (suggestions[key] && typeof suggestions[key] === 'string') {
+                suggestionContent = suggestions[key];
+                break;
+            } else if (Array.isArray(suggestions[key]) && suggestions[key].length > 0) {
+                suggestionContent = suggestions[key].join('<br>• ');
+                suggestionContent = '• ' + suggestionContent;
+                break;
+            }
+        }
+    }
+    
+    // If we have multiple suggestion types, create a comprehensive display
+    if (typeof suggestions === 'object' && suggestions !== null) {
+        let combinedContent = '';
+        
+        // Main suggestions
+        if (suggestions.sugestie && Array.isArray(suggestions.sugestie) && suggestions.sugestie.length > 0) {
+            combinedContent += `<div class="suggestion-section">
+                <h5><i class="fas fa-lightbulb"></i> Główne sugestie:</h5>
+                <ul class="suggestion-list">
+                    ${suggestions.sugestie.map(s => `<li class="action-item">${s}</li>`).join('')}
+                </ul>
+            </div>`;
+        }
+        
+        // Next action
+        if (suggestions.nastepny_krok || suggestions.akcja) {
+            combinedContent += `<div class="suggestion-section">
+                <h5><i class="fas fa-arrow-right"></i> Następny krok:</h5>
+                <div class="suggestion-content action-needed">
+                    ${suggestions.nastepny_krok || suggestions.akcja}
+                </div>
+            </div>`;
+        }
+        
+        // Signals
+        if (suggestions.sygnaly && Array.isArray(suggestions.sygnaly) && suggestions.sygnaly.length > 0) {
+            combinedContent += `<div class="suggestion-section">
+                <h5><i class="fas fa-chart-line"></i> Sygnały:</h5>
+                <ul class="suggestion-list">
+                    ${suggestions.sygnaly.map(s => `<li class="positive">${s}</li>`).join('')}
+                </ul>
+            </div>`;
+        }
+        
+        // Analysis
+        if (suggestions.analiza_mowcy) {
+            combinedContent += `<div class="suggestion-section">
+                <h5><i class="fas fa-user-tie"></i> Analiza:</h5>
+                <div class="suggestion-content">
+                    ${suggestions.analiza_mowcy}
+                </div>
+            </div>`;
+        }
+        
+        // Intent
+        if (suggestions.intencja) {
+            combinedContent += `<div class="suggestion-section">
+                <h5><i class="fas fa-bullseye"></i> Intencja:</h5>
+                <div class="suggestion-content">
+                    ${suggestions.intencja}
+                </div>
+            </div>`;
+        }
+        
+        if (combinedContent) {
+            suggestionContent = combinedContent;
+            suggestionType = 'Analiza AI';
+            suggestionIcon = 'fa-robot';
+        }
+    }
+    
+    // Ensure we have content
+    if (!suggestionContent) {
+        suggestionContent = 'Otrzymano sugestię AI (szczegóły w konsoli)';
+    }
+    
+    // Create the suggestion card HTML
+    suggestionCard.innerHTML = `
+        <div class="suggestion-header">
+            <div class="suggestion-type">
+                <i class="fas ${suggestionIcon}"></i>
+                ${suggestionType}
+            </div>
+            <div class="suggestion-time">
+                ${new Date().toLocaleTimeString('pl-PL')}
+            </div>
+        </div>
+        <div class="suggestion-content ${suggestionClass}">
+            ${suggestionContent}
+        </div>
+    `;
+    
+    // Add to top of suggestions (newest first)
+    suggestionsContent.insertBefore(suggestionCard, suggestionsContent.firstChild);
+    
+    // Remove new-suggestion class after animation
+    setTimeout(() => {
+        suggestionCard.classList.remove('new-suggestion');
+    }, 2000);
+    
+    // Limit number of suggestions displayed (keep last 10)
+    const allSuggestions = suggestionsContent.querySelectorAll('.suggestion-card');
+    if (allSuggestions.length > 10) {
+        for (let i = 10; i < allSuggestions.length; i++) {
+            allSuggestions[i].remove();
+        }
+    }
+    
+    // Add updated animation to container
     suggestionsContent.classList.add('updated-new');
     setTimeout(() => {
         suggestionsContent.classList.remove('updated-new');
     }, 500);
     
-    // Auto-scroll to bottom
-    suggestionsContent.scrollTop = suggestionsContent.scrollHeight;
+    // Auto-scroll to top to show new suggestion
+    suggestionsContent.scrollTop = 0;
 }
 
 // ChatGPT Ready Handler
