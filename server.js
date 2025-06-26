@@ -2736,19 +2736,60 @@ async function processPartialTranscriptMethod2(sessionId, partialTranscript) {
 
         console.log(`[${sessionId}] 🔬⚡ Live partial transcript - Speaker: ${speakerRole}, Words: ${partialTranscript.wordsCount || partialTranscript.text.split(' ').length}`);
 
-        // Generate live AI suggestions for partial transcripts - niższy próg na początku rozmowy
+        // NOWA LOGIKA: Inteligentne generowanie live suggestions
         const wordCount = partialTranscript.wordsCount || partialTranscript.text.split(' ').length;
         const conversationLength = session.conversationHistory.length;
         
-        // Dla pierwszych wypowiedzi w rozmowie - niższy próg (5 słów)
-        // Dla późniejszych wypowiedzi - wyższy próg (8 słów)
-        const wordThreshold = conversationLength < 3 ? 5 : 8;
+        // Sprawdź czy wypowiedź ma sens semantyczny (nie jest w połowie słowa/zdania)
+        const text = partialTranscript.text.trim();
+        const endsWithPunctuation = /[.!?,:;]$/.test(text);
+        const hasCompleteSentence = /[.!?]/.test(text);
+        const lastWord = text.split(' ').pop();
+        const seemsComplete = endsWithPunctuation || hasCompleteSentence || wordCount >= 12;
         
-        if (wordCount >= wordThreshold) {
-            console.log(`[${sessionId}] 🔬⚡ Generating live AI suggestions for partial transcript (${wordCount} words, threshold: ${wordThreshold})...`);
+        // Sprawdź czy to nie jest powtórzenie ostatniej sugestii
+        const lastSuggestionTime = session.lastLiveSuggestionTime || 0;
+        const timeSinceLastSuggestion = Date.now() - lastSuggestionTime;
+        const minTimeBetweenSuggestions = 3000; // 3 sekundy między sugestiami
+        
+        // Inteligentne progi słów
+        let wordThreshold;
+        if (conversationLength < 2) {
+            wordThreshold = 8; // Pierwsza wypowiedź - poczekaj na więcej kontekstu
+        } else if (conversationLength < 5) {
+            wordThreshold = 6; // Początek rozmowy - trochę szybciej
+        } else {
+            wordThreshold = 10; // Później w rozmowie - czekaj na więcej kontekstu
+        }
+        
+        // Generuj sugestie tylko jeśli:
+        // 1. Wystarczająco słów
+        // 2. Wypowiedź wydaje się kompletna ALBO jest bardzo długa
+        // 3. Minęło wystarczająco czasu od ostatniej sugestii
+        const shouldGenerate = wordCount >= wordThreshold && 
+                              seemsComplete && 
+                              timeSinceLastSuggestion > minTimeBetweenSuggestions;
+        
+        if (shouldGenerate) {
+            console.log(`[${sessionId}] 🔬⚡ Generating SMART live AI suggestions:`, {
+                wordCount,
+                threshold: wordThreshold,
+                seemsComplete,
+                timeSinceLastSuggestion: `${timeSinceLastSuggestion}ms`,
+                text: text.substring(0, 50) + '...'
+            });
+            
+            session.lastLiveSuggestionTime = Date.now();
             await generateLiveAISuggestionsMethod2(session, tempTranscript);
         } else {
-            console.log(`[${sessionId}] 🔬⚡ Partial transcript too short (${wordCount} words), waiting for ${wordThreshold} words...`);
+            console.log(`[${sessionId}] 🔬⚡ Skipping live suggestions:`, {
+                wordCount,
+                threshold: wordThreshold,
+                seemsComplete,
+                timeSinceLastSuggestion: `${timeSinceLastSuggestion}ms`,
+                reason: !seemsComplete ? 'incomplete sentence' : 
+                       wordCount < wordThreshold ? 'too few words' : 'too soon'
+            });
         }
         
     } catch (error) {
@@ -2948,10 +2989,16 @@ async function generateAISuggestionsMethod2(session, newTranscript) {
             return `[${roleLabel}] ${t.text}`;
         }).join('\n');
         
-        // Enhanced prompt with speaker context
-        const prompt = `ANALIZA ROZMOWY SPRZEDAŻOWEJ W CZASIE RZECZYWISTYM - METODA 2 (Enhanced Diarization)
+        // Sprawdź czy to nie jest powtórzenie ostatniej analizy
+        const lastFinalSuggestion = session.aiSuggestions.slice(-1)[0];
+        const avoidRepetition = lastFinalSuggestion ? `
 
-OSTATNIA WYPOWIEDŹ:
+WAŻNE: Unikaj powtarzania poprzedniej analizy. Ostatnia analiza: "${JSON.stringify(lastFinalSuggestion.suggestions).substring(0, 150)}..."` : '';
+
+        // Enhanced prompt with speaker context - bardziej przemyślany
+        const prompt = `GŁĘBOKA ANALIZA ROZMOWY SPRZEDAŻOWEJ - KOMPLETNA WYPOWIEDŹ:
+
+AKTUALNA WYPOWIEDŹ (FINALNA):
 Mówca: ${newTranscript.speakerRole === 'salesperson' ? '🔵 SPRZEDAWCA' : 
        newTranscript.speakerRole === 'client' ? '🔴 KLIENT' : 
        '🟡 ' + (newTranscript.speaker || 'NIEZNANY')}
@@ -2960,11 +3007,24 @@ Tekst: "${newTranscript.text}"
 KONTEKST ROZMOWY (ostatnie 5 wypowiedzi):
 ${latestHistory}
 
-UWAGI:
-- Rozpoznano ${session.conversationHistory.length} wypowiedzi
+🎯 GŁĘBOKA ANALIZA - KOMPLETNA WYPOWIEDŹ:
+- Jaka jest prawdziwa intencja tej wypowiedzi?
+- Jakie emocje i sygnały można wykryć?
+- Jak ta wypowiedź wpływa na dynamikę sprzedaży?
+- Jakie są konkretne następne kroki?
+
+ZASADY ANALIZY:
+- To jest kompletna wypowiedź - daj pełną analizę
+- Skoncentruj się na kluczowych sygnałach sprzedażowych
+- Podaj maksymalnie 3 konkretne, działalne sugestie
+- Unikaj ogólników typu "słuchaj aktywnie"
+- Jeśli to klient - jak sprzedawca ma reagować?
+- Jeśli to sprzedawca - jak oceniasz jego podejście?${avoidRepetition}
+
+STATYSTYKI SESJI:
+- Liczba wypowiedzi: ${session.conversationHistory.length}
 - Obecny mówca: ${newTranscript.speakerRole}
-- Analiza w języku polskim z rozpoznaniem mówców
-- Skoncentruj się na dynamice sprzedaży i interakcji między mówcami`;
+- Metoda: Enhanced Diarization`;
 
         // Debug: Check if OpenAI is available
         console.log(`[${sessionId}] 🔬🔍 OpenAI check:`, {
@@ -3078,26 +3138,39 @@ async function generateLiveAISuggestionsMethod2(session, partialTranscript) {
     try {
         console.log(`[${sessionId}] 🔬⚡ Generating LIVE Method 2 AI suggestions for partial: "${partialTranscript.text.substring(0, 30)}..."`);
         
-        // Użyj conversation history z ChatGPT dla lepszego kontekstu
-        const livePrompt = `ANALIZA NA ŻYWO - WYPOWIEDŹ W TRAKCIE:
+        // Sprawdź czy ostatnia sugestia była podobna (unikaj powtórzeń)
+        const lastSuggestion = session.chatGPTHistory?.slice(-2).find(msg => msg.role === 'assistant');
+        const avoidRepetition = lastSuggestion ? `
+        
+WAŻNE: Unikaj powtarzania poprzedniej sugestii. Ostatnia sugestia: "${lastSuggestion.content.substring(0, 100)}..."` : '';
 
-OBECNY MÓWCA: ${partialTranscript.speakerRole === 'salesperson' ? '🔵 SPRZEDAWCA' : 
-                partialTranscript.speakerRole === 'client' ? '🔴 KLIENT' : '🟡 NIEZNANY'}
+        // Przemyślany prompt dla live suggestions
+        const livePrompt = `INTELIGENTNA ANALIZA - WYPOWIEDŹ CZĘŚCIOWA:
 
-WYPOWIEDŹ W TRAKCIE (${partialTranscript.wordsCount || partialTranscript.text.split(' ').length} słów): 
+KONTEKST MÓWCY: ${partialTranscript.speakerRole === 'salesperson' ? '🔵 SPRZEDAWCA' : 
+                  partialTranscript.speakerRole === 'client' ? '🔴 KLIENT' : '🟡 NIEZNANY'}
+
+WYPOWIEDŹ (${partialTranscript.wordsCount || partialTranscript.text.split(' ').length} słów): 
 "${partialTranscript.text}"
 
-⚡ POTRZEBUJĘ SZYBKICH SUGESTII NA ŻYWO:
-- Co może być intencją tej wypowiedzi?
-- Jakie sygnały wykrywasz?
-- Co sprzedawca powinien przygotować jako odpowiedź?
+🧠 PRZEMYŚLANA ANALIZA:
+- Czy wypowiedź zawiera kompletną myśl?
+- Jakie są kluczowe sygnały w tej wypowiedzi?
+- Czy warto już reagować czy poczekać na więcej?
 
-Odpowiedz SZYBKO w formacie JSON po polsku:
+ZASADY ODPOWIEDZI:
+- Jeśli wypowiedź jest niekompletna - zasugeruj cierpliwość
+- Jeśli widać wyraźny sygnał - podaj konkretną akcję
+- Unikaj ogólników i powtórzeń
+- Maksymalnie 2 konkretne sugestie${avoidRepetition}
+
+JSON (po polsku):
 {
   "analiza_mowcy": "sprzedawca|klient|nieznany",
-  "sugestie": ["2-3 szybkie sugestie"],
-  "sygnaly": ["kluczowe sygnały jeśli wykryto"],
-  "natychmiastowa_akcja": "co zrobić TERAZ"
+  "czy_kompletna": "tak|nie|częściowo",
+  "sugestie": ["max 2 konkretne sugestie lub 'Poczekaj na więcej'"],
+  "sygnaly": ["tylko wyraźne sygnały"],
+  "akcja": "konkretna akcja lub 'Słuchaj dalej'"
 }`;
 
         // Debug info removed for better performance
@@ -3190,47 +3263,51 @@ WSKAZÓWKI:
 
 // Create Enhanced GPT Context for Method 2 with Speaker Diarization
 function createGPTContextMethod2(client, product, notes) {
-    return `Jesteś zaawansowanym asystentem sprzedażowym AI słuchającym rozmowy w CZASIE RZECZYWISTYM z ROZPOZNANIEM MÓWCÓW (Enhanced Diarization).
+    return `Jesteś EKSPERTEM w analizie rozmów sprzedażowych z zaawansowanym rozpoznaniem mówców.
 
-TWOJA ROZSZERZONA ROLA (Method 2):
-- Analizujesz każdą wypowiedź natychmiastowo Z INFORMACJĄ O MÓWCY
-- Rozpoznajesz kto jest SPRZEDAWCĄ a kto KLIENTEM
-- Śledzisz dynamikę rozmowy między uczestnikami
-- Podpowiadasz sprzedawcy jak reagować na wypowiedzi klienta
-- Wykrywasz wzorce komunikacyjne i emocje obu stron
-- Odpowiadasz w formacie JSON z uwzględnieniem ról mówców
+🎯 TWOJA MISJA:
+- Analizujesz KOMPLETNE wypowiedzi z pełnym kontekstem
+- Dostarczasz KONKRETNE, działalne sugestie (nie ogólniki)
+- Wykrywasz KLUCZOWE sygnały sprzedażowe
+- Unikasz powtórzeń i chaosu w analizie
+- Koncentrujesz się na JAKOŚCI nad ilością
 
-INFORMACJE O KLIENCIE:
-- Nazwa: ${client.name}
-- Opis: ${client.description || 'Brak'}
-- Notatki: ${client.comment || 'Brak'}
+📊 INFORMACJE O SESJI:
+KLIENT: ${client.name}
+${client.description ? `Opis: ${client.description}` : ''}
+${client.comment ? `Notatki: ${client.comment}` : ''}
 
-INFORMACJE O PRODUKCIE:
-- Nazwa: ${product.name}
-- Opis: ${product.description || 'Brak'}
-- Notatki: ${product.comment || 'Brak'}
+PRODUKT: ${product.name}
+${product.description ? `Opis: ${product.description}` : ''}
+${product.comment ? `Notatki: ${product.comment}` : ''}
 
-NOTATKI SESJI: ${notes || 'Brak'}
+${notes ? `NOTATKI SESJI: ${notes}` : ''}
 
-ZAAWANSOWANE WSKAZÓWKI DLA METHOD 2:
-- Rozpoznajesz mówców: 🔵SPRZEDAWCA vs 🔴KLIENT
-- Analizujesz reakcje klienta na propozycje sprzedawcy
-- Wykrywasz obiekcje klienta i sugerujesz kontragumenty
-- Monitorujesz tempo rozmowy i zaangażowanie stron
-- Podpowiadasz kiedy sprzedawca ma zadać pytanie zamykające
-- Zauważasz sygnały kupna ze strony klienta
-- Ostrzegasz przed mówienie za dużo przez sprzedawcę
-- Sugerujesz aktywne słuchanie i dopasowanie stylu komunikacji
+🧠 ZASADY INTELIGENTNEJ ANALIZY:
+- 🔵SPRZEDAWCA vs 🔴KLIENT - rozpoznajesz role
+- CZEKASZ na kompletne wypowiedzi przed analizą
+- UNIKASZ powtarzania poprzednich sugestii
+- KONCENTRUJESZ się na sygnałach sprzedażowych
+- PODAJESZ maksymalnie 3 konkretne sugestie
+- WYKRYWASZ momenty decyzyjne klienta
+- OSTRZEGASZ przed błędami sprzedawcy
 
-FORMAT ODPOWIEDZI JSON (wszystko po polsku):
+⚠️ CZEGO UNIKAĆ:
+- Ogólników typu "słuchaj aktywnie", "zadaj pytania"
+- Powtarzania poprzednich analiz
+- Analizowania niepełnych wypowiedzi
+- Zbyt częstych sugestii
+- Chaosu w komunikacji
+
+📝 FORMAT JSON (ZAWSZE po polsku):
 {
   "analiza_mowcy": "sprzedawca|klient|nieznany",
-  "intencja": "opis intencji wypowiedzi w języku polskim",
-  "emocje": "pozytywne|negatywne|neutralne",
-  "sugestie": ["konkretne sugestie dla sprzedawcy po polsku"],
-  "sygnaly": ["sygnały kupna lub oporu po polsku"],
-  "dynamika_rozmowy": "analiza dynamiki rozmowy po polsku",
-  "nastepny_krok": "konkretna rekomendacja następnego kroku po polsku"
+  "intencja": "konkretna intencja tej wypowiedzi",
+  "emocje": "pozytywne|negatywne|neutralne|mieszane",
+  "sugestie": ["max 3 konkretne, działalne sugestie"],
+  "sygnaly": ["tylko wyraźne sygnały kupna/oporu"],
+  "dynamika_rozmowy": "jak ta wypowiedź zmienia dynamikę",
+  "nastepny_krok": "jedna konkretna rekomendacja"
 }`;
 }
 

@@ -1259,15 +1259,17 @@ function onAISuggestions(data) {
         `;
         suggestionsContent.appendChild(method2Header);
         
-        // Enhanced suggestions structure for Method 2 (support both Polish and English keys)
+        // Enhanced suggestions structure for Method 2 (support both Polish and English keys + new fields)
         const enhancedSuggestions = [
             { type: 'speaker-analysis', content: suggestions.analiza_mowcy || suggestions.speaker_analysis, icon: 'fa-user-analytics' },
             { type: 'intent-analysis', content: suggestions.intencja || suggestions.intent, icon: 'fa-bullseye' },
             { type: 'emotion-analysis', content: suggestions.emocje || suggestions.emotion, icon: 'fa-heart' },
             { type: 'conversation-dynamics', content: suggestions.dynamika_rozmowy || suggestions.conversation_dynamics, icon: 'fa-exchange-alt' },
-            { type: 'next-action', content: suggestions.nastepny_krok || suggestions.natychmiastowa_akcja || suggestions.next_action, icon: 'fa-arrow-right' },
+            { type: 'next-action', content: suggestions.nastepny_krok || suggestions.natychmiastowa_akcja || suggestions.akcja || suggestions.next_action, icon: 'fa-arrow-right' },
             { type: 'suggestions', content: suggestions.sugestie || suggestions.suggestions, icon: 'fa-lightbulb' },
-            { type: 'signals', content: suggestions.sygnaly || suggestions.signals, icon: 'fa-chart-line' }
+            { type: 'signals', content: suggestions.sygnaly || suggestions.signals, icon: 'fa-chart-line' },
+            // New field for live suggestions
+            { type: 'completeness', content: suggestions.czy_kompletna, icon: 'fa-check-circle' }
         ];
         
         enhancedSuggestions.forEach(item => {
@@ -1280,9 +1282,10 @@ function onAISuggestions(data) {
                     'intent-analysis': 'Intencja',
                     'emotion-analysis': 'Emocje',
                     'conversation-dynamics': 'Dynamika rozmowy',
-                    'next-action': isLive ? 'Natychmiastowa akcja' : 'Następny krok',
+                    'next-action': isLive ? 'Akcja' : 'Następny krok',
                     'suggestions': 'Sugestie',
-                    'signals': 'Sygnały'
+                    'signals': 'Sygnały',
+                    'completeness': 'Kompletność wypowiedzi'
                 }[item.type];
                 
                 // Format content - handle arrays
