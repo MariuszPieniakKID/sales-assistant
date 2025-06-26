@@ -837,13 +837,23 @@ async function exportMeetingToPDF() {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         
-        // Pobierz PDF jako blob
+        // Pobierz odpowiedź jako blob
         const blob = await response.blob();
         
-        // Sprawdź czy to rzeczywiście PDF
-        if (blob.type !== 'application/pdf') {
+        console.log('Otrzymano plik typu:', blob.type);
+        
+        // Sprawdź typ pliku i ustaw odpowiednie rozszerzenie
+        let fileName, successMessage;
+        
+        if (blob.type === 'application/pdf') {
+            fileName = `spotkanie_${clientName.replace(/[^a-zA-Z0-9]/g, '_')}_${meeting.id}.pdf`;
+            successMessage = '📄 PDF został pobrany pomyślnie!';
+        } else if (blob.type === 'text/html' || blob.type.includes('html')) {
+            fileName = `spotkanie_${clientName.replace(/[^a-zA-Z0-9]/g, '_')}_${meeting.id}.html`;
+            successMessage = '📄 Raport HTML został pobrany! Otwórz plik i użyj Ctrl+P → "Zapisz jako PDF"';
+        } else {
             console.error('Otrzymano nieprawidłowy typ pliku:', blob.type);
-            throw new Error('Serwer nie zwrócił pliku PDF');
+            throw new Error('Serwer zwrócił nieobsługiwany typ pliku: ' + blob.type);
         }
         
         // Utwórz link do pobrania
@@ -851,7 +861,7 @@ async function exportMeetingToPDF() {
         const a = document.createElement('a');
         a.style.display = 'none';
         a.href = url;
-        a.download = `spotkanie_${clientName.replace(/[^a-zA-Z0-9]/g, '_')}_${meeting.id}.pdf`;
+        a.download = fileName;
         
         // Dodaj do DOM, kliknij i usuń
         document.body.appendChild(a);
@@ -859,7 +869,7 @@ async function exportMeetingToPDF() {
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
         
-        showSuccess('📄 PDF został pobrany pomyślnie!');
+        showSuccess(successMessage);
         
     } catch (error) {
         console.error('Błąd eksportu do PDF:', error);

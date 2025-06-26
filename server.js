@@ -12,6 +12,7 @@ const { OpenAI } = require('openai');
 const WebSocket = require('ws');
 const http = require('http');
 const puppeteer = require('puppeteer');
+const htmlPdf = require('html-pdf-node');
 
 // Initialize OpenAI globally
 const openai = new OpenAI({
@@ -1454,63 +1455,132 @@ app.post('/api/meetings/export-pdf', requireAuth, async (req, res) => {
     </html>
     `;
     
-    console.log('🚀 Uruchamianie Puppeteer...');
-    
-    // Uruchom Puppeteer z optymalnymi ustawieniami
-    browser = await puppeteer.launch({
-      headless: 'new',
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--disable-gpu',
-        '--window-size=1920x1080'
-      ]
-    });
-    
-    const page = await browser.newPage();
-    
-    // Ustaw viewport i content
-    await page.setViewport({ width: 1920, height: 1080 });
-    await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
-    
-    console.log('📄 Generowanie PDF...');
-    
-    // Generuj PDF z optymalnymi ustawieniami
-    const pdfBuffer = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      margin: {
-        top: '20mm',
-        right: '15mm',
-        bottom: '20mm',
-        left: '15mm'
-      },
-      displayHeaderFooter: true,
-      headerTemplate: '<div></div>',
-      footerTemplate: `
-        <div style="font-size: 10px; color: #666; text-align: center; width: 100%; margin: 0 15mm;">
-          <span>Strona <span class="pageNumber"></span> z <span class="totalPages"></span></span>
-        </div>
-      `
-    });
-    
-    await browser.close();
-    browser = null;
-    
-    console.log('✅ PDF wygenerowany pomyślnie');
-    
-    // Wyślij PDF jako odpowiedź
-    const fileName = `spotkanie_${clientName.replace(/[^a-zA-Z0-9]/g, '_')}_${meetingId}.pdf`;
-    
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-    res.setHeader('Content-Length', pdfBuffer.length);
-    res.send(pdfBuffer);
+    // Spróbuj najpierw Puppeteer
+    try {
+      console.log('🚀 Próba #1: Uruchamianie Puppeteer...');
+      
+      // Uruchom Puppeteer z optymalnymi ustawieniami
+      browser = await puppeteer.launch({
+        headless: 'new',
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-accelerated-2d-canvas',
+          '--disable-gpu',
+          '--window-size=1920x1080',
+          '--disable-web-security',
+          '--disable-features=VizDisplayCompositor'
+        ]
+      });
+      
+      console.log('✅ Puppeteer uruchomiony pomyślnie');
+      
+      const page = await browser.newPage();
+      
+      // Ustaw viewport i content
+      await page.setViewport({ width: 1920, height: 1080 });
+      await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
+      
+      console.log('📄 Generowanie PDF z Puppeteer...');
+      
+      // Generuj PDF z optymalnymi ustawieniami
+      const pdfBuffer = await page.pdf({
+        format: 'A4',
+        printBackground: true,
+        margin: {
+          top: '20mm',
+          right: '15mm',
+          bottom: '20mm',
+          left: '15mm'
+        },
+        displayHeaderFooter: true,
+        headerTemplate: '<div></div>',
+        footerTemplate: `
+          <div style="font-size: 10px; color: #666; text-align: center; width: 100%; margin: 0 15mm;">
+            <span>Strona <span class="pageNumber"></span> z <span class="totalPages"></span></span>
+          </div>
+        `
+      });
+      
+      console.log('📄 PDF Buffer utworzony, rozmiar:', pdfBuffer.length, 'bajtów');
+      
+      // Sprawdź czy buffer jest prawidłowy (PDF powinien zaczynać się od %PDF)
+      const pdfHeader = pdfBuffer.slice(0, 4).toString();
+      console.log('🔍 PDF Header:', pdfHeader);
+      
+      if (!pdfHeader.startsWith('%PDF')) {
+        throw new Error('Wygenerowany buffer nie jest prawidłowym PDF-em');
+      }
+      
+      await browser.close();
+      browser = null;
+      
+      console.log('✅ PDF wygenerowany pomyślnie z Puppeteer');
+      
+      // Wyślij PDF jako odpowiedź
+      const fileName = `spotkanie_${clientName.replace(/[^a-zA-Z0-9]/g, '_')}_${meetingId}.pdf`;
+      
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+      res.setHeader('Content-Length', pdfBuffer.length);
+      res.send(pdfBuffer);
+      
+    } catch (puppeteerError) {
+      console.error('❌ Puppeteer failed:', puppeteerError.message);
+      
+      // Zamknij browser jeśli był otwarty
+      if (browser) {
+        try {
+          await browser.close();
+        } catch (closeError) {
+          console.error('❌ Błąd zamykania Puppeteer:', closeError);
+        }
+        browser = null;
+      }
+      
+      // Spróbuj html-pdf-node jako backup
+      console.log('🔄 Próba #2: Używanie html-pdf-node...');
+      
+      try {
+        const options = { 
+          format: 'A4',
+          margin: { top: '20mm', right: '15mm', bottom: '20mm', left: '15mm' },
+          printBackground: true,
+          preferCSSPageSize: true
+        };
+        
+        const file = { content: htmlContent };
+        const pdfBuffer = await htmlPdf.generatePdf(file, options);
+        
+        console.log('📄 PDF Buffer utworzony z html-pdf-node, rozmiar:', pdfBuffer.length, 'bajtów');
+        
+        // Sprawdź czy buffer jest prawidłowy
+        const pdfHeader = pdfBuffer.slice(0, 4).toString();
+        console.log('🔍 PDF Header:', pdfHeader);
+        
+        if (!pdfHeader.startsWith('%PDF')) {
+          throw new Error('html-pdf-node nie wygenerował prawidłowego PDF-a');
+        }
+        
+        console.log('✅ PDF wygenerowany pomyślnie z html-pdf-node');
+        
+        // Wyślij PDF jako odpowiedź
+        const fileName = `spotkanie_${clientName.replace(/[^a-zA-Z0-9]/g, '_')}_${meetingId}.pdf`;
+        
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+        res.setHeader('Content-Length', pdfBuffer.length);
+        res.send(pdfBuffer);
+        
+      } catch (htmlPdfError) {
+        console.error('❌ html-pdf-node też nie działa:', htmlPdfError.message);
+        throw new Error('Obie biblioteki PDF nie działają: ' + puppeteerError.message + ' | ' + htmlPdfError.message);
+      }
+    }
     
   } catch (error) {
-    console.error('❌ Błąd generowania PDF:', error);
+    console.error('❌ Błąd generowania PDF z Puppeteer:', error);
     
     // Zamknij browser w przypadku błędu
     if (browser) {
@@ -1521,10 +1591,215 @@ app.post('/api/meetings/export-pdf', requireAuth, async (req, res) => {
       }
     }
     
-    res.status(500).json({ 
-      success: false, 
-      message: 'Błąd generowania PDF: ' + error.message 
-    });
+    // FALLBACK: Jeśli Puppeteer nie działa, zwróć HTML z instrukcjami
+    console.log('🔄 Fallback: Generowanie HTML zamiast PDF');
+    
+    try {
+      const {
+        meetingId, clientName, productName, meetingDate,
+        transcription, aiSuggestions, chatgptHistory, finalSummary,
+        positiveFindings, negativeFindings, recommendations, ownNotes
+      } = req.body;
+      
+      const htmlFallback = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+          <meta charset="UTF-8">
+          <title>Spotkanie ${clientName} - ${meetingId}</title>
+          <style>
+              body { 
+                  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+                  margin: 20px; 
+                  line-height: 1.6; 
+                  color: #333; 
+                  background: white;
+              }
+              .print-instructions {
+                  background: #e3f2fd;
+                  border: 2px solid #2196f3;
+                  border-radius: 8px;
+                  padding: 20px;
+                  margin-bottom: 30px;
+                  text-align: center;
+              }
+              .print-instructions h2 {
+                  color: #1976d2;
+                  margin-top: 0;
+              }
+              .print-instructions p {
+                  margin: 10px 0;
+                  font-size: 16px;
+              }
+              .header { 
+                  border-bottom: 3px solid #667eea; 
+                  padding-bottom: 20px; 
+                  margin-bottom: 30px; 
+                  text-align: center;
+              }
+              .header h1 { 
+                  color: #667eea; 
+                  margin: 0; 
+                  font-size: 28px;
+                  font-weight: 700;
+              }
+              .header .meta { 
+                  color: #666; 
+                  margin-top: 15px; 
+                  font-size: 16px;
+                  line-height: 1.8;
+              }
+              .section { 
+                  margin-bottom: 35px; 
+                  page-break-inside: avoid; 
+              }
+              .section h2 { 
+                  color: #667eea; 
+                  border-bottom: 2px solid #e2e8f0; 
+                  padding-bottom: 8px; 
+                  margin-bottom: 15px;
+                  font-size: 20px;
+                  font-weight: 600;
+              }
+              .transcription { 
+                  background: #f8fafc; 
+                  padding: 20px; 
+                  border-radius: 8px; 
+                  white-space: pre-wrap; 
+                  border-left: 4px solid #667eea;
+                  font-size: 14px;
+              }
+              .ai-suggestions { 
+                  background: #f0fff4; 
+                  padding: 20px; 
+                  border-radius: 8px; 
+                  border-left: 4px solid #48bb78;
+                  font-size: 14px;
+              }
+              .summary { 
+                  background: #fff5f5; 
+                  padding: 20px; 
+                  border-radius: 8px; 
+                  border-left: 4px solid #f56565;
+                  font-size: 14px;
+              }
+              .findings { 
+                  display: grid; 
+                  grid-template-columns: 1fr 1fr; 
+                  gap: 20px; 
+                  margin-bottom: 20px;
+              }
+              .positive { 
+                  background: #f0fff4; 
+                  padding: 15px; 
+                  border-radius: 8px; 
+                  border-left: 4px solid #48bb78;
+              }
+              .negative { 
+                  background: #fef5e7; 
+                  padding: 15px; 
+                  border-radius: 8px; 
+                  border-left: 4px solid #ed8936;
+              }
+              .notes { 
+                  background: #f7fafc; 
+                  padding: 20px; 
+                  border-radius: 8px; 
+                  border-left: 4px solid #4299e1;
+                  font-size: 14px;
+              }
+              @media print { 
+                  .print-instructions { display: none; }
+                  body { margin: 0; padding: 15px; }
+                  .section { page-break-inside: avoid; }
+              }
+          </style>
+      </head>
+      <body>
+          <div class="print-instructions">
+              <h2>📄 Instrukcje drukowania</h2>
+              <p><strong>Aby zapisać jako PDF:</strong></p>
+              <p>1. Naciśnij <kbd>Ctrl+P</kbd> (Windows) lub <kbd>Cmd+P</kbd> (Mac)</p>
+              <p>2. W opcjach drukowania wybierz <strong>"Zapisz jako PDF"</strong></p>
+              <p>3. Kliknij <strong>"Zapisz"</strong></p>
+          </div>
+          
+          <div class="header">
+              <h1>📊 Raport ze spotkania sprzedażowego</h1>
+              <div class="meta">
+                  <strong>👤 Klient:</strong> ${clientName}<br>
+                  <strong>📦 Produkt:</strong> ${productName}<br>
+                  <strong>📅 Data spotkania:</strong> ${meetingDate}<br>
+                  <strong>🆔 ID spotkania:</strong> ${meetingId}
+              </div>
+          </div>
+          
+          <div class="section">
+              <h2>📝 Transkrypcja rozmowy</h2>
+              <div class="transcription">${transcription.replace(/\n/g, '<br>')}</div>
+          </div>
+          
+          ${aiSuggestions && aiSuggestions !== 'Brak sugestii AI - prawdopodobnie nie otrzymano transkrypcji z AssemblyAI' ? `
+          <div class="section">
+              <h2>🤖 Sugestie AI z sesji</h2>
+              <div class="ai-suggestions">${aiSuggestions.replace(/\n/g, '<br>')}</div>
+          </div>
+          ` : ''}
+          
+          ${finalSummary ? `
+          <div class="section">
+              <h2>📊 Podsumowanie spotkania</h2>
+              <div class="summary">${finalSummary.replace(/\n/g, '<br>')}</div>
+          </div>
+          ` : ''}
+          
+          <div class="section">
+              <h2>📋 Wnioski i rekomendacje</h2>
+              <div class="findings">
+                  <div>
+                      <h3>✅ Pozytywne wnioski</h3>
+                      <div class="positive">${positiveFindings || 'Brak pozytywnych wniosków'}</div>
+                  </div>
+                  <div>
+                      <h3>⚠️ Obszary do poprawy</h3>
+                      <div class="negative">${negativeFindings || 'Brak obszarów do poprawy'}</div>
+                  </div>
+              </div>
+              <h3>💡 Rekomendacje</h3>
+              <div class="notes">${recommendations || 'Brak rekomendacji'}</div>
+          </div>
+          
+          ${ownNotes ? `
+          <div class="section">
+              <h2>📓 Własne notatki</h2>
+              <div class="notes">${ownNotes.replace(/\n/g, '<br>')}</div>
+          </div>
+          ` : ''}
+          
+          <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e2e8f0; text-align: center; font-size: 12px; color: #666;">
+              <p>
+                  🤖 Raport wygenerowany automatycznie przez <strong>Asystenta Sprzedaży</strong><br>
+                  📅 Data wygenerowania: ${new Date().toLocaleString('pl-PL')}<br>
+                  🔗 System wspierający doradców handlowych
+              </p>
+          </div>
+      </body>
+      </html>
+      `;
+      
+      const fileName = `spotkanie_${clientName.replace(/[^a-zA-Z0-9]/g, '_')}_${meetingId}.html`;
+      
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+      res.send(htmlFallback);
+      
+    } catch (fallbackError) {
+      console.error('❌ Błąd fallback HTML:', fallbackError);
+      res.status(500).json({ 
+        success: false, 
+        message: 'Błąd generowania raportu: ' + fallbackError.message 
+      });
+    }
   }
 });
 
