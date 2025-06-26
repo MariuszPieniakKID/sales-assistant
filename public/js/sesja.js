@@ -67,17 +67,17 @@ function waitForDOMElements() {
     return new Promise((resolve) => {
         const checkElements = () => {
             const sessionClientSelect = document.getElementById('sessionClient');
-            const sessionProductSelect = document.getElementById('sessionProduct'); // POPRAWKA: sessionProduct zamiast sessionProductSelect
-            const startSessionBtn = document.getElementById('startSessionBtn');
+            const sessionProductSelect = document.getElementById('sessionProduct');
+            const startSessionBtnMethod2 = document.getElementById('startSessionBtnMethod2');
             
-            if (sessionClientSelect && sessionProductSelect && startSessionBtn) {
+            if (sessionClientSelect && sessionProductSelect && startSessionBtnMethod2) {
                 console.log('✅ DOM elements ready');
                 resolve();
             } else {
                 console.log('⏳ Waiting for DOM elements...', {
                     client: !!sessionClientSelect,
                     product: !!sessionProductSelect, 
-                    button: !!startSessionBtn
+                    buttonMethod2: !!startSessionBtnMethod2
                 });
                 setTimeout(checkElements, 50);
             }
@@ -244,30 +244,7 @@ function handleWebSocketMessage(data) {
 function setupEventListeners() {
     console.log('🔧 Setting up event listeners...');
     
-    // NOWE: Language selection handler
-    const languageSelect = document.getElementById('sessionLanguage');
-    if (languageSelect) {
-        languageSelect.addEventListener('change', (e) => {
-            selectedLanguage = e.target.value;
-            useWebSpeech = (selectedLanguage === 'pl' && webSpeechRecognition);
-            
-            console.log('🌐 Language changed:', {
-                selectedLanguage,
-                useWebSpeech,
-                hasWebSpeech: !!webSpeechRecognition
-            });
-            
-            // Update Web Speech API language if needed
-            if (webSpeechRecognition && selectedLanguage === 'pl') {
-                webSpeechRecognition.lang = 'pl-PL';
-            }
-            
-            showToast(`Język zmieniony na: ${selectedLanguage === 'pl' ? '🇵🇱 Polski' : '🇺🇸 Angielski'}`, 'info');
-        });
-        
-        // Set default language
-        languageSelect.value = selectedLanguage;
-    }
+    // Język jest teraz domyślnie ustawiony na polski (Method 2)
     
     // Client select change handler
     const clientSelect = document.getElementById('sessionClient');
@@ -281,19 +258,7 @@ function setupEventListeners() {
         productSelect.addEventListener('change', validateSessionForm);
     }
     
-    // Start session button (Method 1)
-    const startBtn = document.getElementById('startSessionBtn');
-    console.log('🔵 Method 1 button found:', !!startBtn);
-    if (startBtn) {
-        console.log('🔵 Adding Method 1 event listener...');
-        startBtn.addEventListener('click', () => {
-            console.log('🔵 Method 1 button clicked!');
-            startRealtimeSession();
-        });
-        console.log('🔵 Method 1 event listener added');
-    } else {
-        console.error('❌ Method 1 button not found!');
-    }
+    // Method 1 został usunięty - używamy tylko Method 2
     
     // Start session button (Method 2 - with diarization)
     const startBtnMethod2 = document.getElementById('startSessionBtnMethod2');
@@ -418,11 +383,10 @@ function populateProductSelect() {
 function validateSessionForm() {
     // Znajdź elementy na nowo
     const clientSelect = document.getElementById('sessionClient');
-    const productSelect = document.getElementById('sessionProduct'); // POPRAWKA: sessionProduct
-    const startBtn = document.getElementById('startSessionBtn');
+    const productSelect = document.getElementById('sessionProduct');
     const startBtnMethod2 = document.getElementById('startSessionBtnMethod2');
     
-    if (!clientSelect || !productSelect || !startBtn) {
+    if (!clientSelect || !productSelect || !startBtnMethod2) {
         console.error('❌ Elementy formularza nie istnieją podczas walidacji');
         return;
     }
@@ -431,16 +395,12 @@ function validateSessionForm() {
     const productSelected = productSelect.value !== '';
     const formValid = clientSelected && productSelected;
     
-    startBtn.disabled = !formValid;
-    if (startBtnMethod2) {
-        startBtnMethod2.disabled = !formValid;
-    }
+    startBtnMethod2.disabled = !formValid;
     
     console.log('🔍 Walidacja formularza:', {
         clientSelected,
         productSelected,
-        button1Enabled: !startBtn.disabled,
-        button2Enabled: startBtnMethod2 ? !startBtnMethod2.disabled : 'not found'
+        buttonEnabled: !startBtnMethod2.disabled
     });
 }
 

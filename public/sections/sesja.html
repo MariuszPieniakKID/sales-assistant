@@ -18,18 +18,6 @@
                 
                 <div class="setup-form">
                     <div class="form-group">
-                        <label for="sessionLanguage">Język rozpoznawania mowy *</label>
-                        <select id="sessionLanguage" required>
-                            <option value="pl">🇵🇱 Polski (Web Speech API - zalecane)</option>
-                            <option value="en">🇺🇸 Angielski (AssemblyAI)</option>
-                        </select>
-                        <small class="form-help">
-                            Polski: Używa Web Speech API przeglądarki (szybsze, dokładniejsze dla polskiego)<br>
-                            Angielski: Używa AssemblyAI (profesjonalne rozpoznawanie)
-                        </small>
-                    </div>
-                    
-                    <div class="form-group">
                         <label for="sessionClient">Wybierz klienta *</label>
                         <select id="sessionClient" required>
                             <option value="">-- Wybierz klienta --</option>
@@ -49,13 +37,9 @@
                     </div>
                     
                     <div class="session-actions">
-                        <button type="button" class="btn btn-primary btn-large" id="startSessionBtn" disabled>
-                            <i class="fas fa-microphone"></i>
-                            Rozpocznij nagrywanie (Metoda 1)
-                        </button>
-                        <button type="button" class="btn btn-success btn-large" id="startSessionBtnMethod2" disabled style="margin-left: 16px;">
-                            <i class="fas fa-users"></i>
-                            Rozpocznij z diarization (Metoda 2)
+                        <button type="button" class="btn btn-success btn-large" id="startSessionBtnMethod2" disabled>
+                            <i class="fas fa-play"></i>
+                            Rozpocznij
                         </button>
                     </div>
                 </div>
