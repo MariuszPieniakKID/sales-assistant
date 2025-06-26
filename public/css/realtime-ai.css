@@ -239,30 +239,52 @@
 /* ZAWARTOŚĆ SUGESTII */
 .suggestion-content {
     padding: 20px;
-    font-size: 16px;
+    font-size: 16px !important;
     line-height: 1.6;
-    color: #374151;
+    color: #000000 !important;
+    font-weight: 600 !important;
+    background: #ffffff;
+}
+
+.suggestion-content * {
+    color: #000000 !important;
+    font-weight: 600 !important;
 }
 
 .suggestion-content.main-suggestion {
     background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
     border-left: 4px solid #f59e0b;
-    font-weight: 600;
-    color: #92400e;
+    font-weight: 700 !important;
+    color: #000000 !important;
+}
+
+.suggestion-content.main-suggestion * {
+    color: #000000 !important;
+    font-weight: 700 !important;
 }
 
 .suggestion-content.action-needed {
     background: linear-gradient(135deg, #fecaca 0%, #fca5a5 100%);
     border-left: 4px solid #ef4444;
-    font-weight: 600;
-    color: #991b1b;
+    font-weight: 700 !important;
+    color: #000000 !important;
+}
+
+.suggestion-content.action-needed * {
+    color: #000000 !important;
+    font-weight: 700 !important;
 }
 
 .suggestion-content.positive-signal {
     background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
     border-left: 4px solid #10b981;
-    font-weight: 600;
-    color: #065f46;
+    font-weight: 700 !important;
+    color: #000000 !important;
+}
+
+.suggestion-content.positive-signal * {
+    color: #000000 !important;
+    font-weight: 700 !important;
 }
 
 /* LISTA SUGESTII */
@@ -278,6 +300,9 @@
     display: flex;
     align-items: flex-start;
     gap: 12px;
+    color: #000000 !important;
+    font-weight: 600 !important;
+    font-size: 16px !important;
 }
 
 .suggestion-list li:last-child {
@@ -316,9 +341,9 @@
 
 .suggestion-section h5 {
     margin: 0 0 12px 0;
-    font-size: 14px;
-    font-weight: 700;
-    color: #1e293b;
+    font-size: 14px !important;
+    font-weight: 700 !important;
+    color: #000000 !important;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -366,10 +391,28 @@
 /* UKRYWANIE TECHNICZNYCH ELEMENTÓW */
 .method2-header,
 .speaker-context,
-.suggestion-item-method2,
 .live-indicator,
 .live-pulse {
     display: none !important;
+}
+
+/* Zapewnienie widoczności nowych elementów */
+.suggestion-card,
+.suggestion-header,
+.suggestion-content,
+.suggestion-section,
+.suggestion-list {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+.suggestion-list {
+    display: block !important;
+}
+
+.suggestion-list li {
+    display: flex !important;
 }
 
 /* RESPONSYWNOŚĆ */
