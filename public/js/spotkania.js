@@ -248,10 +248,30 @@ async function openMeetingDetails(meetingId) {
                 </div>
             </div>
             
-            <!-- Główna zawartość -->
-            <div class="meeting-main-content">
-                <!-- Lewy panel - Transkrypcja -->
-                <div class="meeting-left-panel">
+            <!-- Tabs Navigation -->
+            <div class="meeting-tabs">
+                <button class="tab-button active" onclick="switchTab('transcription')">
+                    <i class="fas fa-microphone"></i>
+                    Transkrypcja
+                </button>
+                <button class="tab-button" onclick="switchTab('chatgpt-history')">
+                    <i class="fas fa-comments"></i>
+                    Historia ChatGPT
+                </button>
+                <button class="tab-button" onclick="switchTab('summary')">
+                    <i class="fas fa-chart-line"></i>
+                    Podsumowanie
+                </button>
+                <button class="tab-button" onclick="switchTab('ai-suggestions')">
+                    <i class="fas fa-robot"></i>
+                    Sugestie AI
+                </button>
+            </div>
+            
+            <!-- Tab Contents -->
+            <div class="meeting-tab-content">
+                <!-- Transkrypcja Tab -->
+                <div id="transcription-tab" class="tab-content active">
                     <div class="transcription-panel">
                         <h4>
                             <i class="fas fa-microphone"></i>
@@ -259,23 +279,55 @@ async function openMeetingDetails(meetingId) {
                         </h4>
                         <div class="transcription-content">
                             ${meeting.transcription ? 
-                                escapeHtml(meeting.transcription).replace(/\n/g, '<br>') : 
+                                formatTranscription(meeting.transcription) : 
                                 '<div class="empty-state-message"><i class="fas fa-microphone-slash"></i>Brak transkrypcji dla tego spotkania</div>'
                             }
                         </div>
                     </div>
                 </div>
                 
-                <!-- Prawy panel - Sugestie AI (główne) -->
-                <div class="meeting-right-panel">
+                <!-- Historia ChatGPT Tab -->
+                <div id="chatgpt-history-tab" class="tab-content">
+                    <div class="chatgpt-history-panel">
+                        <h4>
+                            <i class="fas fa-comments"></i>
+                            Historia rozmowy z ChatGPT
+                        </h4>
+                        <div class="chatgpt-history-content">
+                            ${meeting.chatgpt_history ? 
+                                formatChatGPTHistory(meeting.chatgpt_history) : 
+                                '<div class="empty-state-message"><i class="fas fa-robot"></i>Brak historii ChatGPT dla tego spotkania<br><small>Historia ChatGPT jest dostępna tylko dla nowych sesji</small></div>'
+                            }
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Podsumowanie Tab -->
+                <div id="summary-tab" class="tab-content">
+                    <div class="summary-panel">
+                        <h4>
+                            <i class="fas fa-chart-line"></i>
+                            Podsumowanie spotkania
+                        </h4>
+                        <div class="summary-content">
+                            ${meeting.final_summary ? 
+                                formatSummary(meeting.final_summary) : 
+                                '<div class="empty-state-message"><i class="fas fa-chart-bar"></i>Brak podsumowania dla tego spotkania<br><small>Podsumowania są generowane automatycznie na końcu sesji</small></div>'
+                            }
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Sugestie AI Tab -->
+                <div id="ai-suggestions-tab" class="tab-content">
                     <div class="ai-suggestions-panel">
                         <h4>
                             <i class="fas fa-robot"></i>
-                            Sugestie AI
+                            Sugestie AI z sesji
                         </h4>
                         <div class="ai-suggestions-content">
                             ${meeting.ai_suggestions ? 
-                                escapeHtml(meeting.ai_suggestions).replace(/\n/g, '<br>').replace(/---/g, '<hr style="margin: 16px 0; border: 1px solid #e2e8f0;">') : 
+                                formatAISuggestions(meeting.ai_suggestions) : 
                                 '<div class="empty-state-message"><i class="fas fa-brain"></i>Brak sugestii AI dla tego spotkania<br><small>Sugestie AI pojawiają się podczas sesji na żywo</small></div>'
                             }
                         </div>
@@ -434,6 +486,188 @@ function showError(message) {
     // Tutaj można dodać toast notification system
 }
 
+// Switch between tabs in meeting details
+function switchTab(tabName) {
+    // Hide all tab contents
+    document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    
+    // Remove active class from all tab buttons
+    document.querySelectorAll('.tab-button').forEach(button => {
+        button.classList.remove('active');
+    });
+    
+    // Show selected tab content
+    const selectedTab = document.getElementById(tabName + '-tab');
+    if (selectedTab) {
+        selectedTab.classList.add('active');
+    }
+    
+    // Add active class to clicked button
+    event.target.classList.add('active');
+}
+
+// Format transcription with speaker roles
+function formatTranscription(transcription) {
+    if (!transcription) return '';
+    
+    // Split by lines and format each speaker line
+    const lines = transcription.split('\n');
+    return lines.map(line => {
+        if (line.trim() === '') return '<br>';
+        
+        // Check if line contains speaker role markers
+        if (line.includes('🔵SPRZEDAWCA')) {
+            return `<div class="speaker-line salesperson">
+                <span class="speaker-badge salesperson">🔵 SPRZEDAWCA</span>
+                <span class="speaker-text">${escapeHtml(line.replace(/\[🔵SPRZEDAWCA\]/g, '').trim())}</span>
+            </div>`;
+        } else if (line.includes('🔴KLIENT')) {
+            return `<div class="speaker-line client">
+                <span class="speaker-badge client">🔴 KLIENT</span>
+                <span class="speaker-text">${escapeHtml(line.replace(/\[🔴KLIENT\]/g, '').trim())}</span>
+            </div>`;
+        } else if (line.includes('🟡')) {
+            const speakerMatch = line.match(/🟡([^]]+?)\]/);
+            const speakerName = speakerMatch ? speakerMatch[1] : 'NIEZNANY';
+            return `<div class="speaker-line unknown">
+                <span class="speaker-badge unknown">🟡 ${escapeHtml(speakerName)}</span>
+                <span class="speaker-text">${escapeHtml(line.replace(/\[🟡[^]]+?\]/g, '').trim())}</span>
+            </div>`;
+        } else {
+            // Regular line without speaker detection
+            return `<div class="text-line">${escapeHtml(line)}</div>`;
+        }
+    }).join('');
+}
+
+// Format ChatGPT conversation history
+function formatChatGPTHistory(historyJSON) {
+    try {
+        const history = JSON.parse(historyJSON);
+        
+        return history.map((message, index) => {
+            const timestamp = new Date().toLocaleTimeString('pl-PL'); // Placeholder timestamp
+            
+            if (message.role === 'system') {
+                return `<div class="chatgpt-message system">
+                    <div class="message-header">
+                        <span class="role-badge system">🔧 SYSTEM PROMPT</span>
+                        <span class="timestamp">${timestamp}</span>
+                    </div>
+                    <div class="message-content">
+                        <details>
+                            <summary>Pokaż system prompt</summary>
+                            <pre>${escapeHtml(message.content)}</pre>
+                        </details>
+                    </div>
+                </div>`;
+            } else if (message.role === 'user') {
+                return `<div class="chatgpt-message user">
+                    <div class="message-header">
+                        <span class="role-badge user">👤 PYTANIE DO AI</span>
+                        <span class="timestamp">${timestamp}</span>
+                    </div>
+                    <div class="message-content">
+                        ${escapeHtml(message.content).replace(/\n/g, '<br>')}
+                    </div>
+                </div>`;
+            } else if (message.role === 'assistant') {
+                return `<div class="chatgpt-message assistant">
+                    <div class="message-header">
+                        <span class="role-badge assistant">🤖 ODPOWIEDŹ AI</span>
+                        <span class="timestamp">${timestamp}</span>
+                    </div>
+                    <div class="message-content">
+                        ${formatAIResponse(message.content)}
+                    </div>
+                </div>`;
+            }
+        }).join('');
+        
+    } catch (error) {
+        console.error('Error parsing ChatGPT history:', error);
+        return '<div class="error-message">Błąd parsowania historii ChatGPT</div>';
+    }
+}
+
+// Format AI response (try to parse JSON or show as text)
+function formatAIResponse(content) {
+    try {
+        const parsed = JSON.parse(content);
+        
+        // Format as structured data
+        let formatted = '<div class="ai-response-structured">';
+        
+        Object.keys(parsed).forEach(key => {
+            const value = parsed[key];
+            formatted += `<div class="response-field">
+                <strong>${escapeHtml(key)}:</strong> `;
+            
+            if (Array.isArray(value)) {
+                formatted += `<ul>`;
+                value.forEach(item => {
+                    formatted += `<li>${escapeHtml(item)}</li>`;
+                });
+                formatted += `</ul>`;
+            } else {
+                formatted += `<span>${escapeHtml(value)}</span>`;
+            }
+            
+            formatted += `</div>`;
+        });
+        
+        formatted += '</div>';
+        return formatted;
+        
+    } catch (error) {
+        // Not JSON, show as regular text
+        return escapeHtml(content).replace(/\n/g, '<br>');
+    }
+}
+
+// Format final summary with markdown-like formatting
+function formatSummary(summary) {
+    if (!summary) return '';
+    
+    let formatted = escapeHtml(summary);
+    
+    // Convert markdown-like headers
+    formatted = formatted.replace(/## (.*)/g, '<h3>$1</h3>');
+    formatted = formatted.replace(/### (.*)/g, '<h4>$1</h4>');
+    
+    // Convert line breaks
+    formatted = formatted.replace(/\n/g, '<br>');
+    
+    // Convert lists
+    formatted = formatted.replace(/- (.*?)(<br>|$)/g, '<li>$1</li>');
+    formatted = formatted.replace(/(<li>.*<\/li>)/g, '<ul>$1</ul>');
+    
+    return `<div class="summary-formatted">${formatted}</div>`;
+}
+
+// Format AI suggestions with better structure
+function formatAISuggestions(suggestions) {
+    if (!suggestions) return '';
+    
+    // Split by separator and format each suggestion block
+    const blocks = suggestions.split('\n---\n');
+    
+    return blocks.map(block => {
+        const lines = block.split('\n');
+        const timestamp = lines[0]?.match(/\[(.*?)\]/)?.[1] || 'Nieznany czas';
+        
+        return `<div class="ai-suggestion-block">
+            <div class="suggestion-timestamp">${escapeHtml(timestamp)}</div>
+            <div class="suggestion-content">
+                ${lines.slice(1).map(line => escapeHtml(line)).join('<br>')}
+            </div>
+        </div>`;
+    }).join('');
+}
+
 // Eksport funkcji dla dostępu globalnego
 window.openMeetingDetails = openMeetingDetails;
-window.saveMeetingNotes = saveMeetingNotes; 
+window.saveMeetingNotes = saveMeetingNotes;
+window.switchTab = switchTab; 

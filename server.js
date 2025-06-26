@@ -3382,6 +3382,7 @@ async function saveRealtimeSession(session) {
         console.log('--- DEBUG: Entering saveRealtimeSession ---');
         console.log(`--- DEBUG: conversationHistory length: ${session.conversationHistory.length} ---`);
         console.log(`--- DEBUG: aiSuggestions length: ${session.aiSuggestions.length} ---`);
+        console.log(`--- DEBUG: chatGPTHistory length: ${session.chatGPTHistory?.length || 0} ---`);
         
         const transcription = session.conversationHistory.length > 0 
             ? session.conversationHistory.map(t => {
@@ -3406,6 +3407,18 @@ async function saveRealtimeSession(session) {
                        `Emocje: ${item.suggestions.emotion || 'Nieznane'}\n`;
             }).join('\n---\n')
             : 'Brak sugestii AI - prawdopodobnie nie otrzymano transkrypcji z AssemblyAI';
+        
+        // Przygotuj historię ChatGPT do zapisania
+        const chatGPTHistoryJSON = session.chatGPTHistory && session.chatGPTHistory.length > 0 
+            ? JSON.stringify(session.chatGPTHistory)
+            : null;
+        
+        // Generuj podsumowanie końcowe rozmowy (tylko jeśli mamy transkrypcję)
+        let finalSummary = null;
+        if (session.conversationHistory.length > 0 && session.chatGPTHistory && session.chatGPTHistory.length > 2) {
+            console.log('🤖 Generowanie podsumowania końcowej rozmowy...');
+            finalSummary = await generateFinalSummary(session, transcription);
+        }
         
         // Generate summary for positive/negative findings
         const allSuggestions = session.aiSuggestions.flatMap(item => item.suggestions.suggestions || []);
@@ -3435,8 +3448,9 @@ async function saveRealtimeSession(session) {
         const result = await safeQuery(`
             INSERT INTO sales (
                 product_id, client_id, recording_path, transcription, meeting_datetime,
-                positive_findings, negative_findings, recommendations, own_notes, ai_suggestions
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                positive_findings, negative_findings, recommendations, own_notes, ai_suggestions,
+                chatgpt_history, final_summary
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
             RETURNING id
         `, [
             session.productId,
@@ -3448,19 +3462,92 @@ async function saveRealtimeSession(session) {
             negativeFindings,
             recommendations,
             session.notes || '',
-            aiSuggestionsText
+            aiSuggestionsText,
+            chatGPTHistoryJSON,
+            finalSummary
         ]);
         
         const savedId = result.rows[0].id;
         console.log('💾 Real-time session saved successfully to database:', {
             id: savedId,
             hasTranscription: session.conversationHistory.length > 0,
-            hasAISuggestions: session.aiSuggestions.length > 0
+            hasAISuggestions: session.aiSuggestions.length > 0,
+            hasChatGPTHistory: !!chatGPTHistoryJSON,
+            hasFinalSummary: !!finalSummary
         });
         
     } catch (error) {
         console.error('❌ Error saving real-time session:', error);
         // Nie rzucaj błędu - pozwól sesji się zakończyć
+    }
+}
+
+// Generate final summary of the conversation
+async function generateFinalSummary(session, transcription) {
+    const startTime = Date.now();
+    console.log(`[${session.sessionId}] 🎯 Generating final conversation summary...`);
+    
+    try {
+        const summaryPrompt = `Analizuj poniższą rozmowę sprzedażową i przygotuj szczegółowe podsumowanie.
+
+INFORMACJE O SPOTKANIU:
+- Klient: ${session.client.name}
+- Produkt: ${session.product.name}
+- Data: ${session.startTime.toLocaleString('pl-PL')}
+- Czas trwania: ${Math.round((Date.now() - session.startTime.getTime()) / 1000 / 60)} minut
+
+TRANSKRYPCJA ROZMOWY:
+${transcription}
+
+PRZYGOTUJ SZCZEGÓŁOWE PODSUMOWANIE W NASTĘPUJĄCYM FORMACIE:
+
+## 📊 OGÓLNA OCENA SPOTKANIA
+- Ogólny przebieg rozmowy (1-5 gwiazdek)
+- Główny cel spotkania i czy został osiągnięty
+- Poziom zaangażowania klienta
+
+## ✅ CO POSZŁO DOBRZE
+- Konkretne momenty, które były udane
+- Dobre techniki sprzedażowe zastosowane przez sprzedawcę
+- Pozytywne reakcje klienta
+
+## ❌ CO MOŻNA POPRAWIĆ
+- Błędy popełnione podczas rozmowy
+- Niewykorzystane okazje
+- Momenty, gdzie można było lepiej odpowiedzieć
+
+## 🎯 KLUCZOWE WNIOSKI
+- Główne potrzeby i obawy klienta
+- Poziom zainteresowania produktem
+- Prawdopodobieństwo zakupu (w %)
+
+## 📋 NASTĘPNE KROKI
+- Konkretne działania do podjęcia
+- Terminy i zobowiązania
+- Rekomendacje na przyszłość
+
+Bądź szczegółowy, konkretny i konstruktywny w swojej analizie.`;
+
+        const completion = await openai.chat.completions.create({
+            model: "gpt-4-turbo", // Używamy lepszego modelu dla podsumowania
+            messages: [
+                { role: "system", content: "Jesteś ekspertem od analizy rozmów sprzedażowych. Twoje podsumowania są szczegółowe, konstruktywne i pomagają sprzedawcom się rozwijać." },
+                { role: "user", content: summaryPrompt }
+            ],
+            max_tokens: 1500, // Więcej tokenów na szczegółowe podsumowanie
+            temperature: 0.3 // Niższa temperatura dla bardziej precyzyjnej analizy
+        });
+
+        const responseTime = Date.now() - startTime;
+        const summary = completion.choices[0].message.content;
+        
+        console.log(`[${session.sessionId}] 🎯 Final summary generated in ${responseTime}ms (${summary.length} characters)`);
+        
+        return summary;
+        
+    } catch (error) {
+        console.error(`[${session.sessionId}] ❌ Error generating final summary:`, error);
+        return `Błąd podczas generowania podsumowania: ${error.message}`;
     }
 }
 
