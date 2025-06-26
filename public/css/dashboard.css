@@ -518,4 +518,284 @@ body {
         flex-direction: column;
         gap: 8px;
     }
+}
+
+/* Styles for meeting details modal - transcription formatting */
+.transcription-content {
+    max-height: 400px;
+    overflow-y: auto;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+}
+
+.speaker-line {
+    margin-bottom: 12px;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+.speaker-badge {
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    min-width: 120px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.speaker-badge.salesperson {
+    background: #e3f2fd;
+    color: #1976d2;
+}
+
+.speaker-badge.client {
+    background: #ffebee;
+    color: #d32f2f;
+}
+
+.speaker-badge.unknown {
+    background: #fff3e0;
+    color: #f57c00;
+}
+
+.speaker-badge.generic {
+    background: #f3e5f5;
+    color: #7b1fa2;
+}
+
+.speaker-text {
+    flex: 1;
+    padding: 8px 12px;
+    background: white;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+    line-height: 1.4;
+}
+
+.text-line {
+    margin-bottom: 8px;
+    padding: 8px 12px;
+    background: #f5f5f5;
+    border-radius: 6px;
+    color: #666;
+    font-style: italic;
+}
+
+/* ChatGPT History Formatting */
+.chatgpt-history-content {
+    max-height: 500px;
+    overflow-y: auto;
+    padding: 15px;
+}
+
+.chatgpt-message {
+    margin-bottom: 20px;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.chatgpt-message.system {
+    border-left: 4px solid #9c27b0;
+}
+
+.chatgpt-message.user {
+    border-left: 4px solid #2196f3;
+}
+
+.chatgpt-message.assistant {
+    border-left: 4px solid #4caf50;
+}
+
+.message-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 15px;
+    background: #f8f9fa;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.role-badge {
+    padding: 4px 10px;
+    border-radius: 15px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.role-badge.system {
+    background: #e1bee7;
+    color: #6a1b9a;
+}
+
+.role-badge.user {
+    background: #bbdefb;
+    color: #1565c0;
+}
+
+.role-badge.assistant {
+    background: #c8e6c9;
+    color: #2e7d32;
+}
+
+.timestamp {
+    font-size: 11px;
+    color: #666;
+}
+
+.message-content {
+    padding: 15px;
+    background: white;
+}
+
+.message-content pre {
+    background: #f5f5f5;
+    padding: 10px;
+    border-radius: 6px;
+    overflow-x: auto;
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.message-content details summary {
+    cursor: pointer;
+    color: #666;
+    font-weight: 500;
+    margin-bottom: 10px;
+}
+
+.message-content details[open] summary {
+    margin-bottom: 15px;
+}
+
+/* AI Response Structured Formatting */
+.ai-response-structured {
+    background: #f8f9fa;
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+}
+
+.response-field {
+    margin-bottom: 10px;
+}
+
+.response-field strong {
+    color: #333;
+    display: block;
+    margin-bottom: 4px;
+}
+
+.response-field ul {
+    margin: 5px 0 0 15px;
+    padding: 0;
+}
+
+.response-field li {
+    margin-bottom: 3px;
+}
+
+/* Summary Formatting */
+.summary-content {
+    max-height: 400px;
+    overflow-y: auto;
+    padding: 15px;
+}
+
+.summary-formatted {
+    line-height: 1.6;
+}
+
+.summary-formatted h3 {
+    color: #333;
+    margin: 20px 0 10px 0;
+    padding-bottom: 5px;
+    border-bottom: 2px solid #e9ecef;
+}
+
+.summary-formatted h4 {
+    color: #555;
+    margin: 15px 0 8px 0;
+}
+
+.summary-formatted ul {
+    margin: 10px 0;
+    padding-left: 20px;
+}
+
+.summary-formatted li {
+    margin-bottom: 5px;
+}
+
+/* AI Suggestions Formatting */
+.ai-suggestions-content {
+    max-height: 400px;
+    overflow-y: auto;
+    padding: 15px;
+}
+
+.ai-suggestion-block {
+    margin-bottom: 20px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+    overflow: hidden;
+}
+
+.suggestion-timestamp {
+    background: #e9ecef;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #666;
+}
+
+.suggestion-content {
+    padding: 12px;
+    line-height: 1.5;
+}
+
+/* Empty state styling */
+.empty-state-message {
+    text-align: center;
+    padding: 40px 20px;
+    color: #666;
+}
+
+.empty-state-message i {
+    font-size: 48px;
+    margin-bottom: 15px;
+    color: #ccc;
+}
+
+.empty-state-message small {
+    display: block;
+    margin-top: 8px;
+    font-size: 12px;
+    color: #999;
+}
+
+/* Error message styling */
+.error-message {
+    background: #ffebee;
+    color: #c62828;
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid #ffcdd2;
+    text-align: center;
+}
+
+.error-message i {
+    margin-right: 8px;
+}
+
+.error-message small {
+    display: block;
+    margin-top: 8px;
+    font-size: 12px;
+    opacity: 0.8;
 } 

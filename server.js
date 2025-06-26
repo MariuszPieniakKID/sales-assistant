@@ -3415,7 +3415,7 @@ async function saveRealtimeSession(session) {
         
         // Generuj podsumowanie końcowe rozmowy (tylko jeśli mamy transkrypcję)
         let finalSummary = null;
-        if (session.conversationHistory.length > 0 && session.chatGPTHistory && session.chatGPTHistory.length > 2) {
+        if (session.conversationHistory.length > 0) {
             console.log('🤖 Generowanie podsumowania końcowej rozmowy...');
             finalSummary = await generateFinalSummary(session, transcription);
         }

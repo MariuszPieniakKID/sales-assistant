@@ -518,26 +518,41 @@ function formatTranscription(transcription) {
         if (line.trim() === '') return '<br>';
         
         // Check if line contains speaker role markers
-        if (line.includes('🔵SPRZEDAWCA')) {
+        if (line.includes('[🔵SPRZEDAWCA]') || line.includes('🔵SPRZEDAWCA')) {
+            const text = line.replace(/\[🔵SPRZEDAWCA\]/g, '').replace(/🔵SPRZEDAWCA/g, '').trim();
             return `<div class="speaker-line salesperson">
                 <span class="speaker-badge salesperson">🔵 SPRZEDAWCA</span>
-                <span class="speaker-text">${escapeHtml(line.replace(/\[🔵SPRZEDAWCA\]/g, '').trim())}</span>
+                <span class="speaker-text">${escapeHtml(text)}</span>
             </div>`;
-        } else if (line.includes('🔴KLIENT')) {
+        } else if (line.includes('[🔴KLIENT]') || line.includes('🔴KLIENT')) {
+            const text = line.replace(/\[🔴KLIENT\]/g, '').replace(/🔴KLIENT/g, '').trim();
             return `<div class="speaker-line client">
                 <span class="speaker-badge client">🔴 KLIENT</span>
-                <span class="speaker-text">${escapeHtml(line.replace(/\[🔴KLIENT\]/g, '').trim())}</span>
+                <span class="speaker-text">${escapeHtml(text)}</span>
             </div>`;
-        } else if (line.includes('🟡')) {
-            const speakerMatch = line.match(/🟡([^]]+?)\]/);
-            const speakerName = speakerMatch ? speakerMatch[1] : 'NIEZNANY';
+        } else if (line.includes('🟡') || line.includes('[🟡')) {
+            // Handle unknown speakers
+            const speakerMatch = line.match(/\[?🟡([^\]]*)\]?/);
+            const speakerName = speakerMatch ? speakerMatch[1].trim() : 'NIEZNANY';
+            const text = line.replace(/\[?🟡[^\]]*\]?/g, '').trim();
             return `<div class="speaker-line unknown">
                 <span class="speaker-badge unknown">🟡 ${escapeHtml(speakerName)}</span>
-                <span class="speaker-text">${escapeHtml(line.replace(/\[🟡[^]]+?\]/g, '').trim())}</span>
+                <span class="speaker-text">${escapeHtml(text)}</span>
             </div>`;
         } else {
-            // Regular line without speaker detection
-            return `<div class="text-line">${escapeHtml(line)}</div>`;
+            // Regular line without speaker detection - check if it starts with [Speaker]
+            const speakerMatch = line.match(/^\[([^\]]+)\]\s*(.*)$/);
+            if (speakerMatch) {
+                const speaker = speakerMatch[1];
+                const text = speakerMatch[2];
+                return `<div class="speaker-line generic">
+                    <span class="speaker-badge generic">👤 ${escapeHtml(speaker)}</span>
+                    <span class="speaker-text">${escapeHtml(text)}</span>
+                </div>`;
+            } else {
+                // Regular line without speaker detection
+                return `<div class="text-line">${escapeHtml(line)}</div>`;
+            }
         }
     }).join('');
 }
@@ -545,7 +560,20 @@ function formatTranscription(transcription) {
 // Format ChatGPT conversation history
 function formatChatGPTHistory(historyJSON) {
     try {
-        const history = JSON.parse(historyJSON);
+        if (!historyJSON) {
+            return '<div class="empty-state-message"><i class="fas fa-comments"></i>Brak historii rozmowy z ChatGPT</div>';
+        }
+        
+        let history;
+        if (typeof historyJSON === 'string') {
+            history = JSON.parse(historyJSON);
+        } else {
+            history = historyJSON;
+        }
+        
+        if (!Array.isArray(history) || history.length === 0) {
+            return '<div class="empty-state-message"><i class="fas fa-comments"></i>Historia rozmowy z ChatGPT jest pusta</div>';
+        }
         
         return history.map((message, index) => {
             const timestamp = new Date().toLocaleTimeString('pl-PL'); // Placeholder timestamp
@@ -584,11 +612,17 @@ function formatChatGPTHistory(historyJSON) {
                     </div>
                 </div>`;
             }
+            return '';
         }).join('');
         
     } catch (error) {
         console.error('Error parsing ChatGPT history:', error);
-        return '<div class="error-message">Błąd parsowania historii ChatGPT</div>';
+        console.error('Raw historyJSON:', historyJSON);
+        return `<div class="error-message">
+            <i class="fas fa-exclamation-triangle"></i>
+            Błąd parsowania historii ChatGPT: ${error.message}
+            <br><small>Sprawdź konsolę deweloperską dla szczegółów</small>
+        </div>`;
     }
 }
 
