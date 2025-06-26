@@ -341,7 +341,10 @@ document.addEventListener('DOMContentLoaded', function() {
         // Sprawdź czy skrypt już istnieje
         const existingScript = document.querySelector(`script[data-section="${section}"]`);
         if (existingScript) {
-            console.log(`ℹ️ Skrypt dla ${section} już istnieje, pomijam`);
+            console.log(`🔄 Skrypt dla ${section} już istnieje - uruchamiam reinicjalizację`);
+            
+            // Ponownie zainicjalizuj dane dla istniejącej sekcji
+            reinitializeSection(section);
             return;
         }
         
@@ -368,6 +371,78 @@ document.addEventListener('DOMContentLoaded', function() {
         };
         
         document.head.appendChild(script);
+    }
+    
+    // Reinicjalizuj sekcję gdy użytkownik wraca do niej
+    function reinitializeSection(section) {
+        console.log(`🔄 Reinicjalizuję sekcję: ${section}`);
+        
+        try {
+            switch(section) {
+                case 'spotkania':
+                    // Reinicjalizuj spotkania
+                    if (typeof loadMeetings === 'function') {
+                        console.log('🔄 Reinicjalizuję spotkania...');
+                        loadMeetings();
+                    }
+                    break;
+                    
+                case 'sesja':
+                    // Reinicjalizuj sesję
+                    if (typeof loadClients === 'function' && typeof loadProducts === 'function') {
+                        console.log('🔄 Reinicjalizuję sesję...');
+                        Promise.all([
+                            loadClients(),
+                            loadProducts(),
+                            typeof loadRecentSessions === 'function' ? loadRecentSessions() : Promise.resolve()
+                        ]).then(() => {
+                            // Po załadowaniu danych, waliduj formularz
+                            if (typeof validateSessionForm === 'function') {
+                                setTimeout(validateSessionForm, 100);
+                            }
+                        });
+                    }
+                    break;
+                    
+                case 'klienci':
+                    // Reinicjalizuj klientów
+                    if (typeof loadClients === 'function') {
+                        console.log('🔄 Reinicjalizuję klientów...');
+                        loadClients().then(() => {
+                            if (typeof renderClients === 'function') {
+                                renderClients();
+                            }
+                        });
+                    }
+                    break;
+                    
+                case 'produkty':
+                    // Reinicjalizuj produkty
+                    if (typeof loadProducts === 'function') {
+                        console.log('🔄 Reinicjalizuję produkty...');
+                        loadProducts().then(() => {
+                            if (typeof renderProducts === 'function') {
+                                renderProducts();
+                            }
+                        });
+                    }
+                    break;
+                    
+                case 'profil':
+                    // Reinicjalizuj profil
+                    if (typeof loadUserProfile === 'function') {
+                        console.log('🔄 Reinicjalizuję profil...');
+                        loadUserProfile();
+                    }
+                    break;
+                    
+                default:
+                    console.log(`ℹ️ Brak specjalnej reinicjalizacji dla sekcji: ${section}`);
+                    break;
+            }
+        } catch (error) {
+            console.error(`❌ Błąd reinicjalizacji sekcji ${section}:`, error);
+        }
     }
 
     // Konfiguracja mobilnego menu
