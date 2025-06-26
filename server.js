@@ -3394,7 +3394,7 @@ async function saveRealtimeSession(session) {
                 } else {
                     return `[${t.speaker}] ${t.text}`;
                 }
-            }).join('\\n\\n')
+            }).join('\n\n')
             : `Sesja Real-time AI Assistant${session.method === 2 ? ' Method 2 (Enhanced Diarization)' : ''} - brak transkrypcji (możliwy problem z mikrofonem lub AssemblyAI)`;
         
         // Create AI suggestions summary
