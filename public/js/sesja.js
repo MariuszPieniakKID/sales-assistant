@@ -21,7 +21,12 @@ let selectedLanguage = 'pl'; // Default: Polish
 let webSpeechRecognition = null;
 let useWebSpeech = true; // Default: use Web Speech API for Polish
 
-// Debug tracking removed for cleaner interface
+// NOWE: Recording session variables
+let currentRecording = null;
+let recordingTimer = null;
+let recordingStartTime = null;
+let recordingTranscript = '';
+let recordingSaveInterval = null;
 
 // DOM Elements - będą wyszukiwane dynamicznie bo AJAX może je zmieniać
 
@@ -235,6 +240,16 @@ function handleWebSocketMessage(data) {
             console.error('❌ Frontend: AssemblyAI error:', data.error);
             showToast('Błąd AssemblyAI: ' + data.error, 'error');
             break;
+        
+        // NOWE: Recording WebSocket messages
+        case 'RECORDING_STARTED':
+            onRecordingStarted(data);
+            break;
+            
+        case 'RECORDING_ERROR':
+            onRecordingError(data);
+            break;
+            
         default:
             console.log('❓ Unknown WebSocket message type:', data.type, data);
     }
@@ -272,6 +287,32 @@ function setupEventListeners() {
         console.log('🔬 Method 2 event listener added');
     } else {
         console.error('❌ Method 2 button not found!');
+    }
+    
+    // NOWE: Start recording button
+    const startRecordingBtn = document.getElementById('startRecordingBtn');
+    console.log('🎥 Recording button found:', !!startRecordingBtn);
+    if (startRecordingBtn) {
+        console.log('🎥 Adding recording event listener...');
+        startRecordingBtn.addEventListener('click', () => {
+            console.log('🎥 Recording button clicked!');
+            startRecordingSession();
+        });
+        
+        // Walidacja jest teraz w głównej funkcji validateSessionForm()
+        
+        console.log('🎥 Recording event listener added');
+    } else {
+        console.error('❌ Recording button not found!');
+    }
+    
+    // Stop recording button
+    const stopRecordingBtn = document.getElementById('stopRecordingBtn');
+    if (stopRecordingBtn) {
+        stopRecordingBtn.addEventListener('click', () => {
+            console.log('🛑 Stop recording button clicked!');
+            stopRecordingSession();
+        });
     }
     
     console.log('✅ Event listeners set up successfully');
@@ -385,8 +426,9 @@ function validateSessionForm() {
     const clientSelect = document.getElementById('sessionClient');
     const productSelect = document.getElementById('sessionProduct');
     const startBtnMethod2 = document.getElementById('startSessionBtnMethod2');
+    const startRecordingBtn = document.getElementById('startRecordingBtn');
     
-    if (!clientSelect || !productSelect || !startBtnMethod2) {
+    if (!clientSelect || !productSelect) {
         console.error('❌ Elementy formularza nie istnieją podczas walidacji');
         return;
     }
@@ -395,12 +437,20 @@ function validateSessionForm() {
     const productSelected = productSelect.value !== '';
     const formValid = clientSelected && productSelected;
     
-    startBtnMethod2.disabled = !formValid;
+    // Aktualizuj oba przyciski
+    if (startBtnMethod2) {
+        startBtnMethod2.disabled = !formValid;
+    }
+    
+    if (startRecordingBtn) {
+        startRecordingBtn.disabled = !formValid;
+    }
     
     console.log('🔍 Walidacja formularza:', {
         clientSelected,
         productSelected,
-        buttonEnabled: !startBtnMethod2.disabled
+        liveButtonEnabled: startBtnMethod2 ? !startBtnMethod2.disabled : 'brak przycisku',
+        recordingButtonEnabled: startRecordingBtn ? !startRecordingBtn.disabled : 'brak przycisku'
     });
 }
 
@@ -1953,5 +2003,371 @@ function setupWebSpeechHandlersMethod2() {
 }
 
 // Debug panel functions removed for cleaner interface
+
+// ===== NOWE FUNKCJE NAGRYWANIA =====
+
+// Start Recording Session
+async function startRecordingSession() {
+    console.log('🎥 Starting recording session...');
+    
+    const clientSelect = document.getElementById('sessionClient');
+    const productSelect = document.getElementById('sessionProduct');
+    const notesTextarea = document.getElementById('sessionNotes');
+    
+    if (!clientSelect || !productSelect) {
+        showToast('Elementy formularza nie zostały znalezione', 'error');
+        return;
+    }
+    
+    const clientId = parseInt(clientSelect.value);
+    const productId = parseInt(productSelect.value);
+    const notes = notesTextarea ? notesTextarea.value : '';
+    
+    if (!clientId || !productId) {
+        showToast('Proszę wybierz klienta i produkt', 'error');
+        return;
+    }
+    
+    try {
+        // Wait for WebSocket connection
+        await waitForWebSocketConnection();
+        
+        // Setup audio recording
+        await setupRecordingAudio();
+        
+        // Send WebSocket message to start recording
+        const recordingData = {
+            type: 'START_RECORDING_SESSION',
+            clientId: clientId,
+            productId: productId,
+            notes: notes
+        };
+        
+        console.log('🎥 Sending recording start message:', recordingData);
+        websocket.send(JSON.stringify(recordingData));
+        
+        showToast('Rozpoczynanie nagrania...', 'info');
+        
+    } catch (error) {
+        console.error('❌ Failed to start recording session:', error);
+        showToast('Błąd rozpoczęcia nagrania: ' + error.message, 'error');
+    }
+}
+
+// Setup Audio Recording (skopiowane z metody live)
+async function setupRecordingAudio() {
+    try {
+        console.log('🎤 Setting up recording audio...');
+        
+        if (audioStream) {
+            console.log('🔄 Closing existing audio stream...');
+            audioStream.getTracks().forEach(track => track.stop());
+        }
+        
+        // Request microphone access
+        audioStream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+                sampleRate: 16000
+            }
+        });
+        
+        console.log('✅ Recording microphone access granted');
+        
+        // Setup Web Speech Recognition for Polish (z Method2)
+        setupRecordingWebSpeech();
+        
+    } catch (error) {
+        console.error('❌ Recording microphone setup failed:', error);
+        throw error;
+    }
+}
+
+// Setup Web Speech Recognition for Recording
+function setupRecordingWebSpeech() {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+        console.error('❌ Web Speech API not supported');
+        return;
+    }
+    
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    webSpeechRecognition = new SpeechRecognition();
+    
+    // Configuration (Polish language)
+    webSpeechRecognition.lang = 'pl-PL';
+    webSpeechRecognition.continuous = true;
+    webSpeechRecognition.interimResults = true;
+    webSpeechRecognition.maxAlternatives = 1;
+    
+    // Event handlers
+    webSpeechRecognition.onstart = () => {
+        console.log('🎤 Recording speech recognition started');
+    };
+    
+    webSpeechRecognition.onresult = (event) => {
+        let interimTranscript = '';
+        let finalTranscript = '';
+        
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            const transcript = event.results[i][0].transcript;
+            
+            if (event.results[i].isFinal) {
+                finalTranscript += transcript;
+            } else {
+                interimTranscript += transcript;
+            }
+        }
+        
+        // Update transcript display
+        updateRecordingTranscript(finalTranscript, interimTranscript);
+        
+        // Send to server if final
+        if (finalTranscript && websocket && websocket.readyState === WebSocket.OPEN) {
+            const transcriptData = {
+                type: 'RECORDING_TRANSCRIPT',
+                recordingId: currentRecording?.id,
+                transcript: finalTranscript,
+                isFinal: true
+            };
+            
+            websocket.send(JSON.stringify(transcriptData));
+        }
+    };
+    
+    webSpeechRecognition.onerror = (event) => {
+        console.error('❌ Recording speech recognition error:', event.error);
+    };
+    
+    webSpeechRecognition.onend = () => {
+        console.log('🎤 Recording speech recognition ended');
+        
+        // Auto restart if still recording
+        if (currentRecording && !currentRecording.stopped) {
+            console.log('🔄 Restarting recording speech recognition...');
+            setTimeout(() => {
+                try {
+                    webSpeechRecognition.start();
+                } catch (error) {
+                    console.error('❌ Error restarting recording speech recognition:', error);
+                }
+            }, 100);
+        }
+    };
+}
+
+// Update Recording Transcript Display
+function updateRecordingTranscript(finalText, interimText) {
+    const transcriptContent = document.getElementById('recordingTranscriptContent');
+    if (!transcriptContent) return;
+    
+    if (finalText) {
+        // Add final transcript entry
+        recordingTranscript += finalText + ' ';
+        
+        const transcriptEntry = document.createElement('div');
+        transcriptEntry.className = 'transcript-entry final';
+        transcriptEntry.textContent = finalText;
+        
+        // Remove placeholder if exists
+        const placeholder = transcriptContent.querySelector('.transcript-placeholder');
+        if (placeholder) {
+            placeholder.remove();
+        }
+        
+        transcriptContent.appendChild(transcriptEntry);
+        
+        // Scroll to bottom
+        transcriptContent.scrollTop = transcriptContent.scrollHeight;
+    }
+    
+    // Show interim text in placeholder (if no final text yet)
+    if (interimText && !transcriptContent.querySelector('.transcript-entry')) {
+        const placeholder = transcriptContent.querySelector('.transcript-placeholder');
+        if (placeholder) {
+            placeholder.textContent = interimText;
+        }
+    }
+}
+
+// Start Recording Timer
+function startRecordingTimer() {
+    recordingStartTime = Date.now();
+    
+    recordingTimer = setInterval(() => {
+        const elapsed = Date.now() - recordingStartTime;
+        const hours = Math.floor(elapsed / 3600000);
+        const minutes = Math.floor((elapsed % 3600000) / 60000);
+        const seconds = Math.floor((elapsed % 60000) / 1000);
+        
+        const timerDisplay = document.getElementById('recordingTimer');
+        if (timerDisplay) {
+            timerDisplay.textContent = 
+                `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+    }, 1000);
+}
+
+// Save Recording Progress (co 10 sekund)
+function startRecordingSave() {
+    recordingSaveInterval = setInterval(() => {
+        if (currentRecording && recordingTranscript) {
+            saveRecordingProgress();
+        }
+    }, 10000); // 10 sekund
+}
+
+// Save Recording Progress to Database
+async function saveRecordingProgress() {
+    if (!currentRecording) return;
+    
+    try {
+        const response = await fetchWithAuth('/api/recordings/save-progress', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                recordingId: currentRecording.id,
+                transcript: recordingTranscript,
+                duration: Math.floor((Date.now() - recordingStartTime) / 1000)
+            })
+        });
+        
+        if (response && response.ok) {
+            console.log('💾 Recording progress saved');
+        }
+    } catch (error) {
+        console.error('❌ Error saving recording progress:', error);
+    }
+}
+
+// Stop Recording Session
+async function stopRecordingSession() {
+    console.log('🛑 Stopping recording session...');
+    
+    try {
+        // Stop timers
+        if (recordingTimer) {
+            clearInterval(recordingTimer);
+            recordingTimer = null;
+        }
+        
+        if (recordingSaveInterval) {
+            clearInterval(recordingSaveInterval);
+            recordingSaveInterval = null;
+        }
+        
+        // Stop speech recognition
+        if (webSpeechRecognition) {
+            webSpeechRecognition.stop();
+        }
+        
+        // Stop audio stream
+        if (audioStream) {
+            audioStream.getTracks().forEach(track => track.stop());
+            audioStream = null;
+        }
+        
+        // Send stop message to server
+        if (websocket && websocket.readyState === WebSocket.OPEN && currentRecording) {
+            const stopData = {
+                type: 'STOP_RECORDING_SESSION',
+                recordingId: currentRecording.id,
+                finalTranscript: recordingTranscript
+            };
+            
+            websocket.send(JSON.stringify(stopData));
+        }
+        
+        // Hide recording status
+        const recordingStatus = document.getElementById('recordingStatus');
+        if (recordingStatus) {
+            recordingStatus.style.display = 'none';
+        }
+        
+        // Show setup form
+        const setupCard = document.querySelector('.setup-card');
+        if (setupCard) {
+            setupCard.style.display = 'block';
+        }
+        
+        // Reset variables
+        currentRecording = null;
+        recordingTranscript = '';
+        
+        showToast('Nagranie zakończone', 'success');
+        
+    } catch (error) {
+        console.error('❌ Error stopping recording:', error);
+        showToast('Błąd zatrzymania nagrania: ' + error.message, 'error');
+    }
+}
+
+// Handle Recording Started Message
+function onRecordingStarted(data) {
+    console.log('🎥 Recording started:', data);
+    
+    currentRecording = {
+        id: data.recordingId,
+        clientId: data.clientId,
+        productId: data.productId,
+        stopped: false
+    };
+    
+    // Show recording status
+    const recordingStatus = document.getElementById('recordingStatus');
+    if (recordingStatus) {
+        recordingStatus.style.display = 'block';
+    }
+    
+    // Hide setup form
+    const setupCard = document.querySelector('.setup-card');
+    if (setupCard) {
+        setupCard.style.display = 'none';
+    }
+    
+    // Update client/product names
+    const clientSelect = document.getElementById('sessionClient');
+    const productSelect = document.getElementById('sessionProduct');
+    
+    if (clientSelect) {
+        const clientName = clientSelect.options[clientSelect.selectedIndex]?.text || 'Nieznany';
+        const recordingClientName = document.getElementById('recordingClientName');
+        if (recordingClientName) recordingClientName.textContent = clientName;
+    }
+    
+    if (productSelect) {
+        const productName = productSelect.options[productSelect.selectedIndex]?.text || 'Nieznany';
+        const recordingProductName = document.getElementById('recordingProductName');
+        if (recordingProductName) recordingProductName.textContent = productName;
+    }
+    
+    // Start timer and auto-save
+    startRecordingTimer();
+    startRecordingSave();
+    
+    // Start speech recognition
+    if (webSpeechRecognition) {
+        try {
+            webSpeechRecognition.start();
+            console.log('🎤 Recording speech recognition started');
+        } catch (error) {
+            console.error('❌ Error starting recording speech recognition:', error);
+        }
+    }
+    
+    showToast('Nagranie rozpoczęte', 'success');
+}
+
+// Handle Recording Error
+function onRecordingError(data) {
+    console.error('❌ Recording error:', data);
+    showToast('Błąd nagrania: ' + (data.message || 'Nieznany błąd'), 'error');
+    
+    // Cleanup
+    stopRecordingSession();
+}
 
 console.log('✅ Real-time AI Assistant loaded successfully'); 

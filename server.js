@@ -251,6 +251,37 @@ async function runDatabaseMigrations(pool) {
             console.log('✅ Kolumna sales_script_path już istnieje');
         }
         
+        // NOWE: Sprawdź czy tabela recordings istnieje
+        console.log('🔍 Sprawdzanie tabeli recordings...');
+        const checkRecordingsTable = `
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_name = 'recordings'
+            )
+        `;
+        
+        const recordingsTableExists = await pool.query(checkRecordingsTable);
+        
+        if (!recordingsTableExists.rows[0].exists) {
+            console.log('➕ Tworzenie tabeli recordings...');
+            await pool.query(`
+                CREATE TABLE recordings (
+                    id VARCHAR(255) PRIMARY KEY,
+                    client_id INTEGER NOT NULL REFERENCES clients(id),
+                    product_id INTEGER NOT NULL REFERENCES products(id),
+                    notes TEXT,
+                    transcript TEXT,
+                    duration INTEGER DEFAULT 0,
+                    status VARCHAR(50) DEFAULT 'recording',
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )
+            `);
+            console.log('✅ Tabela recordings utworzona');
+        } else {
+            console.log('✅ Tabela recordings już istnieje');
+        }
+        
         console.log('✅ Migracje bazy danych ukończone pomyślnie');
         
     } catch (error) {
@@ -2277,6 +2308,54 @@ app.post('/api/change-password', requireAuth, async (req, res) => {
   }
 });
 
+// NOWE: Endpoint do zapisywania postępu nagrania (co 10 sekund)
+app.post('/api/recordings/save-progress', requireAuth, async (req, res) => {
+    const { recordingId, transcript, duration } = req.body;
+    
+    console.log(`[${recordingId}] 💾 API: Zapisywanie postępu nagrania...`);
+    
+    try {
+        if (!recordingId) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Brak recordingId' 
+            });
+        }
+        
+        // Zaktualizuj nagranie w bazie danych
+        const result = await safeQuery(`
+            UPDATE recordings 
+            SET transcript = $1, duration = $2, updated_at = NOW()
+            WHERE id = $3
+            RETURNING id, duration
+        `, [transcript || '', duration || 0, recordingId]);
+        
+        if (result.rows.length === 0) {
+            return res.status(404).json({ 
+                success: false, 
+                message: 'Nagranie nie zostało znalezione' 
+            });
+        }
+        
+        console.log(`[${recordingId}] ✅ API: Postęp zapisany - ${transcript?.length || 0} znaków, ${duration || 0}s`);
+        
+        res.json({ 
+            success: true, 
+            message: 'Postęp nagrania zapisany',
+            recordingId: recordingId,
+            transcriptLength: transcript?.length || 0,
+            duration: duration || 0
+        });
+        
+    } catch (error) {
+        console.error(`[${recordingId}] ❌ API: Błąd zapisywania postępu:`, error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Błąd serwera podczas zapisywania postępu' 
+        });
+    }
+});
+
 // Statystyki użytkownika
 app.get('/api/user-stats', requireAuth, async (req, res) => {
   try {
@@ -2820,6 +2899,33 @@ wss.on('connection', (ws, req) => {
                 case 'END_REALTIME_SESSION':
                     console.log('🛑 Processing END_REALTIME_SESSION:', data.sessionId);
                     await endRealtimeSession(ws, data);
+                    break;
+                    
+                // NOWE: Recording session handlers
+                case 'START_RECORDING_SESSION':
+                    console.log('🎥 Processing START_RECORDING_SESSION:', {
+                        clientId: data.clientId,
+                        productId: data.productId,
+                        notes: data.notes?.substring(0, 50) + '...'
+                    });
+                    await startRecordingSession(ws, data);
+                    break;
+                    
+                case 'RECORDING_TRANSCRIPT':
+                    console.log('🎥📝 Processing RECORDING_TRANSCRIPT:', {
+                        recordingId: data.recordingId,
+                        transcriptLength: data.transcript?.length || 0,
+                        isFinal: data.isFinal
+                    });
+                    await processRecordingTranscript(ws, data);
+                    break;
+                    
+                case 'STOP_RECORDING_SESSION':
+                    console.log('🎥🛑 Processing STOP_RECORDING_SESSION:', {
+                        recordingId: data.recordingId,
+                        finalTranscriptLength: data.finalTranscript?.length || 0
+                    });
+                    await stopRecordingSession(ws, data);
                     break;
                     
                 case 'TEST':
@@ -4692,6 +4798,179 @@ function initializeChatGPTConversation(session) {
             message: "ChatGPT gotowy do analizy rozmowy (fallback mode)",
             error: error.message,
             timestamp: new Date().toISOString()
+        }));
+    }
+}
+
+// ===== NOWE FUNKCJE NAGRYWANIA =====
+
+// Globalne zmienne dla nagrań
+const activeRecordings = new Map(); // recordingId -> recording object
+
+// Start Recording Session
+async function startRecordingSession(ws, data) {
+    const { clientId, productId, notes } = data;
+    const recordingId = `recording_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    console.log(`[${recordingId}] 🎥 Rozpoczynanie sesji nagrywania...`);
+    
+    try {
+        // Sprawdź klienta i produkt w bazie
+        const [clientResult, productResult] = await Promise.all([
+            safeQuery('SELECT * FROM clients WHERE id = $1', [clientId]),
+            safeQuery('SELECT * FROM products WHERE id = $1', [productId])
+        ]);
+        
+        if (clientResult.rows.length === 0 || productResult.rows.length === 0) {
+            console.error(`[${recordingId}] ❌ Nieprawidłowy ID klienta lub produktu`);
+            ws.send(JSON.stringify({ 
+                type: 'RECORDING_ERROR', 
+                message: 'Nieprawidłowy ID klienta lub produktu' 
+            }));
+            return;
+        }
+        
+        const client = clientResult.rows[0];
+        const product = productResult.rows[0];
+        
+        // Utwórz nagranie w bazie danych - tabela recordings
+        const insertResult = await safeQuery(`
+            INSERT INTO recordings (
+                id, client_id, product_id, notes, transcript, 
+                duration, status, created_at, updated_at
+            ) VALUES (
+                $1, $2, $3, $4, '', 0, 'recording', NOW(), NOW()
+            ) RETURNING *
+        `, [recordingId, clientId, productId, notes || '']);
+        
+        if (insertResult.rows.length === 0) {
+            throw new Error('Nie udało się utworzyć nagrania w bazie danych');
+        }
+        
+        const recording = insertResult.rows[0];
+        
+        // Zapisz w aktywnych nagraniach
+        const recordingSession = {
+            id: recordingId,
+            ws: ws,
+            clientId: clientId,
+            productId: productId,
+            client: client,
+            product: product,
+            notes: notes,
+            transcript: '',
+            startTime: new Date(),
+            status: 'recording'
+        };
+        
+        activeRecordings.set(recordingId, recordingSession);
+        
+        console.log(`[${recordingId}] ✅ Nagranie utworzone w bazie i pamięci`);
+        
+        // Wyślij potwierdzenie do frontendu
+        ws.send(JSON.stringify({
+            type: 'RECORDING_STARTED',
+            recordingId: recordingId,
+            clientId: clientId,
+            productId: productId,
+            message: 'Nagranie rozpoczęte pomyślnie'
+        }));
+        
+    } catch (error) {
+        console.error(`[${recordingId}] ❌ Błąd podczas rozpoczynania nagrania:`, error);
+        ws.send(JSON.stringify({
+            type: 'RECORDING_ERROR',
+            message: 'Błąd rozpoczęcia nagrania: ' + error.message
+        }));
+    }
+}
+
+// Process Recording Transcript
+async function processRecordingTranscript(ws, data) {
+    const { recordingId, transcript, isFinal } = data;
+    
+    if (!recordingId || !transcript) {
+        console.error('❌ Brak recordingId lub transcript w processRecordingTranscript');
+        return;
+    }
+    
+    console.log(`[${recordingId}] 🎥📝 Przetwarzanie transkrypcji: ${transcript.substring(0, 50)}...`);
+    
+    try {
+        const recording = activeRecordings.get(recordingId);
+        if (!recording) {
+            console.error(`[${recordingId}] ❌ Nie znaleziono aktywnego nagrania`);
+            return;
+        }
+        
+        // Dodaj transkrypcję do sesji
+        recording.transcript += transcript + ' ';
+        
+        // Aktualizuj nagranie w bazie danych jeśli to finalna transkrypcja
+        if (isFinal) {
+            const duration = Math.floor((Date.now() - recording.startTime.getTime()) / 1000);
+            
+            await safeQuery(`
+                UPDATE recordings 
+                SET transcript = $1, duration = $2, updated_at = NOW()
+                WHERE id = $3
+            `, [recording.transcript, duration, recordingId]);
+            
+            console.log(`[${recordingId}] 💾 Zapisano transkrypcję do bazy danych`);
+        }
+        
+    } catch (error) {
+        console.error(`[${recordingId}] ❌ Błąd podczas przetwarzania transkrypcji:`, error);
+    }
+}
+
+// Stop Recording Session
+async function stopRecordingSession(ws, data) {
+    const { recordingId, finalTranscript } = data;
+    
+    console.log(`[${recordingId}] 🎥🛑 Zatrzymywanie nagrania...`);
+    
+    try {
+        const recording = activeRecordings.get(recordingId);
+        if (!recording) {
+            console.error(`[${recordingId}] ❌ Nie znaleziono aktywnego nagrania`);
+            return;
+        }
+        
+        // Dodaj finalną transkrypcję jeśli została przekazana
+        if (finalTranscript) {
+            recording.transcript = finalTranscript;
+        }
+        
+        // Oblicz czas trwania
+        const duration = Math.floor((Date.now() - recording.startTime.getTime()) / 1000);
+        
+        // Zaktualizuj status w bazie danych
+        await safeQuery(`
+            UPDATE recordings 
+            SET transcript = $1, duration = $2, status = 'completed', updated_at = NOW()
+            WHERE id = $3
+        `, [recording.transcript, duration, recordingId]);
+        
+        // Usuń z aktywnych nagrań
+        activeRecordings.delete(recordingId);
+        
+        console.log(`[${recordingId}] ✅ Nagranie zakończone i zapisane`);
+        
+        // Wyślij potwierdzenie do frontendu
+        ws.send(JSON.stringify({
+            type: 'RECORDING_STOPPED',
+            recordingId: recordingId,
+            message: 'Nagranie zakończone pomyślnie',
+            duration: duration,
+            transcriptLength: recording.transcript.length
+        }));
+        
+    } catch (error) {
+        console.error(`[${recordingId}] ❌ Błąd podczas zatrzymywania nagrania:`, error);
+        ws.send(JSON.stringify({
+            type: 'RECORDING_ERROR',
+            message: 'Błąd zatrzymania nagrania: ' + error.message
         }));
     }
 }
