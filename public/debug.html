@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diagnostyka Systemu - Sales Assistant</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .test-section {
+            margin-bottom: 30px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        .test-header {
+            background: #f8f9fa;
+            padding: 15px 20px;
+            border-bottom: 1px solid #e0e0e0;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .test-content {
+            padding: 20px;
+        }
+        
+        .test-result {
+            background: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 15px;
+            margin-top: 10px;
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .test-result.success {
+            border-color: #28a745;
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .test-result.error {
+            border-color: #dc3545;
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .test-result.loading {
+            border-color: #007bff;
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            margin: 5px;
+            transition: transform 0.2s ease;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+        
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .status-loading { background: #ffc107; }
+        .status-success { background: #28a745; }
+        .status-error { background: #dc3545; }
+        .status-pending { background: #6c757d; }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+        }
+        
+        .actions {
+            text-align: center;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Diagnostyka Systemu - Skrypty Sprzedażowe</h1>
+        
+        <div class="actions">
+            <button class="btn" onclick="runAllTests()">▶️ Uruchom wszystkie testy</button>
+            <button class="btn" onclick="runSingleTest('database-structure')">🗄️ Test struktury bazy</button>
+            <button class="btn" onclick="runSingleTest('simple-product')">📦 Test prostego produktu</button>
+            <button class="btn" onclick="runSingleTest('product-with-script')">📄 Test produktu ze skryptem</button>
+        </div>
+
+        <!-- Test 1: Struktura bazy danych -->
+        <div class="test-section">
+            <div class="test-header">
+                <span class="status-indicator status-pending" id="status-database"></span>
+                🗄️ Test 1: Struktura bazy danych
+            </div>
+            <div class="test-content">
+                <p>Sprawdza czy kolumny skryptów sprzedażowych zostały prawidłowo dodane do tabeli products.</p>
+                <div class="test-result" id="result-database">Naciśnij przycisk powyżej aby uruchomić test...</div>
+            </div>
+        </div>
+
+        <!-- Test 2: Prosty produkt -->
+        <div class="test-section">
+            <div class="test-header">
+                <span class="status-indicator status-pending" id="status-simple"></span>
+                📦 Test 2: Dodawanie prostego produktu
+            </div>
+            <div class="test-content">
+                <p>Testuje dodawanie produktu bez skryptu sprzedażowego (stara funkcjonalność).</p>
+                <div class="test-result" id="result-simple">Naciśnij przycisk powyżej aby uruchomić test...</div>
+            </div>
+        </div>
+
+        <!-- Test 3: Produkt ze skryptem -->
+        <div class="test-section">
+            <div class="test-header">
+                <span class="status-indicator status-pending" id="status-script"></span>
+                📄 Test 3: Dodawanie produktu ze skryptem sprzedażowym
+            </div>
+            <div class="test-content">
+                <p>Testuje dodawanie produktu z tekstem skryptu sprzedażowego (nowa funkcjonalność).</p>
+                <div class="test-result" id="result-script">Naciśnij przycisk powyżej aby uruchomić test...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let testResults = {};
+
+        async function runAllTests() {
+            console.log('🚀 Uruchamianie wszystkich testów diagnostycznych...');
+            
+            // Reset wszystkich statusów
+            resetAllStatuses();
+            
+            // Uruchom testy sekwencyjnie
+            await runSingleTest('database-structure');
+            await runSingleTest('simple-product');
+            await runSingleTest('product-with-script');
+            
+            console.log('✅ Wszystkie testy ukończone:', testResults);
+        }
+
+        async function runSingleTest(testType) {
+            let endpoint, statusId, resultId, testName;
+            
+            switch(testType) {
+                case 'database-structure':
+                    endpoint = '/api/debug/database-structure';
+                    statusId = 'status-database';
+                    resultId = 'result-database';
+                    testName = 'Struktura bazy danych';
+                    break;
+                case 'simple-product':
+                    endpoint = '/api/debug/test-product';
+                    statusId = 'status-simple';
+                    resultId = 'result-simple';
+                    testName = 'Prosty produkt';
+                    break;
+                case 'product-with-script':
+                    endpoint = '/api/debug/test-product-with-script';
+                    statusId = 'status-script';
+                    resultId = 'result-script';
+                    testName = 'Produkt ze skryptem';
+                    break;
+                default:
+                    console.error('Nieznany typ testu:', testType);
+                    return;
+            }
+            
+            // Ustaw status loading
+            setStatus(statusId, 'loading');
+            setResult(resultId, `⏳ Wykonywanie testu "${testName}"...`, 'loading');
+            
+            try {
+                const method = testType === 'database-structure' ? 'GET' : 'POST';
+                
+                console.log(`🔍 Uruchamianie testu: ${testName} (${method} ${endpoint})`);
+                
+                const response = await fetch(endpoint, {
+                    method: method,
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    setStatus(statusId, 'success');
+                    setResult(resultId, formatSuccessResult(testType, data), 'success');
+                    testResults[testType] = { success: true, data };
+                    console.log(`✅ Test "${testName}" zakończony sukcesem:`, data);
+                } else {
+                    setStatus(statusId, 'error');
+                    setResult(resultId, formatErrorResult(testType, data), 'error');
+                    testResults[testType] = { success: false, data };
+                    console.error(`❌ Test "${testName}" zakończony błędem:`, data);
+                }
+                
+            } catch (error) {
+                setStatus(statusId, 'error');
+                setResult(resultId, `❌ Błąd połączenia z serwerem:\n\n${error.message}\n\nStack trace:\n${error.stack}`, 'error');
+                testResults[testType] = { success: false, error: error.message };
+                console.error(`💥 Test "${testName}" - błąd połączenia:`, error);
+            }
+        }
+
+        function formatSuccessResult(testType, data) {
+            switch(testType) {
+                case 'database-structure':
+                    let result = `✅ STRUKTURA BAZY DANYCH - SUKCES\n\n`;
+                    result += `👤 User ID: ${data.user_id}\n`;
+                    result += `📊 Łącznie produktów: ${data.test_query_result.total}\n\n`;
+                    result += `🏗️ STRUKTURA TABELI PRODUCTS:\n`;
+                    result += `${'='.repeat(80)}\n`;
+                    
+                    data.table_structure.forEach(col => {
+                        result += `📋 ${col.column_name.padEnd(25)} | ${col.data_type.padEnd(20)} | nullable: ${col.is_nullable}\n`;
+                    });
+                    
+                    // Sprawdź czy kolumny skryptu istnieją
+                    const scriptColumns = data.table_structure.filter(col => 
+                        ['sales_script_text', 'sales_script_filename', 'sales_script_path'].includes(col.column_name)
+                    );
+                    
+                    result += `\n🎯 KOLUMNY SKRYPTÓW SPRZEDAŻOWYCH:\n`;
+                    result += `${'='.repeat(50)}\n`;
+                    
+                    if (scriptColumns.length === 3) {
+                        result += `✅ sales_script_text: ${scriptColumns.find(c => c.column_name === 'sales_script_text')?.data_type || 'BRAK'}\n`;
+                        result += `✅ sales_script_filename: ${scriptColumns.find(c => c.column_name === 'sales_script_filename')?.data_type || 'BRAK'}\n`;
+                        result += `✅ sales_script_path: ${scriptColumns.find(c => c.column_name === 'sales_script_path')?.data_type || 'BRAK'}\n`;
+                        result += `\n🎉 Wszystkie kolumny skryptów sprzedażowych istnieją!`;
+                    } else {
+                        result += `❌ Brakuje ${3 - scriptColumns.length} kolumn skryptów sprzedażowych!\n`;
+                        ['sales_script_text', 'sales_script_filename', 'sales_script_path'].forEach(colName => {
+                            const exists = scriptColumns.find(c => c.column_name === colName);
+                            result += `${exists ? '✅' : '❌'} ${colName}: ${exists ? exists.data_type : 'BRAK'}\n`;
+                        });
+                    }
+                    
+                    return result;
+                    
+                case 'simple-product':
+                    return `✅ PROSTY PRODUKT - SUKCES\n\n${data.message}\n\n📦 UTWORZONY PRODUKT:\n${'='.repeat(50)}\n${JSON.stringify(data.product, null, 2)}`;
+                    
+                case 'product-with-script':
+                    return `✅ PRODUKT ZE SKRYPTEM - SUKCES\n\n${data.message}\n\n📄 UTWORZONY PRODUKT:\n${'='.repeat(50)}\n${JSON.stringify(data.product, null, 2)}`;
+                    
+                default:
+                    return `✅ SUKCES\n\n${JSON.stringify(data, null, 2)}`;
+            }
+        }
+
+        function formatErrorResult(testType, data) {
+            let result = `❌ BŁĄD - ${testType.toUpperCase()}\n\n`;
+            
+            if (data.error) {
+                result += `💥 Błąd: ${data.error}\n`;
+            }
+            
+            if (data.code) {
+                result += `🔢 Kod błędu: ${data.code}\n`;
+            }
+            
+            if (data.detail) {
+                result += `📝 Szczegóły: ${data.detail}\n`;
+            }
+            
+            if (data.hint) {
+                result += `💡 Wskazówka: ${data.hint}\n`;
+            }
+            
+            result += `\n📋 PEŁNE DANE BŁĘDU:\n${'='.repeat(50)}\n${JSON.stringify(data, null, 2)}`;
+            
+            return result;
+        }
+
+        function setStatus(statusId, status) {
+            const element = document.getElementById(statusId);
+            if (element) {
+                element.className = `status-indicator status-${status}`;
+            }
+        }
+
+        function setResult(resultId, text, type) {
+            const element = document.getElementById(resultId);
+            if (element) {
+                element.textContent = text;
+                element.className = `test-result ${type}`;
+            }
+        }
+
+        function resetAllStatuses() {
+            ['database', 'simple', 'script'].forEach(test => {
+                setStatus(`status-${test}`, 'pending');
+                setResult(`result-${test}`, 'Oczekuje na uruchomienie...', '');
+            });
+            testResults = {};
+        }
+
+        // Auto-uruchom wszystkie testy po załadowaniu strony
+        window.addEventListener('load', () => {
+            console.log('🚀 Strona diagnostyczna załadowana');
+            setTimeout(() => {
+                runAllTests();
+            }, 1000);
+        });
+    </script>
+</body>
+</html> 
