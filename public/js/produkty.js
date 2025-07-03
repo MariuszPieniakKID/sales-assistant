@@ -58,6 +58,12 @@
         cancelBtn.addEventListener('click', () => closeModalHandler());
         productForm.addEventListener('submit', handleFormSubmit);
         
+        // Obsługa upload skryptu sprzedażowego
+        const salesScriptInput = document.getElementById('salesScript');
+        if (salesScriptInput) {
+            salesScriptInput.addEventListener('change', handleSalesScriptUpload);
+        }
+        
         // Zamknij modal po kliknięciu w tło
         productModal.addEventListener('click', (e) => {
             if (e.target === productModal) closeModalHandler();
@@ -115,6 +121,12 @@
                     </div>
                 </div>
                 <p class="product-description">${escapeHtml(product.description)}</p>
+                ${product.sales_script_filename ? `
+                    <div class="product-script-indicator">
+                        <i class="fas fa-file-pdf"></i>
+                        <span>Skrypt sprzedażowy: ${escapeHtml(product.sales_script_filename)}</span>
+                    </div>
+                ` : ''}
                 <div class="product-meta">
                     <span>${formatDate(product.created_at)}</span>
                     <div class="product-files">
@@ -136,8 +148,52 @@
             document.getElementById('productName').value = product.name || '';
             document.getElementById('productDescription').value = product.description || '';
             document.getElementById('productComment').value = product.comment || '';
+            
+            // Obsługa istniejącego skryptu sprzedażowego
+            const statusDiv = document.getElementById('salesScriptStatus');
+            const filenameSpan = statusDiv.querySelector('.script-filename');
+            const previewDiv = statusDiv.querySelector('.script-text-preview');
+            
+            if (product.sales_script_filename && product.sales_script_text) {
+                filenameSpan.textContent = product.sales_script_filename;
+                const textPreview = product.sales_script_text.substring(0, 500) + 
+                    (product.sales_script_text.length > 500 ? '...' : '');
+                previewDiv.textContent = textPreview;
+                statusDiv.style.display = 'block';
+                
+                // Dodaj hidden inputy z tekstem i nazwą pliku skryptu
+                let hiddenTextInput = document.getElementById('salesScriptText');
+                let hiddenFilenameInput = document.getElementById('salesScriptFilename');
+                
+                if (hiddenTextInput) {
+                    hiddenTextInput.value = product.sales_script_text;
+                } else {
+                    hiddenTextInput = document.createElement('input');
+                    hiddenTextInput.type = 'hidden';
+                    hiddenTextInput.name = 'salesScriptText';
+                    hiddenTextInput.value = product.sales_script_text;
+                    hiddenTextInput.id = 'salesScriptText';
+                    productForm.appendChild(hiddenTextInput);
+                }
+                
+                if (hiddenFilenameInput) {
+                    hiddenFilenameInput.value = product.sales_script_filename;
+                } else {
+                    hiddenFilenameInput = document.createElement('input');
+                    hiddenFilenameInput.type = 'hidden';
+                    hiddenFilenameInput.name = 'salesScriptFilename';
+                    hiddenFilenameInput.value = product.sales_script_filename;
+                    hiddenFilenameInput.id = 'salesScriptFilename';
+                    productForm.appendChild(hiddenFilenameInput);
+                }
+            } else {
+                statusDiv.style.display = 'none';
+            }
         } else {
             productForm.reset();
+            // Ukryj status skryptu przy nowym produkcie
+            const statusDiv = document.getElementById('salesScriptStatus');
+            if (statusDiv) statusDiv.style.display = 'none';
         }
         
         productModal.classList.add('active');
@@ -252,6 +308,20 @@
                     <p>${escapeHtml(product.comment)}</p>
                 </div>
             ` : ''}
+            ${product.sales_script_filename ? `
+                <div class="product-detail">
+                    <h4>Skrypt sprzedażowy</h4>
+                    <div class="script-info" style="margin-bottom: 12px;">
+                        <i class="fas fa-file-pdf" style="color: #dc2626; margin-right: 8px;"></i>
+                        <span style="font-weight: 500;">${escapeHtml(product.sales_script_filename)}</span>
+                    </div>
+                    ${product.sales_script_text ? `
+                        <div class="script-text-preview" style="max-height: 200px;">
+                            ${escapeHtml(product.sales_script_text.substring(0, 1000))}${product.sales_script_text.length > 1000 ? '...' : ''}
+                        </div>
+                    ` : ''}
+                </div>
+            ` : ''}
             <div class="product-detail">
                 <h4>Data utworzenia</h4>
                 <p>${formatDate(product.created_at)}</p>
@@ -270,6 +340,95 @@
 
         productDetailsModal.classList.add('active');
         document.body.style.overflow = 'hidden';
+    };
+
+    // Obsługa upload skryptu sprzedażowego
+    async function handleSalesScriptUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        if (file.type !== 'application/pdf') {
+            showNotification('Można dodać tylko pliki PDF', 'error');
+            event.target.value = '';
+            return;
+        }
+
+        const statusDiv = document.getElementById('salesScriptStatus');
+        const filenameSpan = statusDiv.querySelector('.script-filename');
+        const previewDiv = statusDiv.querySelector('.script-text-preview');
+        
+        // Pokaż status uploadu
+        filenameSpan.textContent = file.name;
+        previewDiv.textContent = 'Przetwarzanie PDF... To może chwilę potrwać.';
+        statusDiv.style.display = 'block';
+
+        try {
+            // Wyślij plik do backend dla OCR
+            const formData = new FormData();
+            formData.append('salesScript', file);
+
+            const response = await fetch('/api/process-sales-script', {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                // Pokaż podgląd tekstu
+                const textPreview = result.extractedText.substring(0, 500) + 
+                    (result.extractedText.length > 500 ? '...' : '');
+                previewDiv.textContent = textPreview;
+                
+                // Zapisz dane w formularzu
+                const hiddenTextInput = document.createElement('input');
+                hiddenTextInput.type = 'hidden';
+                hiddenTextInput.name = 'salesScriptText';
+                hiddenTextInput.value = result.extractedText;
+                hiddenTextInput.id = 'salesScriptText';
+                
+                const hiddenFilenameInput = document.createElement('input');
+                hiddenFilenameInput.type = 'hidden';
+                hiddenFilenameInput.name = 'salesScriptFilename';
+                hiddenFilenameInput.value = file.name;
+                hiddenFilenameInput.id = 'salesScriptFilename';
+                
+                // Usuń poprzednie hidden inputy jeśli istnieją
+                const existingTextInput = document.getElementById('salesScriptText');
+                const existingFilenameInput = document.getElementById('salesScriptFilename');
+                if (existingTextInput) existingTextInput.remove();
+                if (existingFilenameInput) existingFilenameInput.remove();
+                
+                productForm.appendChild(hiddenTextInput);
+                productForm.appendChild(hiddenFilenameInput);
+                
+                showNotification('Skrypt sprzedażowy przetworzony pomyślnie!', 'success');
+            } else {
+                throw new Error(result.message || 'Błąd przetwarzania PDF');
+            }
+        } catch (error) {
+            console.error('Błąd przetwarzania skryptu:', error);
+            showNotification('Błąd przetwarzania PDF: ' + error.message, 'error');
+            previewDiv.textContent = 'Błąd przetwarzania pliku';
+            
+            // Usuń plik z inputa
+            event.target.value = '';
+        }
+    }
+
+    // Usunięcie skryptu sprzedażowego
+    window.removeSalesScript = function() {
+        const salesScriptInput = document.getElementById('salesScript');
+        const statusDiv = document.getElementById('salesScriptStatus');
+        const hiddenTextInput = document.getElementById('salesScriptText');
+        const hiddenFilenameInput = document.getElementById('salesScriptFilename');
+        
+        if (salesScriptInput) salesScriptInput.value = '';
+        if (statusDiv) statusDiv.style.display = 'none';
+        if (hiddenTextInput) hiddenTextInput.remove();
+        if (hiddenFilenameInput) hiddenFilenameInput.remove();
+        
+        showNotification('Skrypt sprzedażowy usunięty', 'info');
     };
 
     function escapeHtml(text) {

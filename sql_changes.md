@@ -91,3 +91,35 @@ ALTER TABLE clients ALTER COLUMN name SET NOT NULL;
 - Upewnij się że PostgreSQL działa
 - Sprawdź czy baza danych 'asystent' istnieje
 - Sprawdź czy użytkownik 'kid' ma dostęp do bazy 
+
+## NOWA FUNKCJONALNOŚĆ: Skrypty sprzedażowe z OCR
+
+### Dodanie kolumny dla skryptów sprzedażowych
+
+```sql
+-- Dodanie kolumny na tekst skryptu sprzedażowego (po OCR z PDF)
+ALTER TABLE products ADD COLUMN IF NOT EXISTS sales_script_text TEXT;
+
+-- Dodanie kolumny na nazwę pliku skryptu
+ALTER TABLE products ADD COLUMN IF NOT EXISTS sales_script_filename VARCHAR(255);
+
+-- Dodanie kolumny na ścieżkę do oryginalnego pliku PDF
+ALTER TABLE products ADD COLUMN IF NOT EXISTS sales_script_path TEXT;
+
+-- Sprawdzenie czy kolumny zostały dodane
+SELECT column_name, data_type, is_nullable 
+FROM information_schema.columns 
+WHERE table_name = 'products' 
+AND column_name IN ('sales_script_text', 'sales_script_filename', 'sales_script_path');
+```
+
+### Aktualizacja istniejących produktów (opcjonalnie)
+
+```sql
+-- Można ustawić domyślne wartości dla istniejących produktów
+UPDATE products 
+SET sales_script_text = NULL, 
+    sales_script_filename = NULL, 
+    sales_script_path = NULL 
+WHERE sales_script_text IS NULL;
+``` 

@@ -39,9 +39,28 @@
             </div>
             
             <div class="form-group">
-                <label for="productFiles">Pliki</label>
+                <label for="salesScript">Dodaj skrypt sprzedażowy (PDF)</label>
+                <input type="file" id="salesScript" name="salesScript" accept=".pdf">
+                <small class="form-help">Dodaj skrypt sprzedażowy w formacie PDF. Tekst zostanie automatycznie wyodrębniony przez OCR.</small>
+                <div id="salesScriptStatus" class="script-status" style="display: none;">
+                    <div class="script-info">
+                        <i class="fas fa-file-pdf"></i>
+                        <span class="script-filename"></span>
+                        <button type="button" class="btn-remove-script" onclick="removeSalesScript()">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="script-preview">
+                        <strong>Podgląd tekstu:</strong>
+                        <div class="script-text-preview"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="productFiles">Inne pliki</label>
                 <input type="file" id="productFiles" name="files" multiple>
-                <small class="form-help">Możesz dodać wiele plików</small>
+                <small class="form-help">Możesz dodać wiele dodatkowych plików</small>
             </div>
             
             <div class="modal-actions">
@@ -225,11 +244,89 @@
     color: #94a3b8;
 }
 
-.product-files {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-}
+    .product-files {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    /* Styles dla skryptu sprzedażowego */
+    .script-status {
+        margin-top: 12px;
+        padding: 16px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+    }
+
+    .script-info {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 12px;
+    }
+
+    .script-info i {
+        color: #dc2626;
+        font-size: 18px;
+    }
+
+    .script-filename {
+        flex: 1;
+        font-weight: 500;
+        color: #374151;
+    }
+
+    .btn-remove-script {
+        width: 24px;
+        height: 24px;
+        border: none;
+        background: #fef2f2;
+        color: #dc2626;
+        border-radius: 4px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.3s ease;
+    }
+
+    .btn-remove-script:hover {
+        background: #dc2626;
+        color: white;
+    }
+
+    .script-preview {
+        border-top: 1px solid #e2e8f0;
+        padding-top: 12px;
+    }
+
+    .script-text-preview {
+        max-height: 150px;
+        overflow-y: auto;
+        background: white;
+        padding: 12px;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        font-family: 'Courier New', monospace;
+        font-size: 12px;
+        line-height: 1.4;
+        color: #374151;
+        white-space: pre-wrap;
+        margin-top: 8px;
+    }
+
+    .product-script-indicator {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 12px;
+        color: #059669;
+        background: #d1fae5;
+        padding: 4px 8px;
+        border-radius: 4px;
+        margin-top: 8px;
+    }
 
 .modal {
     display: none;

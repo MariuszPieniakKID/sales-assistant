@@ -13,6 +13,7 @@ const WebSocket = require('ws');
 const http = require('http');
 const puppeteer = require('puppeteer');
 const htmlPdf = require('html-pdf-node');
+const pdfParse = require('pdf-parse');
 
 // Initialize OpenAI globally
 const openai = new OpenAI({
@@ -192,6 +193,10 @@ async function testNeonConnection(retries = 3) {
             `);
             const tables = tablesResult.rows.map(row => row.table_name);
             console.log('📊 Dostępne tabele:', tables);
+            
+            // Wykonaj migracje bazy danych
+            await runDatabaseMigrations(pool);
+            
             return true;
         } catch (error) {
             console.error(`❌ Próba ${i + 1} nieudana:`, error.message);
@@ -202,6 +207,46 @@ async function testNeonConnection(retries = 3) {
             // Czekaj przed retry
             await new Promise(resolve => setTimeout(resolve, 1000));
         }
+    }
+}
+
+// Funkcja do automatycznych migracji bazy danych
+async function runDatabaseMigrations(pool) {
+    try {
+        console.log('🔄 Sprawdzanie i wykonywanie migracji bazy danych...');
+        
+        // Sprawdź czy kolumny skryptu sprzedażowego istnieją
+        const checkColumnsQuery = `
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'products' 
+            AND column_name IN ('sales_script_text', 'sales_script_filename', 'sales_script_path')
+        `;
+        
+        const existingColumns = await pool.query(checkColumnsQuery);
+        const columnNames = existingColumns.rows.map(row => row.column_name);
+        
+        // Dodaj brakujące kolumny
+        if (!columnNames.includes('sales_script_text')) {
+            console.log('➕ Dodawanie kolumny sales_script_text...');
+            await pool.query('ALTER TABLE products ADD COLUMN sales_script_text TEXT');
+        }
+        
+        if (!columnNames.includes('sales_script_filename')) {
+            console.log('➕ Dodawanie kolumny sales_script_filename...');
+            await pool.query('ALTER TABLE products ADD COLUMN sales_script_filename VARCHAR(255)');
+        }
+        
+        if (!columnNames.includes('sales_script_path')) {
+            console.log('➕ Dodawanie kolumny sales_script_path...');
+            await pool.query('ALTER TABLE products ADD COLUMN sales_script_path TEXT');
+        }
+        
+        console.log('✅ Migracje bazy danych ukończone pomyślnie');
+        
+    } catch (error) {
+        console.error('❌ Błąd podczas migracji bazy danych:', error);
+        // Nie przerywaj startowania serwera w przypadku błędu migracji
     }
 }
 
@@ -985,18 +1030,100 @@ app.get('/api/products', requireAuth, async (req, res) => {
     }
 });
 
+// Endpoint do przetwarzania skryptu sprzedażowego przez OCR
+app.post('/api/process-sales-script', requireAuth, upload.single('salesScript'), async (req, res) => {
+    console.log('📍 Processing sales script PDF...');
+    
+    if (!req.file) {
+        return res.status(400).json({ success: false, message: 'Brak pliku PDF' });
+    }
+
+    try {
+        // Sprawdź czy to PDF
+        if (req.file.mimetype !== 'application/pdf') {
+            // Usuń plik
+            if (fs.existsSync(req.file.path)) {
+                fs.unlinkSync(req.file.path);
+            }
+            return res.status(400).json({ success: false, message: 'Plik musi być w formacie PDF' });
+        }
+
+        // Wczytaj PDF
+        const dataBuffer = fs.readFileSync(req.file.path);
+        
+        // Przetworz PDF przez OCR
+        console.log('🔍 Extracting text from PDF...');
+        const pdfData = await pdfParse(dataBuffer);
+        
+        const extractedText = pdfData.text.trim();
+        
+        if (!extractedText || extractedText.length < 10) {
+            // Usuń plik
+            if (fs.existsSync(req.file.path)) {
+                fs.unlinkSync(req.file.path);
+            }
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Nie udało się wyodrębnić tekstu z PDF. Plik może być uszkodzony lub zawierać tylko obrazy.' 
+            });
+        }
+
+        console.log(`✅ Extracted ${extractedText.length} characters from PDF`);
+        
+        // Usuń tymczasowy plik (tekst jest już wyodrębniony)
+        if (fs.existsSync(req.file.path)) {
+            fs.unlinkSync(req.file.path);
+        }
+
+        res.json({
+            success: true,
+            extractedText: extractedText,
+            filename: req.file.originalname,
+            textLength: extractedText.length
+        });
+
+    } catch (error) {
+        console.error('❌ Błąd przetwarzania PDF:', error);
+        
+        // Usuń plik w przypadku błędu
+        if (req.file && fs.existsSync(req.file.path)) {
+            fs.unlinkSync(req.file.path);
+        }
+        
+        res.status(500).json({ 
+            success: false, 
+            message: 'Błąd przetwarzania PDF: ' + error.message 
+        });
+    }
+});
+
 app.post('/api/products', requireAuth, upload.array('files'), async (req, res) => {
-  const { name, description, comment } = req.body;
+  const { name, description, comment, salesScriptText } = req.body;
   
   try {
     const client = await pool.connect();
     
-    // Dodaj produkt
-    const productResult = await client.query(
-      'INSERT INTO products (user_id, name, description, comment) VALUES ($1, $2, $3, $4) RETURNING *',
-      [req.session.userId, name, description, comment]
-    );
+    // Sprawdź czy istnieją nowe kolumny (dodane w migracji)
+    let productQuery, productValues;
     
+    if (salesScriptText) {
+      // Dodaj produkt ze skryptem sprzedażowym
+      productQuery = `
+        INSERT INTO products (user_id, name, description, comment, sales_script_text, sales_script_filename) 
+        VALUES ($1, $2, $3, $4, $5, $6) RETURNING *
+      `;
+      
+      // Znajdź oryginalną nazwę pliku ze skryptu w req.body lub ustaw domyślną
+      const scriptFilename = req.body.salesScriptFilename || 'skrypt-sprzedazowy.pdf';
+      
+      productValues = [req.session.userId, name, description, comment, salesScriptText, scriptFilename];
+    } else {
+      // Standardowy produkt bez skryptu
+      productQuery = 'INSERT INTO products (user_id, name, description, comment) VALUES ($1, $2, $3, $4) RETURNING *';
+      productValues = [req.session.userId, name, description, comment];
+    }
+    
+    const productResult = await client.query(productQuery, productValues);
     const productId = productResult.rows[0].id;
     
     // Dodaj pliki jeśli zostały przesłane
@@ -1021,7 +1148,7 @@ app.post('/api/products', requireAuth, upload.array('files'), async (req, res) =
 // Edycja produktu
 app.put('/api/products/:id', requireAuth, upload.array('files'), async (req, res) => {
   const productId = req.params.id;
-  const { name, description, comment } = req.body;
+  const { name, description, comment, salesScriptText } = req.body;
   
   try {
     const client = await pool.connect();
@@ -1037,11 +1164,25 @@ app.put('/api/products/:id', requireAuth, upload.array('files'), async (req, res
       return res.status(404).json({ success: false, message: 'Produkt nie znaleziony' });
     }
     
-    // Aktualizuj produkt
-    const updateResult = await client.query(
-      'UPDATE products SET name = $1, description = $2, comment = $3 WHERE id = $4 AND user_id = $5 RETURNING *',
-      [name, description, comment, productId, req.session.userId]
-    );
+    // Aktualizuj produkt - sprawdź czy skrypt sprzedażowy został przesłany
+    let updateQuery, updateValues;
+    
+    if (salesScriptText) {
+      // Aktualizuj ze skryptem sprzedażowym
+      const scriptFilename = req.body.salesScriptFilename || 'skrypt-sprzedazowy.pdf';
+      updateQuery = `
+        UPDATE products 
+        SET name = $1, description = $2, comment = $3, sales_script_text = $4, sales_script_filename = $5 
+        WHERE id = $6 AND user_id = $7 RETURNING *
+      `;
+      updateValues = [name, description, comment, salesScriptText, scriptFilename, productId, req.session.userId];
+    } else {
+      // Standardowa aktualizacja bez zmiany skryptu
+      updateQuery = 'UPDATE products SET name = $1, description = $2, comment = $3 WHERE id = $4 AND user_id = $5 RETURNING *';
+      updateValues = [name, description, comment, productId, req.session.userId];
+    }
+    
+    const updateResult = await client.query(updateQuery, updateValues);
     
     // Dodaj nowe pliki jeśli zostały przesłane
     if (req.files && req.files.length > 0) {
