@@ -104,6 +104,12 @@ async function loadMeetings() {
         meetings = await response.json();
         console.log('📊 Załadowano spotkań:', meetings.length, meetings);
         
+        // Debug: sprawdź ile jest każdego typu
+        const liveSessions = meetings.filter(m => m.type === 'live_session' || !m.type);
+        const recordings = meetings.filter(m => m.type === 'recording');
+        console.log('🎬 Live sessions:', liveSessions.length, liveSessions);
+        console.log('🎙️ Nagrania:', recordings.length, recordings);
+        
         filteredMeetings = [...meetings];
         renderMeetingsTable();
         
@@ -250,10 +256,12 @@ function handleSearch() {
             meeting.client_name.toLowerCase().includes(searchTerm) ||
             meeting.product_name.toLowerCase().includes(searchTerm) ||
             (meeting.transcription && meeting.transcription.toLowerCase().includes(searchTerm)) ||
+            (meeting.transcript && meeting.transcript.toLowerCase().includes(searchTerm)) || // Dla nagrań
             (meeting.positive_findings && meeting.positive_findings.toLowerCase().includes(searchTerm)) ||
             (meeting.negative_findings && meeting.negative_findings.toLowerCase().includes(searchTerm)) ||
             (meeting.recommendations && meeting.recommendations.toLowerCase().includes(searchTerm)) ||
-            (meeting.own_notes && meeting.own_notes.toLowerCase().includes(searchTerm))
+            (meeting.own_notes && meeting.own_notes.toLowerCase().includes(searchTerm)) ||
+            (meeting.notes && meeting.notes.toLowerCase().includes(searchTerm)) // Dla nagrań
         );
     }
     
@@ -364,7 +372,12 @@ function renderMeetingDetailsInSection(meeting) {
 
 // Renderowanie szczegółów nagrania w sekcji
 function renderRecordingDetailsInSection(recording) {
-    console.log('Renderowanie szczegółów nagrania:', recording);
+    console.log('🎙️ Renderowanie szczegółów nagrania:', recording);
+    console.log('🎙️ Recording transcript:', recording.transcript);
+    console.log('🎙️ Recording notes:', recording.notes);
+    console.log('🎙️ Recording created_at:', recording.created_at);
+    console.log('🎙️ Recording duration:', recording.duration);
+    console.log('🎙️ Recording status:', recording.status);
     
     // Zapisz nagranie do eksportu PDF
     currentMeetingForExport = recording;
