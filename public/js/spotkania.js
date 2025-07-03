@@ -142,8 +142,11 @@ function renderMeetingsTable() {
         const status = getMeetingStatus(meeting);
         const typeInfo = getMeetingTypeInfo(meeting);
         
+        // Obsługa ID - nagrania mają string ID, live sessions mają numeric ID
+        const meetingIdForOnClick = meeting.type === 'recording' ? `'${meeting.id}'` : meeting.id;
+        
         return `
-            <tr onclick="openMeetingDetails(${meeting.id}, '${meeting.type || 'live_session'}')" data-meeting-id="${meeting.id}" data-meeting-type="${meeting.type || 'live_session'}">
+            <tr onclick="openMeetingDetails(${meetingIdForOnClick}, '${meeting.type || 'live_session'}')" data-meeting-id="${meeting.id}" data-meeting-type="${meeting.type || 'live_session'}">
                 <td>
                     <div class="client-name">${escapeHtml(meeting.client_name)}</div>
                     <div class="meeting-type-indicator">
@@ -166,7 +169,7 @@ function renderMeetingsTable() {
                 </td>
                 <td>
                     <div class="action-buttons">
-                        <button class="btn-icon btn-view" onclick="event.stopPropagation(); openMeetingDetails(${meeting.id}, '${meeting.type || 'live_session'}')" title="Zobacz szczegóły">
+                        <button class="btn-icon btn-view" onclick="event.stopPropagation(); openMeetingDetails(${meetingIdForOnClick}, '${meeting.type || 'live_session'}')" title="Zobacz szczegóły">
                             <i class="fas fa-eye"></i>
                         </button>
                     </div>
@@ -273,11 +276,11 @@ async function openMeetingDetails(meetingId, meetingType = 'live_session') {
     console.log('Otwieranie szczegółów spotkania ID:', meetingId, 'Typ:', meetingType);
     
     try {
-        // Znajdź spotkanie w lokalnych danych - porównaj z konwersją typu
-        const meeting = meetings.find(m => m.id == meetingId);
+        // Znajdź spotkanie w lokalnych danych - obsługa string i numeric ID
+        const meeting = meetings.find(m => m.id == meetingId || m.id === meetingId);
         if (!meeting) {
-            console.error('Nie znaleziono spotkania w lokalnych danych:', meetingId);
-            console.error('Dostępne spotkania:', meetings.map(m => ({id: m.id, type: m.type})));
+            console.error('Nie znaleziono spotkania w lokalnych danych:', meetingId, typeof meetingId);
+            console.error('Dostępne spotkania:', meetings.map(m => ({id: m.id, type: m.type, idType: typeof m.id})));
             showError('Nie znaleziono spotkania');
             return;
         }
