@@ -2983,13 +2983,36 @@ wss.on('connection', (ws, req) => {
                     await processRecordingTranscript(ws, data);
                     break;
                     
+                case 'RECORDING_TRANSCRIPT_METHOD2':
+                    console.log('🎥🔬📝 Processing RECORDING_TRANSCRIPT_METHOD2:', {
+                        recordingId: data.recordingId,
+                        transcriptLength: data.transcript?.text?.length || 0,
+                        speaker: data.transcript?.speaker,
+                        speakerRole: data.transcript?.speakerRole,
+                        isFinal: data.isFinal
+                    });
+                    await processRecordingTranscriptMethod2(ws, data);
+                    break;
+                    
+                case 'RECORDING_PARTIAL_METHOD2':
+                    console.log('🎥🔬⚡📝 Processing RECORDING_PARTIAL_METHOD2:', {
+                        recordingId: data.recordingId,
+                        transcriptLength: data.transcript?.text?.substring(0, 30) + '...' || 0,
+                        speaker: data.transcript?.speaker,
+                        speakerRole: data.transcript?.speakerRole,
+                        wordsCount: data.transcript?.wordsCount,
+                        isPartial: data.isPartial
+                    });
+                    await processRecordingPartialMethod2(ws, data);
+                    break;
+                    
                 case 'STOP_RECORDING_SESSION':
                     console.log('🎥🛑 Processing STOP_RECORDING_SESSION:', {
                         recordingId: data.recordingId,
                         finalTranscriptLength: data.finalTranscript?.length || 0
                     });
                     await stopRecordingSession(ws, data);
-                    break;
+                                        break;
                     
                 case 'TEST':
                     console.log('🧪 TEST message received:', data);
@@ -5035,6 +5058,111 @@ async function stopRecordingSession(ws, data) {
             type: 'RECORDING_ERROR',
             message: 'Błąd zatrzymania nagrania: ' + error.message
         }));
+    }
+}
+
+// Process Recording Transcript Method 2 (with Speaker Diarization)
+async function processRecordingTranscriptMethod2(ws, data) {
+    const { recordingId, transcript, isFinal } = data;
+    
+    if (!recordingId || !transcript) {
+        console.error('❌ Brak recordingId lub transcript w processRecordingTranscriptMethod2');
+        return;
+    }
+    
+    console.log(`[${recordingId}] 🎥🔬📝 Przetwarzanie transkrypcji Method 2: ${transcript.text.substring(0, 50)}...`);
+    console.log(`[${recordingId}] 🎥🔬📝 Speaker info:`, {
+        speaker: transcript.speaker,
+        speakerRole: transcript.speakerRole,
+        language: transcript.language,
+        confidence: transcript.confidence
+    });
+    
+    try {
+        const recording = activeRecordings.get(recordingId);
+        if (!recording) {
+            console.error(`[${recordingId}] ❌ Nie znaleziono aktywnego nagrania`);
+            return;
+        }
+        
+        // Initialize transcriptWithSpeakers if not exists
+        if (!recording.transcriptWithSpeakers) {
+            recording.transcriptWithSpeakers = [];
+        }
+        
+        // Add transcript entry with speaker info
+        const transcriptEntry = {
+            speaker: transcript.speaker,
+            speakerRole: transcript.speakerRole,
+            text: transcript.text,
+            timestamp: new Date().toISOString(),
+            confidence: transcript.confidence,
+            language: transcript.language
+        };
+        
+        recording.transcriptWithSpeakers.push(transcriptEntry);
+        
+        // Update plain transcript for backward compatibility
+        recording.transcript += `[${transcript.speakerRole}] ${transcript.text} `;
+        
+        // Aktualizuj nagranie w bazie danych jeśli to finalna transkrypcja
+        if (isFinal) {
+            const duration = Math.floor((Date.now() - recording.startTime.getTime()) / 1000);
+            
+            await safeQuery(`
+                UPDATE recordings 
+                SET transcript = $1, duration = $2, updated_at = NOW()
+                WHERE id = $3
+            `, [recording.transcript, duration, recordingId]);
+            
+            console.log(`[${recordingId}] 💾 Zapisano transkrypcję Method 2 do bazy danych`);
+        }
+        
+    } catch (error) {
+        console.error(`[${recordingId}] ❌ Błąd podczas przetwarzania transkrypcji Method 2:`, error);
+    }
+}
+
+// Process Recording Partial Transcript Method 2 (for live updates)
+async function processRecordingPartialMethod2(ws, data) {
+    const { recordingId, transcript, isPartial } = data;
+    
+    if (!recordingId || !transcript || !isPartial) {
+        console.error('❌ Brak recordingId, transcript lub isPartial w processRecordingPartialMethod2');
+        return;
+    }
+    
+    console.log(`[${recordingId}] 🎥🔬⚡📝 Przetwarzanie częściowej transkrypcji Method 2: ${transcript.text.substring(0, 30)}...`);
+    console.log(`[${recordingId}] 🎥🔬⚡📝 Partial info:`, {
+        speaker: transcript.speaker,
+        speakerRole: transcript.speakerRole,
+        wordsCount: transcript.wordsCount,
+        language: transcript.language,
+        confidence: transcript.confidence
+    });
+    
+    try {
+        const recording = activeRecordings.get(recordingId);
+        if (!recording) {
+            console.error(`[${recordingId}] ❌ Nie znaleziono aktywnego nagrania`);
+            return;
+        }
+        
+        // Store partial transcript for potential live processing
+        recording.currentPartialTranscript = {
+            speaker: transcript.speaker,
+            speakerRole: transcript.speakerRole,
+            text: transcript.text,
+            timestamp: new Date().toISOString(),
+            confidence: transcript.confidence,
+            language: transcript.language,
+            wordsCount: transcript.wordsCount
+        };
+        
+        console.log(`[${recordingId}] 💾 Zapisano częściową transkrypcję Method 2 w pamięci`);
+        
+    } catch (error) {
+        console.error(`[${recordingId}] ❌ Błąd podczas przetwarzania częściowej transkrypcji Method 2:`, error);
     }
 }
 

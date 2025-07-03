@@ -595,3 +595,115 @@
         background: linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%); 
     }
 }
+
+/* SPEAKER INDICATORS FOR RECORDINGS */
+.transcript-entry.speaker-a,
+.transcript-entry.speaker-b {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 8px;
+    padding: 8px 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    border-left: 4px solid;
+}
+
+.transcript-entry.speaker-a {
+    border-left-color: #3b82f6; /* Blue for speaker A */
+}
+
+.transcript-entry.speaker-b {
+    border-left-color: #ef4444; /* Red for speaker B */
+}
+
+.transcript-entry .speaker-indicator {
+    font-size: 16px;
+    margin-right: 4px;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+.transcript-entry .speaker-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-right: 8px;
+    flex-shrink: 0;
+    min-width: 80px;
+}
+
+.transcript-entry .transcript-text {
+    flex: 1;
+    line-height: 1.4;
+    color: #1e293b;
+}
+
+.transcript-entry .transcript-text.interim {
+    color: #64748b;
+    font-style: italic;
+    opacity: 0.8;
+}
+
+.transcript-placeholder {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 8px;
+    padding: 8px 12px;
+    background: #f1f5f9;
+    border: 1px dashed #cbd5e1;
+    border-radius: 8px;
+    animation: pulse 2s infinite;
+}
+
+.transcript-placeholder .speaker-indicator {
+    font-size: 16px;
+    margin-right: 4px;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+.transcript-placeholder .speaker-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-right: 8px;
+    flex-shrink: 0;
+    min-width: 80px;
+}
+
+.transcript-placeholder .transcript-text {
+    flex: 1;
+    line-height: 1.4;
+    color: #64748b;
+    font-style: italic;
+    opacity: 0.8;
+}
+
+/* Recording transcript container styles */
+#recordingTranscriptContent .transcript-entry:last-child {
+    margin-bottom: 0;
+}
+
+#recordingTranscriptContent::-webkit-scrollbar {
+    width: 8px;
+}
+
+#recordingTranscriptContent::-webkit-scrollbar-track {
+    background: #f1f5f9;
+}
+
+#recordingTranscriptContent::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+
+#recordingTranscriptContent::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+}

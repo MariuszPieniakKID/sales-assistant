@@ -2085,7 +2085,7 @@ async function setupRecordingAudio() {
     }
 }
 
-// Setup Web Speech Recognition for Recording
+// Setup Web Speech Recognition for Recording with Method 2 (Enhanced Speaker Diarization)
 function setupRecordingWebSpeech() {
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
         console.error('❌ Web Speech API not supported');
@@ -2101,9 +2101,15 @@ function setupRecordingWebSpeech() {
     webSpeechRecognition.interimResults = true;
     webSpeechRecognition.maxAlternatives = 1;
     
+    // Enhanced speaker tracking variables for recording
+    let recordingLastSpeaker = null;
+    let recordingLastSpeechTime = 0;
+    let recordingWordBuffer = [];
+    let recordingCurrentSpeaker = 'A'; // Start with speaker A
+    
     // Event handlers
     webSpeechRecognition.onstart = () => {
-        console.log('🎤 Recording speech recognition started');
+        console.log('🎤🔬 Recording speech recognition started with Method 2 enhanced diarization');
     };
     
     webSpeechRecognition.onresult = (event) => {
@@ -2120,19 +2126,74 @@ function setupRecordingWebSpeech() {
             }
         }
         
-        // Update transcript display
-        updateRecordingTranscript(finalTranscript, interimTranscript);
+        // Enhanced speaker detection for recording
+        const currentTime = Date.now();
+        const timeSinceLastSpeech = currentTime - recordingLastSpeechTime;
         
-        // Send to server if final
+        // Detect speaker change based on silence duration and speech patterns
+        if (timeSinceLastSpeech > 2000 || // More than 2 seconds silence
+            (finalTranscript && detectSpeakerChange(finalTranscript, recordingWordBuffer))) {
+            
+            // Switch speaker
+            recordingCurrentSpeaker = recordingCurrentSpeaker === 'A' ? 'B' : 'A';
+            console.log(`🎤🔬 Recording speaker switched to: ${recordingCurrentSpeaker}`);
+        }
+        
+        // Update word buffer for speaker detection
+        if (finalTranscript) {
+            recordingWordBuffer.push(...finalTranscript.split(' '));
+            if (recordingWordBuffer.length > 50) {
+                recordingWordBuffer = recordingWordBuffer.slice(-25); // Keep last 25 words
+            }
+        }
+        
+        recordingLastSpeechTime = currentTime;
+        
+        // Determine speaker role (same logic as Method 2)
+        const speakerRole = recordingCurrentSpeaker === 'A' ? 'SPRZEDAWCA' : 'KLIENT';
+        
+        // Update transcript display with speaker info
+        updateRecordingTranscriptWithSpeaker(finalTranscript, interimTranscript, recordingCurrentSpeaker, speakerRole);
+        
+        // Send final transcript to server with speaker info
         if (finalTranscript && websocket && websocket.readyState === WebSocket.OPEN) {
             const transcriptData = {
-                type: 'RECORDING_TRANSCRIPT',
+                type: 'RECORDING_TRANSCRIPT_METHOD2',
                 recordingId: currentRecording?.id,
-                transcript: finalTranscript,
+                transcript: {
+                    text: finalTranscript,
+                    speaker: recordingCurrentSpeaker,
+                    speakerRole: speakerRole,
+                    language: 'pl',
+                    confidence: event.results[event.resultIndex]?.[0]?.confidence || 0.9
+                },
                 isFinal: true
             };
             
             websocket.send(JSON.stringify(transcriptData));
+        }
+        
+        // Send partial transcript for live updates (if interim text exists)
+        if (interimTranscript && websocket && websocket.readyState === WebSocket.OPEN) {
+            const wordsCount = interimTranscript.split(' ').length;
+            
+            if (wordsCount >= 3) { // Send partial after 3+ words
+                const partialData = {
+                    type: 'RECORDING_PARTIAL_METHOD2',
+                    recordingId: currentRecording?.id,
+                    transcript: {
+                        text: interimTranscript,
+                        speaker: recordingCurrentSpeaker,
+                        speakerRole: speakerRole,
+                        language: 'pl',
+                        confidence: event.results[event.resultIndex]?.[0]?.confidence || 0.9,
+                        wordsCount: wordsCount
+                    },
+                    isPartial: true
+                };
+                
+                websocket.send(JSON.stringify(partialData));
+            }
         }
     };
     
@@ -2141,7 +2202,7 @@ function setupRecordingWebSpeech() {
     };
     
     webSpeechRecognition.onend = () => {
-        console.log('🎤 Recording speech recognition ended');
+        console.log('🎤🔬 Recording speech recognition ended');
         
         // Auto restart if still recording
         if (currentRecording && !currentRecording.stopped) {
@@ -2157,18 +2218,65 @@ function setupRecordingWebSpeech() {
     };
 }
 
-// Update Recording Transcript Display
-function updateRecordingTranscript(finalText, interimText) {
+// Speaker Change Detection Function for Recording (copied from Method 2)
+function detectSpeakerChange(newText, wordBuffer) {
+    // Simple heuristics for speaker change detection
+    const text = newText.toLowerCase();
+    
+    // Question indicators suggest speaker change
+    if (text.includes('?') || text.includes('tak') || text.includes('nie') || 
+        text.includes('słucham') || text.includes('proszę')) {
+        return true;
+    }
+    
+    // Check for conversation markers
+    if (text.includes('dzień dobry') || text.includes('dziękuję') || 
+        text.includes('mogę') || text.includes('chciałbym')) {
+        return true;
+    }
+    
+    // Check word buffer for context changes
+    if (wordBuffer.length > 10) {
+        const lastWords = wordBuffer.slice(-10).join(' ').toLowerCase();
+        if (lastWords.includes('produktu') && text.includes('tak')) {
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+// Update Recording Transcript Display with Speaker Information
+function updateRecordingTranscriptWithSpeaker(finalText, interimText, speaker, speakerRole) {
     const transcriptContent = document.getElementById('recordingTranscriptContent');
     if (!transcriptContent) return;
     
     if (finalText) {
-        // Add final transcript entry
+        // Add final transcript entry with speaker info
         recordingTranscript += finalText + ' ';
         
         const transcriptEntry = document.createElement('div');
-        transcriptEntry.className = 'transcript-entry final';
-        transcriptEntry.textContent = finalText;
+        transcriptEntry.className = `transcript-entry final speaker-${speaker.toLowerCase()}`;
+        
+        // Create speaker indicator
+        const speakerIndicator = document.createElement('span');
+        speakerIndicator.className = 'speaker-indicator';
+        speakerIndicator.textContent = speakerRole === 'SPRZEDAWCA' ? '🔵' : '🔴';
+        
+        // Create speaker label
+        const speakerLabel = document.createElement('span');
+        speakerLabel.className = 'speaker-label';
+        speakerLabel.textContent = speakerRole;
+        
+        // Create transcript text
+        const transcriptText = document.createElement('span');
+        transcriptText.className = 'transcript-text';
+        transcriptText.textContent = finalText;
+        
+        // Assemble entry
+        transcriptEntry.appendChild(speakerIndicator);
+        transcriptEntry.appendChild(speakerLabel);
+        transcriptEntry.appendChild(transcriptText);
         
         // Remove placeholder if exists
         const placeholder = transcriptContent.querySelector('.transcript-placeholder');
@@ -2182,13 +2290,24 @@ function updateRecordingTranscript(finalText, interimText) {
         transcriptContent.scrollTop = transcriptContent.scrollHeight;
     }
     
-    // Show interim text in placeholder (if no final text yet)
-    if (interimText && !transcriptContent.querySelector('.transcript-entry')) {
-        const placeholder = transcriptContent.querySelector('.transcript-placeholder');
-        if (placeholder) {
-            placeholder.textContent = interimText;
+    // Show interim text in placeholder with speaker info (if no final text yet)
+    if (interimText && !finalText) {
+        let placeholder = transcriptContent.querySelector('.transcript-placeholder');
+        if (!placeholder) {
+            placeholder = document.createElement('div');
+            placeholder.className = 'transcript-placeholder';
+            transcriptContent.appendChild(placeholder);
         }
+        
+        const speakerIcon = speakerRole === 'SPRZEDAWCA' ? '🔵' : '🔴';
+        placeholder.innerHTML = `<span class="speaker-indicator">${speakerIcon}</span><span class="speaker-label">${speakerRole}</span><span class="transcript-text interim">${interimText}</span>`;
     }
+}
+
+// Legacy function for backward compatibility
+function updateRecordingTranscript(finalText, interimText) {
+    // Call the new function with default speaker info
+    updateRecordingTranscriptWithSpeaker(finalText, interimText, 'A', 'SPRZEDAWCA');
 }
 
 // Start Recording Timer

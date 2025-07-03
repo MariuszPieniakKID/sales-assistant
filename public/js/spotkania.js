@@ -579,18 +579,71 @@ function formatRecordingTranscript(transcript) {
         return '<div class="empty-transcript">Brak transkrypcji</div>';
     }
     
-    // Prosty format transkrypcji - każda linijka na nowej linii
+    console.log('🎙️ formatRecordingTranscript input:', transcript.substring(0, 200));
+    
+    // Split by lines and format each speaker line (like live sessions)
     const lines = transcript.split('\n').filter(line => line.trim() !== '');
     
     const formattedLines = lines.map(line => {
-        // Escape HTML dla bezpieczeństwa
-        const escapedLine = escapeHtml(line.trim());
+        const trimmedLine = line.trim();
+        if (trimmedLine === '') return '';
         
-        // Jeśli linia nie jest pusta, zwróć ją w formacie akapitu
-        if (escapedLine) {
-            return `<p class="transcript-line">${escapedLine}</p>`;
+        // Check if line contains speaker role markers (Method 2 format)
+        if (trimmedLine.includes('[SPRZEDAWCA]') || trimmedLine.includes('🔵SPRZEDAWCA')) {
+            const text = trimmedLine.replace(/\[SPRZEDAWCA\]/g, '').replace(/🔵SPRZEDAWCA/g, '').trim();
+            return `<div class="speaker-line salesperson">
+                <span class="speaker-badge salesperson">🔵 SPRZEDAWCA</span>
+                <span class="speaker-text">${escapeHtml(text)}</span>
+            </div>`;
+        } else if (trimmedLine.includes('[KLIENT]') || trimmedLine.includes('🔴KLIENT')) {
+            const text = trimmedLine.replace(/\[KLIENT\]/g, '').replace(/🔴KLIENT/g, '').trim();
+            return `<div class="speaker-line client">
+                <span class="speaker-badge client">🔴 KLIENT</span>
+                <span class="speaker-text">${escapeHtml(text)}</span>
+            </div>`;
+        } else if (trimmedLine.includes('[🔵SPRZEDAWCA]') || trimmedLine.includes('[🔴KLIENT]')) {
+            // Handle full marker format
+            if (trimmedLine.includes('[🔵SPRZEDAWCA]')) {
+                const text = trimmedLine.replace(/\[🔵SPRZEDAWCA\]/g, '').trim();
+                return `<div class="speaker-line salesperson">
+                    <span class="speaker-badge salesperson">🔵 SPRZEDAWCA</span>
+                    <span class="speaker-text">${escapeHtml(text)}</span>
+                </div>`;
+            } else if (trimmedLine.includes('[🔴KLIENT]')) {
+                const text = trimmedLine.replace(/\[🔴KLIENT\]/g, '').trim();
+                return `<div class="speaker-line client">
+                    <span class="speaker-badge client">🔴 KLIENT</span>
+                    <span class="speaker-text">${escapeHtml(text)}</span>
+                </div>`;
+            }
+        } else {
+            // Regular line without speaker detection - check if it starts with [Speaker]
+            const speakerMatch = trimmedLine.match(/^\[([^\]]+)\]\s*(.*)$/);
+            if (speakerMatch) {
+                const speaker = speakerMatch[1];
+                const text = speakerMatch[2];
+                
+                // Map speaker roles to colors
+                let speakerClass = 'generic';
+                let speakerIcon = '👤';
+                
+                if (speaker.includes('SPRZEDAWCA') || speaker.includes('A')) {
+                    speakerClass = 'salesperson';
+                    speakerIcon = '🔵';
+                } else if (speaker.includes('KLIENT') || speaker.includes('B')) {
+                    speakerClass = 'client';
+                    speakerIcon = '🔴';
+                }
+                
+                return `<div class="speaker-line ${speakerClass}">
+                    <span class="speaker-badge ${speakerClass}">${speakerIcon} ${escapeHtml(speaker)}</span>
+                    <span class="speaker-text">${escapeHtml(text)}</span>
+                </div>`;
+            } else {
+                // Regular line without speaker detection - format as simple line
+                return `<div class="transcript-line-simple">${escapeHtml(trimmedLine)}</div>`;
+            }
         }
-        return '';
     }).filter(line => line !== '');
     
     return formattedLines.join('');
