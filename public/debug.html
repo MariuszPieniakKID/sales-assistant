@@ -146,6 +146,7 @@
             <button class="btn" onclick="runSingleTest('database-structure')">🗄️ Test struktury bazy</button>
             <button class="btn" onclick="runSingleTest('simple-product')">📦 Test prostego produktu</button>
             <button class="btn" onclick="runSingleTest('product-with-script')">📄 Test produktu ze skryptem</button>
+            <button class="btn" onclick="showLiveLogs()">🖥️ Logi serwera</button>
         </div>
 
         <!-- Test 1: Struktura bazy danych -->
@@ -181,6 +182,19 @@
             <div class="test-content">
                 <p>Testuje dodawanie produktu z tekstem skryptu sprzedażowego (nowa funkcjonalność).</p>
                 <div class="test-result" id="result-script">Naciśnij przycisk powyżej aby uruchomić test...</div>
+            </div>
+        </div>
+
+        <!-- Sekcja logów serwera -->
+        <div class="test-section" id="logs-section" style="display: none;">
+            <div class="test-header">
+                <span class="status-indicator status-pending" id="status-logs"></span>
+                📄 Logi serwera - ostatnie błędy produktów
+                <button class="btn" style="float: right; padding: 4px 8px; font-size: 12px;" onclick="refreshLogs()">🔄 Odśwież</button>
+            </div>
+            <div class="test-content">
+                <p>Ostatnie logi związane z produktami, PDF i błędami (automatyczne odświeżanie co 5 sekund).</p>
+                <div class="test-result" id="result-logs" style="max-height: 500px; font-size: 11px;">Kliknij "Pokaż logi serwera" aby uruchomić...</div>
             </div>
         </div>
     </div>
@@ -361,12 +375,100 @@
             testResults = {};
         }
 
+        // Sprawdź czy użytkownik jest zalogowany
+        async function checkAuthentication() {
+            try {
+                const response = await fetch('/api/check-auth');
+                const data = await response.json();
+                
+                if (!data.authenticated) {
+                    // Przekieruj do logowania
+                    window.location.href = '/login.html?redirect=/debug.html';
+                    return false;
+                }
+                
+                return true;
+            } catch (error) {
+                console.error('Błąd sprawdzania uwierzytelnienia:', error);
+                // W przypadku błędu, spróbuj uruchomić testy - może być zalogowany
+                return true;
+            }
+        }
+
+        // Zmienne dla logów
+        let logsInterval = null;
+
+        // Funkcja do pokazywania/ukrywania logów
+        function showLiveLogs() {
+            const logsSection = document.getElementById('logs-section');
+            const isVisible = logsSection.style.display !== 'none';
+            
+            if (isVisible) {
+                // Ukryj logi
+                logsSection.style.display = 'none';
+                if (logsInterval) {
+                    clearInterval(logsInterval);
+                    logsInterval = null;
+                }
+                setStatus('status-logs', 'pending');
+                setResult('result-logs', 'Logi ukryte.', '');
+            } else {
+                // Pokaż logi
+                logsSection.style.display = 'block';
+                refreshLogs();
+                
+                // Automatyczne odświeżanie co 5 sekund
+                logsInterval = setInterval(refreshLogs, 5000);
+            }
+        }
+
+        // Funkcja do odświeżania logów
+        async function refreshLogs() {
+            setStatus('status-logs', 'loading');
+            setResult('result-logs', '⏳ Pobieranie logów serwera...', 'loading');
+            
+            try {
+                const response = await fetch('/debug/product-logs');
+                const data = await response.json();
+                
+                if (data.logs) {
+                    const formattedLogs = `📊 LOGI SERWERA - OSTATNIE WPISY ZWIĄZANE Z PRODUKTAMI
+${'='.repeat(80)}
+📅 Czas: ${new Date(data.timestamp).toLocaleString()}
+📄 Znalezionych linii: ${data.totalFilteredLines}
+
+${data.logs}
+
+${'='.repeat(80)}
+ℹ️  Logi odświeżają się automatycznie co 5 sekund.
+ℹ️  Filtrowane są linie zawierające: products, pdf, script, error, błąd, post, formdata`;
+                    
+                    setResult('result-logs', formattedLogs, 'success');
+                    setStatus('status-logs', 'success');
+                } else {
+                    setResult('result-logs', '⚠️ Brak logów lub błąd dostępu: ' + (data.error || 'Nieznany błąd'), 'error');
+                    setStatus('status-logs', 'error');
+                }
+                
+            } catch (error) {
+                console.error('Błąd pobierania logów:', error);
+                setResult('result-logs', `❌ Błąd połączenia z serwerem logów:\n\n${error.message}`, 'error');
+                setStatus('status-logs', 'error');
+            }
+        }
+
         // Auto-uruchom wszystkie testy po załadowaniu strony
-        window.addEventListener('load', () => {
+        window.addEventListener('load', async () => {
             console.log('🚀 Strona diagnostyczna załadowana');
-            setTimeout(() => {
-                runAllTests();
-            }, 1000);
+            
+            // Sprawdź uwierzytelnienie
+            const isAuthenticated = await checkAuthentication();
+            
+            if (isAuthenticated) {
+                setTimeout(() => {
+                    runAllTests();
+                }, 1000);
+            }
         });
     </script>
 </body>

@@ -1228,7 +1228,7 @@ app.post('/api/process-sales-script', requireAuth, upload.single('salesScript'),
 });
 
 app.post('/api/products', requireAuth, upload.array('files'), async (req, res) => {
-  const { name, description, comment, salesScriptText } = req.body;
+  const { name, description, comment, salesScriptText, salesScriptFilename } = req.body;
   
   console.log('📍 POST /api/products - Request data:', {
     name, 
@@ -1236,8 +1236,15 @@ app.post('/api/products', requireAuth, upload.array('files'), async (req, res) =
     comment: comment?.substring(0, 50) + '...',
     hasSalesScript: !!salesScriptText,
     scriptLength: salesScriptText?.length || 0,
-    filesCount: req.files?.length || 0
+    salesScriptFilename: salesScriptFilename,
+    filesCount: req.files?.length || 0,
+    userId: req.session?.userId,
+    contentType: req.headers['content-type']
   });
+  
+  // Dodatkowe debugowanie FormData
+  console.log('🔍 Full request body keys:', Object.keys(req.body));
+  console.log('🔍 Sales script preview:', salesScriptText?.substring(0, 100) + '...');
   
   try {
     const pool = getNeonPool();
@@ -2617,6 +2624,39 @@ app.get('/debug/logs-viewer', (req, res) => {
         </body>
         </html>
     `);
+});
+
+// Endpoint do sprawdzania logów związanych z produktami
+app.get('/debug/product-logs', (req, res) => {
+    try {
+        const logPath = path.join(__dirname, 'server.log');
+        
+        if (!fs.existsSync(logPath)) {
+            return res.json({ logs: 'Brak pliku logów', path: logPath });
+        }
+        
+        const logs = fs.readFileSync(logPath, 'utf8');
+        const lines = logs.split('\n')
+            .filter(line => {
+                const lowercaseLine = line.toLowerCase();
+                return lowercaseLine.includes('products') || 
+                       lowercaseLine.includes('pdf') || 
+                       lowercaseLine.includes('script') ||
+                       lowercaseLine.includes('error') || 
+                       lowercaseLine.includes('błąd') ||
+                       lowercaseLine.includes('post /api') ||
+                       lowercaseLine.includes('formdata');
+            })
+            .slice(-30); // ostatnie 30 istotnych linii
+        
+        res.json({ 
+            logs: lines.join('\n'),
+            totalFilteredLines: lines.length,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        res.status(500).json({ error: 'Błąd odczytu logów: ' + error.message });
+    }
 });
 
 // WebSocket Connection Handler
