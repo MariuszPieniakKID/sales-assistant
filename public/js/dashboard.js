@@ -191,7 +191,7 @@ document.addEventListener('DOMContentLoaded', function() {
             'klienci': 'Klienci',
             'spotkania': 'Spotkania',
             'profil': 'Edytuj Profil',
-            'sesja': 'Rozpocznij sesję',
+            'sesja': 'Sesja z podpowiedziami Live',
             'admin': 'Panel Administratora'
         };
         
@@ -323,7 +323,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         </button>
                         <button class="action-btn start-session" data-section="sesja">
                             <i class="fas fa-play"></i>
-                            <span>Rozpocznij sesję</span>
+                            <span>Sesja z podpowiedziami Live</span>
                         </button>
                     </div>
                 </div>
