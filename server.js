@@ -230,16 +230,25 @@ async function runDatabaseMigrations(pool) {
         if (!columnNames.includes('sales_script_text')) {
             console.log('➕ Dodawanie kolumny sales_script_text...');
             await pool.query('ALTER TABLE products ADD COLUMN sales_script_text TEXT');
+            console.log('✅ Kolumna sales_script_text dodana');
+        } else {
+            console.log('✅ Kolumna sales_script_text już istnieje');
         }
         
         if (!columnNames.includes('sales_script_filename')) {
             console.log('➕ Dodawanie kolumny sales_script_filename...');
             await pool.query('ALTER TABLE products ADD COLUMN sales_script_filename VARCHAR(255)');
+            console.log('✅ Kolumna sales_script_filename dodana');
+        } else {
+            console.log('✅ Kolumna sales_script_filename już istnieje');
         }
         
         if (!columnNames.includes('sales_script_path')) {
             console.log('➕ Dodawanie kolumny sales_script_path...');
             await pool.query('ALTER TABLE products ADD COLUMN sales_script_path TEXT');
+            console.log('✅ Kolumna sales_script_path dodana');
+        } else {
+            console.log('✅ Kolumna sales_script_path już istnieje');
         }
         
         console.log('✅ Migracje bazy danych ukończone pomyślnie');
@@ -1100,7 +1109,17 @@ app.post('/api/process-sales-script', requireAuth, upload.single('salesScript'),
 app.post('/api/products', requireAuth, upload.array('files'), async (req, res) => {
   const { name, description, comment, salesScriptText } = req.body;
   
+  console.log('📍 POST /api/products - Request data:', {
+    name, 
+    description: description?.substring(0, 50) + '...',
+    comment: comment?.substring(0, 50) + '...',
+    hasSalesScript: !!salesScriptText,
+    scriptLength: salesScriptText?.length || 0,
+    filesCount: req.files?.length || 0
+  });
+  
   try {
+    const pool = getNeonPool();
     const client = await pool.connect();
     
     // Sprawdź czy istnieją nowe kolumny (dodane w migracji)
@@ -1141,7 +1160,14 @@ app.post('/api/products', requireAuth, upload.array('files'), async (req, res) =
     
   } catch (err) {
     console.error('Błąd dodawania produktu:', err);
-    res.status(500).json({ success: false, message: 'Błąd serwera' });
+    console.error('Stack trace:', err.stack);
+    console.error('SQL Error details:', {
+      message: err.message,
+      code: err.code,
+      detail: err.detail,
+      query: err.query
+    });
+    res.status(500).json({ success: false, message: 'Błąd serwera: ' + err.message });
   }
 });
 
@@ -1151,6 +1177,7 @@ app.put('/api/products/:id', requireAuth, upload.array('files'), async (req, res
   const { name, description, comment, salesScriptText } = req.body;
   
   try {
+    const pool = getNeonPool();
     const client = await pool.connect();
     
     // Sprawdź czy produkt należy do użytkownika
@@ -1199,7 +1226,14 @@ app.put('/api/products/:id', requireAuth, upload.array('files'), async (req, res
     
   } catch (err) {
     console.error('Błąd edycji produktu:', err);
-    res.status(500).json({ success: false, message: 'Błąd serwera' });
+    console.error('Stack trace:', err.stack);
+    console.error('SQL Error details:', {
+      message: err.message,
+      code: err.code,
+      detail: err.detail,
+      query: err.query
+    });
+    res.status(500).json({ success: false, message: 'Błąd serwera: ' + err.message });
   }
 });
 
@@ -1208,6 +1242,7 @@ app.delete('/api/products/:id', requireAuth, async (req, res) => {
   const productId = req.params.id;
   
   try {
+    const pool = getNeonPool();
     const client = await pool.connect();
     
     // Sprawdź czy produkt należy do użytkownika
