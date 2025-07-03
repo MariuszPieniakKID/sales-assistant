@@ -4,6 +4,7 @@ console.log('🎬 spotkania.js - Start ładowania skryptu');
 
 let meetings = [];
 let filteredMeetings = [];
+let currentMeetingForExport = null;
 
 // Elementy DOM - sprawdzenie czy istnieją
 console.log('🔍 Sprawdzanie elementów DOM...');
@@ -136,7 +137,7 @@ function renderMeetingsTable() {
         const typeInfo = getMeetingTypeInfo(meeting);
         
         return `
-            <tr onclick="openMeetingDetails('${meeting.id}', '${meeting.type || 'live_session'}')" data-meeting-id="${meeting.id}" data-meeting-type="${meeting.type || 'live_session'}">
+            <tr onclick="openMeetingDetails(${meeting.id}, '${meeting.type || 'live_session'}')" data-meeting-id="${meeting.id}" data-meeting-type="${meeting.type || 'live_session'}">
                 <td>
                     <div class="client-name">${escapeHtml(meeting.client_name)}</div>
                     <div class="meeting-type-indicator">
@@ -159,7 +160,7 @@ function renderMeetingsTable() {
                 </td>
                 <td>
                     <div class="action-buttons">
-                        <button class="btn-icon btn-view" onclick="event.stopPropagation(); openMeetingDetails('${meeting.id}', '${meeting.type || 'live_session'}')" title="Zobacz szczegóły">
+                        <button class="btn-icon btn-view" onclick="event.stopPropagation(); openMeetingDetails(${meeting.id}, '${meeting.type || 'live_session'}')" title="Zobacz szczegóły">
                             <i class="fas fa-eye"></i>
                         </button>
                     </div>
@@ -264,15 +265,18 @@ async function openMeetingDetails(meetingId, meetingType = 'live_session') {
     console.log('Otwieranie szczegółów spotkania ID:', meetingId, 'Typ:', meetingType);
     
     try {
-        // Znajdź spotkanie w lokalnych danych
-        const meeting = meetings.find(m => m.id === meetingId);
+        // Znajdź spotkanie w lokalnych danych - porównaj z konwersją typu
+        const meeting = meetings.find(m => m.id == meetingId);
         if (!meeting) {
-            console.error('Nie znaleziono spotkania w lokalnych danych');
+            console.error('Nie znaleziono spotkania w lokalnych danych:', meetingId);
+            console.error('Dostępne spotkania:', meetings.map(m => ({id: m.id, type: m.type})));
             showError('Nie znaleziono spotkania');
             return;
         }
         
         console.log('Dane spotkania znalezione:', meeting);
+        console.log('Przekazany typ spotkania:', meetingType);
+        console.log('Typ spotkania z danych:', meeting.type);
         
         // Ukryj widok listy i pokaż widok szczegółów
         document.getElementById('meetingsListView').style.display = 'none';
@@ -280,8 +284,10 @@ async function openMeetingDetails(meetingId, meetingType = 'live_session') {
         
         // Renderuj szczegóły w zależności od typu spotkania
         if (meetingType === 'recording') {
+            console.log('Renderowanie szczegółów nagrania...');
             renderRecordingDetailsInSection(meeting);
         } else {
+            console.log('Renderowanie szczegółów sesji live...');
             renderMeetingDetailsInSection(meeting);
         }
         
@@ -351,6 +357,8 @@ function renderMeetingDetailsInSection(meeting) {
     const contentContainer = document.getElementById('meetingDetailsContent');
     if (contentContainer) {
         contentContainer.innerHTML = detailsHTML;
+        // Resetuj klasę dla standardowego widoku live sessions
+        contentContainer.className = 'meeting-details-content';
     }
 }
 
@@ -961,9 +969,6 @@ function formatSummaryForDetails(summary) {
     
     return formatted;
 }
-
-// Globalna zmienna do przechowywania aktualnego spotkania dla eksportu PDF
-let currentMeetingForExport = null;
 
 // Funkcja eksportu spotkania do PDF
 async function exportMeetingToPDF() {
