@@ -91,7 +91,7 @@ async function loadMeetings() {
         console.log('🔄 Ładowanie spotkań z API...');
         showLoading();
         
-        const response = await fetch('/api/sales', {
+        const response = await fetch('/api/meetings-all', {
             credentials: 'include'
         });
         console.log('📡 Odpowiedź API:', response.status, response.statusText);
@@ -133,17 +133,23 @@ function renderMeetingsTable() {
         });
         
         const status = getMeetingStatus(meeting);
+        const typeInfo = getMeetingTypeInfo(meeting);
         
         return `
-            <tr onclick="openMeetingDetails(${meeting.id})" data-meeting-id="${meeting.id}">
+            <tr onclick="openMeetingDetails('${meeting.id}', '${meeting.type || 'live_session'}')" data-meeting-id="${meeting.id}" data-meeting-type="${meeting.type || 'live_session'}">
                 <td>
                     <div class="client-name">${escapeHtml(meeting.client_name)}</div>
+                    <div class="meeting-type-indicator">
+                        <i class="fas ${typeInfo.icon}"></i>
+                        ${typeInfo.text}
+                    </div>
                 </td>
                 <td>
                     <div class="product-name">${escapeHtml(meeting.product_name)}</div>
                 </td>
                 <td>
                     <div class="meeting-date">${formattedDate}</div>
+                    ${meeting.duration ? `<div class="meeting-duration">⏱️ ${Math.floor(meeting.duration / 60)}min ${meeting.duration % 60}s</div>` : ''}
                 </td>
                 <td>
                     <span class="status-badge ${status.class}">
@@ -153,7 +159,7 @@ function renderMeetingsTable() {
                 </td>
                 <td>
                     <div class="action-buttons">
-                        <button class="btn-icon btn-view" onclick="event.stopPropagation(); openMeetingDetails(${meeting.id})" title="Zobacz szczegóły">
+                        <button class="btn-icon btn-view" onclick="event.stopPropagation(); openMeetingDetails('${meeting.id}', '${meeting.type || 'live_session'}')" title="Zobacz szczegóły">
                             <i class="fas fa-eye"></i>
                         </button>
                     </div>
@@ -170,6 +176,30 @@ function getMeetingStatus(meeting) {
     const now = new Date();
     const meetingDate = new Date(meeting.meeting_datetime);
     
+    // Dla nagrań - zawsze sprawdzaj status
+    if (meeting.type === 'recording') {
+        if (meeting.status === 'completed' && meeting.transcript && meeting.transcript.trim()) {
+            return {
+                class: 'status-completed',
+                icon: 'fa-check-circle',
+                text: 'Zakończone'
+            };
+        } else if (meeting.status === 'active') {
+            return {
+                class: 'status-active',
+                icon: 'fa-microphone',
+                text: 'Nagrywanie'
+            };
+        } else {
+            return {
+                class: 'status-cancelled',
+                icon: 'fa-times-circle',
+                text: 'Przerwane'
+            };
+        }
+    }
+    
+    // Dla live sessions - oryginalna logika
     if (meetingDate > now) {
         return {
             class: 'status-pending',
@@ -187,6 +217,23 @@ function getMeetingStatus(meeting) {
             class: 'status-cancelled',
             icon: 'fa-times-circle',
             text: 'Anulowane'
+        };
+    }
+}
+
+// Określanie typu spotkania
+function getMeetingTypeInfo(meeting) {
+    if (meeting.type === 'recording') {
+        return {
+            icon: 'fa-microphone',
+            text: 'Nagranie',
+            class: 'type-recording'
+        };
+    } else {
+        return {
+            icon: 'fa-comments',
+            text: 'Sesja Live',
+            class: 'type-live'
         };
     }
 }
@@ -213,8 +260,8 @@ function handleSearch() {
 }
 
 // Otwieranie szczegółów spotkania w tej samej sekcji
-async function openMeetingDetails(meetingId) {
-    console.log('Otwieranie szczegółów spotkania ID:', meetingId);
+async function openMeetingDetails(meetingId, meetingType = 'live_session') {
+    console.log('Otwieranie szczegółów spotkania ID:', meetingId, 'Typ:', meetingType);
     
     try {
         // Znajdź spotkanie w lokalnych danych
@@ -231,8 +278,12 @@ async function openMeetingDetails(meetingId) {
         document.getElementById('meetingsListView').style.display = 'none';
         document.getElementById('meetingDetailsView').style.display = 'block';
         
-        // Renderuj szczegóły spotkania
-        renderMeetingDetailsInSection(meeting);
+        // Renderuj szczegóły w zależności od typu spotkania
+        if (meetingType === 'recording') {
+            renderRecordingDetailsInSection(meeting);
+        } else {
+            renderMeetingDetailsInSection(meeting);
+        }
         
     } catch (error) {
         console.error('Błąd otwierania szczegółów spotkania:', error);
@@ -300,6 +351,94 @@ function renderMeetingDetailsInSection(meeting) {
     const contentContainer = document.getElementById('meetingDetailsContent');
     if (contentContainer) {
         contentContainer.innerHTML = detailsHTML;
+    }
+}
+
+// Renderowanie szczegółów nagrania w sekcji
+function renderRecordingDetailsInSection(recording) {
+    console.log('Renderowanie szczegółów nagrania:', recording);
+    
+    // Zapisz nagranie do eksportu PDF
+    currentMeetingForExport = recording;
+    
+    // Ustaw tytuł
+    const titleElement = document.getElementById('meetingDetailsTitle');
+    if (titleElement) {
+        const clientName = recording.client_name || 'Nieznany klient';
+        const duration = recording.duration ? `(${Math.floor(recording.duration / 60)}min ${recording.duration % 60}s)` : '';
+        titleElement.textContent = `🎙️ Nagranie z ${clientName} ${duration}`;
+    }
+    
+    // Generuj HTML dla szczegółów nagrania - prostszy layout skupiony na transkrypcji
+    const detailsHTML = `
+        <!-- Informacje o nagraniu -->
+        <div class="recording-info-section">
+            <div class="recording-meta">
+                <div class="meta-item">
+                    <i class="fas fa-user"></i>
+                    <span><strong>Klient:</strong> ${escapeHtml(recording.client_name)}</span>
+                </div>
+                <div class="meta-item">
+                    <i class="fas fa-box"></i>
+                    <span><strong>Produkt:</strong> ${escapeHtml(recording.product_name)}</span>
+                </div>
+                <div class="meta-item">
+                    <i class="fas fa-calendar"></i>
+                    <span><strong>Data:</strong> ${new Date(recording.created_at).toLocaleDateString('pl-PL', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    })}</span>
+                </div>
+                ${recording.duration ? `
+                <div class="meta-item">
+                    <i class="fas fa-clock"></i>
+                    <span><strong>Długość:</strong> ${Math.floor(recording.duration / 60)}min ${recording.duration % 60}s</span>
+                </div>
+                ` : ''}
+                <div class="meta-item">
+                    <i class="fas fa-info-circle"></i>
+                    <span><strong>Status:</strong> ${getRecordingStatusText(recording.status)}</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Pełna transkrypcja nagrania -->
+        <div class="recording-transcript-section">
+            <h3>
+                <i class="fas fa-file-alt"></i>
+                Transkrypcja nagrania
+            </h3>
+            <div class="recording-transcript-full">
+                ${recording.transcript ? 
+                    formatRecordingTranscript(recording.transcript) : 
+                    '<div class="empty-state-recording"><i class="fas fa-microphone-slash"></i><h4>Brak transkrypcji</h4><p>Transkrypcja nie jest dostępna dla tego nagrania</p></div>'
+                }
+            </div>
+        </div>
+        
+        <!-- Notatki -->
+        ${recording.notes ? `
+        <div class="recording-notes-section">
+            <h3>
+                <i class="fas fa-sticky-note"></i>
+                Notatki
+            </h3>
+            <div class="recording-notes-content">
+                ${escapeHtml(recording.notes)}
+            </div>
+        </div>
+        ` : ''}
+    `;
+    
+    // Wstaw HTML do kontenera
+    const contentContainer = document.getElementById('meetingDetailsContent');
+    if (contentContainer) {
+        contentContainer.innerHTML = detailsHTML;
+        // Dodaj klasę dla stylowania nagrania
+        contentContainer.className = 'meeting-details-content recording-details';
     }
 }
 
@@ -396,6 +535,41 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+function getRecordingStatusText(status) {
+    switch (status) {
+        case 'active':
+            return '🔴 Nagrywanie w toku';
+        case 'completed':
+            return '✅ Zakończone';
+        case 'stopped':
+            return '⏹️ Zatrzymane';
+        default:
+            return '❓ Nieznany';
+    }
+}
+
+function formatRecordingTranscript(transcript) {
+    if (!transcript || transcript.trim() === '') {
+        return '<div class="empty-transcript">Brak transkrypcji</div>';
+    }
+    
+    // Prosty format transkrypcji - każda linijka na nowej linii
+    const lines = transcript.split('\n').filter(line => line.trim() !== '');
+    
+    const formattedLines = lines.map(line => {
+        // Escape HTML dla bezpieczeństwa
+        const escapedLine = escapeHtml(line.trim());
+        
+        // Jeśli linia nie jest pusta, zwróć ją w formacie akapitu
+        if (escapedLine) {
+            return `<p class="transcript-line">${escapedLine}</p>`;
+        }
+        return '';
+    }).filter(line => line !== '');
+    
+    return formattedLines.join('');
 }
 
 function showSuccess(message) {

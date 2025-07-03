@@ -1605,7 +1605,7 @@ app.delete('/api/clients/:id', requireAuth, async (req, res) => {
   }
 });
 
-// API dla spotkań
+// API dla spotkań (live sessions)
 app.get('/api/sales', requireAuth, async (req, res) => {
   try {
     const client = await pool.connect();
@@ -1619,6 +1619,69 @@ app.get('/api/sales', requireAuth, async (req, res) => {
     `, [req.session.userId]);
     await client.release();
     res.json(result.rows);
+  } catch (err) {
+    console.error('Błąd pobierania spotkań:', err);
+    res.status(500).json({ success: false, message: 'Błąd serwera' });
+  }
+});
+
+// API dla nagrań
+app.get('/api/recordings', requireAuth, async (req, res) => {
+  try {
+    const client = await pool.connect();
+    const result = await client.query(`
+      SELECT r.*, c.name as client_name, p.name as product_name,
+             r.created_at as meeting_datetime,
+             'recording' as type
+      FROM recordings r 
+      JOIN clients c ON r.client_id = c.id 
+      JOIN products p ON r.product_id = p.id 
+      WHERE p.user_id = $1 
+      ORDER BY r.created_at DESC
+    `, [req.session.userId]);
+    await client.release();
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Błąd pobierania nagrań:', err);
+    res.status(500).json({ success: false, message: 'Błąd serwera' });
+  }
+});
+
+// API dla wszystkich spotkań (live sessions + nagrania)
+app.get('/api/meetings-all', requireAuth, async (req, res) => {
+  try {
+    const client = await pool.connect();
+    
+    // Pobierz live sessions
+    const salesResult = await client.query(`
+      SELECT s.*, c.name as client_name, p.name as product_name,
+             'live_session' as type
+      FROM sales s 
+      JOIN clients c ON s.client_id = c.id 
+      JOIN products p ON s.product_id = p.id 
+      WHERE p.user_id = $1
+    `, [req.session.userId]);
+    
+    // Pobierz nagrania
+    const recordingsResult = await client.query(`
+      SELECT r.*, c.name as client_name, p.name as product_name,
+             r.created_at as meeting_datetime,
+             'recording' as type
+      FROM recordings r 
+      JOIN clients c ON r.client_id = c.id 
+      JOIN products p ON r.product_id = p.id 
+      WHERE p.user_id = $1
+    `, [req.session.userId]);
+    
+    await client.release();
+    
+    // Połącz wyniki i posortuj po dacie
+    const allMeetings = [
+      ...salesResult.rows,
+      ...recordingsResult.rows
+    ].sort((a, b) => new Date(b.meeting_datetime) - new Date(a.meeting_datetime));
+    
+    res.json(allMeetings);
   } catch (err) {
     console.error('Błąd pobierania spotkań:', err);
     res.status(500).json({ success: false, message: 'Błąd serwera' });
