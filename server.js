@@ -1227,7 +1227,10 @@ app.post('/api/process-sales-script', requireAuth, upload.single('salesScript'),
     }
 });
 
-app.post('/api/products', requireAuth, upload.array('files'), async (req, res) => {
+app.post('/api/products', requireAuth, upload.fields([
+  { name: 'files', maxCount: 10 },
+  { name: 'salesScript', maxCount: 1 }
+]), async (req, res) => {
   const { name, description, comment, salesScriptText, salesScriptFilename } = req.body;
   
   console.log('📍 POST /api/products - Request data:', {
@@ -1237,7 +1240,7 @@ app.post('/api/products', requireAuth, upload.array('files'), async (req, res) =
     hasSalesScript: !!salesScriptText,
     scriptLength: salesScriptText?.length || 0,
     salesScriptFilename: salesScriptFilename,
-    filesCount: req.files?.length || 0,
+    filesCount: req.files?.files?.length || 0,
     userId: req.session?.userId,
     contentType: req.headers['content-type']
   });
@@ -1274,8 +1277,8 @@ app.post('/api/products', requireAuth, upload.array('files'), async (req, res) =
     const productId = productResult.rows[0].id;
     
     // Dodaj pliki jeśli zostały przesłane
-    if (req.files && req.files.length > 0) {
-      for (const file of req.files) {
+    if (req.files && req.files.files && req.files.files.length > 0) {
+      for (const file of req.files.files) {
         await client.query(
           'INSERT INTO product_files (product_id, file_name, file_path, file_type) VALUES ($1, $2, $3, $4)',
           [productId, file.originalname, file.path, file.mimetype]
@@ -1300,7 +1303,10 @@ app.post('/api/products', requireAuth, upload.array('files'), async (req, res) =
 });
 
 // Edycja produktu
-app.put('/api/products/:id', requireAuth, upload.array('files'), async (req, res) => {
+app.put('/api/products/:id', requireAuth, upload.fields([
+  { name: 'files', maxCount: 10 },
+  { name: 'salesScript', maxCount: 1 }
+]), async (req, res) => {
   const productId = req.params.id;
   const { name, description, comment, salesScriptText } = req.body;
   
@@ -1340,8 +1346,8 @@ app.put('/api/products/:id', requireAuth, upload.array('files'), async (req, res
     const updateResult = await client.query(updateQuery, updateValues);
     
     // Dodaj nowe pliki jeśli zostały przesłane
-    if (req.files && req.files.length > 0) {
-      for (const file of req.files) {
+    if (req.files && req.files.files && req.files.files.length > 0) {
+      for (const file of req.files.files) {
         await client.query(
           'INSERT INTO product_files (product_id, file_name, file_path, file_type) VALUES ($1, $2, $3, $4)',
           [productId, file.originalname, file.path, file.mimetype]
