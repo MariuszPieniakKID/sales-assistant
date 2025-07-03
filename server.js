@@ -358,6 +358,127 @@ app.use((req, res, next) => {
     next();
 });
 
+// DEBUG: Test endpoint do sprawdzenia struktury bazy danych
+app.get('/api/debug/database-structure', requireAuth, async (req, res) => {
+    try {
+        const pool = getNeonPool();
+        
+        // Sprawdź strukturę tabeli products
+        const columnsQuery = `
+            SELECT column_name, data_type, is_nullable, column_default
+            FROM information_schema.columns 
+            WHERE table_name = 'products' 
+            ORDER BY ordinal_position
+        `;
+        
+        const columnsResult = await pool.query(columnsQuery);
+        
+        // Spróbuj wykonać podstawowe query
+        const testQuery = 'SELECT COUNT(*) as total FROM products';
+        const testResult = await pool.query(testQuery);
+        
+        res.json({
+            success: true,
+            table_structure: columnsResult.rows,
+            test_query_result: testResult.rows[0],
+            user_id: req.session.userId
+        });
+        
+    } catch (error) {
+        console.error('❌ Database debug error:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message,
+            stack: error.stack
+        });
+    }
+});
+
+// DEBUG: Test endpoint do dodawania prostego produktu
+app.post('/api/debug/test-product', requireAuth, async (req, res) => {
+    try {
+        const pool = getNeonPool();
+        const client = await pool.connect();
+        
+        console.log('🧪 Test dodawania produktu dla user_id:', req.session.userId);
+        
+        // Prosta wersja bez skryptu
+        const testQuery = `
+            INSERT INTO products (user_id, name, description, comment) 
+            VALUES ($1, $2, $3, $4) RETURNING *
+        `;
+        
+        const testValues = [
+            req.session.userId, 
+            'Test Product ' + Date.now(), 
+            'Test Description', 
+            'Test Comment'
+        ];
+        
+        const result = await client.query(testQuery, testValues);
+        await client.release();
+        
+        res.json({
+            success: true,
+            product: result.rows[0],
+            message: 'Test product created successfully'
+        });
+        
+    } catch (error) {
+        console.error('❌ Test product creation error:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message,
+            code: error.code,
+            detail: error.detail
+        });
+    }
+});
+
+// DEBUG: Test endpoint do dodawania produktu ze skryptem
+app.post('/api/debug/test-product-with-script', requireAuth, async (req, res) => {
+    try {
+        const pool = getNeonPool();
+        const client = await pool.connect();
+        
+        console.log('🧪 Test dodawania produktu ze skryptem dla user_id:', req.session.userId);
+        
+        // Test ze skryptem sprzedażowym
+        const testQuery = `
+            INSERT INTO products (user_id, name, description, comment, sales_script_text, sales_script_filename) 
+            VALUES ($1, $2, $3, $4, $5, $6) RETURNING *
+        `;
+        
+        const testValues = [
+            req.session.userId, 
+            'Test Product with Script ' + Date.now(), 
+            'Test Description with Sales Script', 
+            'Test Comment',
+            'To jest testowy skrypt sprzedażowy zawierający informacje o produkcie...',
+            'test-skrypt.pdf'
+        ];
+        
+        const result = await client.query(testQuery, testValues);
+        await client.release();
+        
+        res.json({
+            success: true,
+            product: result.rows[0],
+            message: 'Test product with script created successfully'
+        });
+        
+    } catch (error) {
+        console.error('❌ Test product with script creation error:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message,
+            code: error.code,
+            detail: error.detail,
+            hint: error.hint
+        });
+    }
+});
+
 // Routes
 
 // Strona logowania
