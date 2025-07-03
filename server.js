@@ -1302,6 +1302,69 @@ app.post('/api/products', requireAuth, upload.fields([
   }
 });
 
+// Pobieranie skryptu sprzedażowego jako plik TXT
+app.get('/api/products/:id/download-script', requireAuth, async (req, res) => {
+  const productId = req.params.id;
+  
+  try {
+    const pool = getNeonPool();
+    const client = await pool.connect();
+    
+    // Pobierz produkt ze skryptem
+    const productResult = await client.query(
+      'SELECT name, sales_script_text, sales_script_filename FROM products WHERE id = $1 AND user_id = $2',
+      [productId, req.session.userId]
+    );
+    
+    await client.release();
+    
+    if (productResult.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Produkt nie znaleziony' });
+    }
+    
+    const product = productResult.rows[0];
+    
+    if (!product.sales_script_text) {
+      return res.status(404).json({ success: false, message: 'Produkt nie ma skryptu sprzedażowego' });
+    }
+    
+    // Przygotuj nazwę pliku
+    const originalFilename = product.sales_script_filename || 'skrypt-sprzedazowy.pdf';
+    const txtFilename = originalFilename.replace(/\.pdf$/i, '_OCR.txt');
+    const safeTxtFilename = txtFilename.replace(/[^a-zA-Z0-9._-]/g, '_');
+    
+    // Przygotuj zawartość pliku
+    const fileContent = `SKRYPT SPRZEDAŻOWY - TEKST WYODRĘBNIONY PRZEZ OCR
+==================================================
+
+Produkt: ${product.name}
+Oryginalny plik: ${originalFilename}
+Data wyodrębnienia: ${new Date().toLocaleString('pl-PL')}
+Liczba znaków: ${product.sales_script_text.length}
+
+==================================================
+
+${product.sales_script_text}
+
+==================================================
+KONIEC SKRYPTU SPRZEDAŻOWEGO
+`;
+
+    // Ustaw nagłówki dla pobierania pliku
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeTxtFilename}"`);
+    res.setHeader('Content-Length', Buffer.byteLength(fileContent, 'utf8'));
+    
+    console.log(`📄 Pobieranie skryptu sprzedażowego: ${safeTxtFilename} (${product.sales_script_text.length} znaków)`);
+    
+    res.send(fileContent);
+    
+  } catch (err) {
+    console.error('Błąd pobierania skryptu:', err);
+    res.status(500).json({ success: false, message: 'Błąd serwera: ' + err.message });
+  }
+});
+
 // Edycja produktu
 app.put('/api/products/:id', requireAuth, upload.fields([
   { name: 'files', maxCount: 10 },

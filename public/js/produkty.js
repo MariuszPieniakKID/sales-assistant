@@ -125,6 +125,9 @@
                     <div class="product-script-indicator">
                         <i class="fas fa-file-pdf"></i>
                         <span>Skrypt sprzedażowy: ${escapeHtml(product.sales_script_filename)}</span>
+                        <button class="btn-icon-download" onclick="downloadSalesScript(${product.id}); event.stopPropagation();" title="Pobierz skrypt jako TXT">
+                            <i class="fas fa-download"></i>
+                        </button>
                     </div>
                 ` : ''}
                 <div class="product-meta">
@@ -331,6 +334,12 @@
                     <i class="fas fa-edit"></i>
                     Edytuj
                 </button>
+                ${product.sales_script_filename ? `
+                    <button class="btn btn-success" onclick="downloadSalesScript(${product.id});">
+                        <i class="fas fa-download"></i>
+                        Pobierz skrypt (TXT)
+                    </button>
+                ` : ''}
                 <button class="btn btn-danger" onclick="deleteProduct(${product.id}); closeDetailsModalHandler();">
                     <i class="fas fa-trash"></i>
                     Usuń
@@ -429,6 +438,55 @@
         if (hiddenFilenameInput) hiddenFilenameInput.remove();
         
         showNotification('Skrypt sprzedażowy usunięty', 'info');
+    };
+
+    // Pobieranie skryptu sprzedażowego jako plik TXT
+    window.downloadSalesScript = async function(productId) {
+        try {
+            showNotification('Przygotowywanie pliku do pobrania...', 'info');
+            
+            const response = await fetch(`/api/products/${productId}/download-script`);
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Błąd pobierania skryptu');
+            }
+            
+            // Pobierz nazwę pliku z nagłówka Content-Disposition
+            const contentDisposition = response.headers.get('Content-Disposition');
+            let filename = 'skrypt-sprzedazowy-OCR.txt';
+            
+            if (contentDisposition) {
+                const filenameMatch = contentDisposition.match(/filename="([^"]+)"/);
+                if (filenameMatch) {
+                    filename = filenameMatch[1];
+                }
+            }
+            
+            // Pobierz zawartość pliku
+            const blob = await response.blob();
+            
+            // Utwórz link do pobrania
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const downloadLink = document.createElement('a');
+            downloadLink.href = downloadUrl;
+            downloadLink.download = filename;
+            downloadLink.style.display = 'none';
+            
+            // Dodaj do DOM, kliknij i usuń
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+            
+            // Zwolnij pamięć
+            window.URL.revokeObjectURL(downloadUrl);
+            
+            showNotification('Skrypt sprzedażowy pobrany pomyślnie!', 'success');
+            
+        } catch (error) {
+            console.error('Błąd pobierania skryptu:', error);
+            showNotification('Błąd pobierania skryptu: ' + error.message, 'error');
+        }
     };
 
     function escapeHtml(text) {
@@ -536,6 +594,48 @@
             margin-top: 24px;
             padding-top: 20px;
             border-top: 1px solid #e2e8f0;
+        }
+        
+        .btn-icon-download {
+            background: #10b981;
+            border: none;
+            border-radius: 4px;
+            color: white;
+            padding: 4px 6px;
+            margin-left: 8px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .btn-icon-download:hover {
+            background: #059669;
+            transform: translateY(-1px);
+        }
+        
+        .btn-icon-download:active {
+            transform: translateY(0);
+        }
+        
+        .product-script-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 8px 0;
+            color: #dc2626;
+            font-size: 14px;
+        }
+        
+        .product-script-indicator i.fa-file-pdf {
+            color: #dc2626;
+        }
+        
+        .product-script-indicator span {
+            flex: 1;
+            font-weight: 500;
         }
     `;
     document.head.appendChild(notificationStyles);
