@@ -377,6 +377,7 @@ function renderMeetingDetailsInSection(meeting) {
 function renderRecordingDetailsInSection(recording) {
     console.log('🎙️ Renderowanie szczegółów nagrania:', recording);
     console.log('🎙️ Recording transcript:', recording.transcript);
+    console.log('🎙️ Recording transcription:', recording.transcription);
     console.log('🎙️ Recording notes:', recording.notes);
     console.log('🎙️ Recording created_at:', recording.created_at);
     console.log('🎙️ Recording duration:', recording.duration);
@@ -576,13 +577,16 @@ function getRecordingStatusText(status) {
 
 function formatRecordingTranscript(transcript) {
     if (!transcript || transcript.trim() === '') {
+        console.log('🎙️ formatRecordingTranscript: Brak transkrypcji lub pusta transkrypcja');
         return '<div class="empty-transcript">Brak transkrypcji</div>';
     }
     
-    console.log('🎙️ formatRecordingTranscript input:', transcript.substring(0, 200));
+    console.log('🎙️ formatRecordingTranscript input length:', transcript.length);
+    console.log('🎙️ formatRecordingTranscript first 500 chars:', transcript.substring(0, 500));
     
     // Split by lines and format each speaker line (like live sessions)
     const lines = transcript.split('\n').filter(line => line.trim() !== '');
+    console.log('🎙️ formatRecordingTranscript lines count:', lines.length);
     
     const formattedLines = lines.map(line => {
         const trimmedLine = line.trim();
@@ -646,7 +650,11 @@ function formatRecordingTranscript(transcript) {
         }
     }).filter(line => line !== '');
     
-    return formattedLines.join('');
+    console.log('🎙️ formatRecordingTranscript formatted lines count:', formattedLines.length);
+    const result = formattedLines.join('');
+    console.log('🎙️ formatRecordingTranscript result length:', result.length);
+    
+    return result;
 }
 
 function showSuccess(message) {
@@ -1048,6 +1056,11 @@ async function exportMeetingToPDF() {
     
     try {
         console.log('Eksportowanie spotkania do PDF:', currentMeetingForExport.id);
+        console.log('Typ spotkania:', currentMeetingForExport.type);
+        console.log('Dostępne pola transkrypcji:', {
+            transcript: currentMeetingForExport.transcript ? 'present' : 'null',
+            transcription: currentMeetingForExport.transcription ? 'present' : 'null'
+        });
         
         // Przygotuj dane do eksportu
         const meeting = currentMeetingForExport;
@@ -1055,13 +1068,26 @@ async function exportMeetingToPDF() {
         const productName = meeting.product_name || 'Nieznany produkt';
         const meetingDate = new Date(meeting.meeting_datetime).toLocaleString('pl-PL');
         
+        // Wybierz odpowiednie pole transkrypcji w zależności od typu spotkania
+        let transcription;
+        if (meeting.type === 'recording') {
+            transcription = meeting.transcript || 'Brak transkrypcji';
+            console.log('📝 Używam pola transcript dla nagrania');
+        } else {
+            transcription = meeting.transcription || 'Brak transkrypcji';
+            console.log('📝 Używam pola transcription dla live session');
+        }
+        
+        console.log('📝 Transcription length:', transcription.length);
+        console.log('📝 Transcription preview:', transcription.substring(0, 200));
+        
         // Przygotuj zawartość PDF
         const pdfContent = {
             meetingId: meeting.id,
             clientName: clientName,
             productName: productName,
             meetingDate: meetingDate,
-            transcription: meeting.transcription || 'Brak transkrypcji',
+            transcription: transcription,
             aiSuggestions: meeting.ai_suggestions || 'Brak sugestii AI',
             chatgptHistory: meeting.chatgpt_history || null,
             finalSummary: meeting.final_summary || 'Brak podsumowania',
