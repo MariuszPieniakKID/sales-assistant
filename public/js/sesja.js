@@ -2097,11 +2097,19 @@ function setupRecordingWebSpeech() {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     webSpeechRecognition = new SpeechRecognition();
     
-    // Configuration (Polish language)
+    // Configuration (Polish language) - ZOPTYMALIZOWANA dla długich nagrań
     webSpeechRecognition.lang = 'pl-PL';
     webSpeechRecognition.continuous = true;
     webSpeechRecognition.interimResults = true;
     webSpeechRecognition.maxAlternatives = 1;
+    
+    // Dodatkowe konfiguracje dla stabilności (jeśli są dostępne w przeglądarce)
+    if ('speechTimeout' in webSpeechRecognition) {
+        webSpeechRecognition.speechTimeout = 10000; // 10 sekund timeout
+    }
+    if ('serviceURI' in webSpeechRecognition) {
+        // Możemy ustawić własny service jeśli jest dostępny
+    }
     
     console.log('🔧 Web Speech Recognition configured:', {
         lang: webSpeechRecognition.lang,
@@ -2115,10 +2123,12 @@ function setupRecordingWebSpeech() {
     let recordingLastSpeechTime = 0;
     let recordingWordBuffer = [];
     let recordingCurrentSpeaker = 'A'; // Start with speaker A
+    let restartAttempts = 0; // Licznik prób restartowania
     
     // Event handlers
     webSpeechRecognition.onstart = () => {
         console.log('🎤🔬 Recording speech recognition started with Method 2 enhanced diarization');
+        restartAttempts = 0; // Reset licznika po udanym starcie
     };
     
     webSpeechRecognition.onresult = (event) => {
@@ -2147,7 +2157,7 @@ function setupRecordingWebSpeech() {
         const timeSinceLastSpeech = currentTime - recordingLastSpeechTime;
         
         // Detect speaker change based on silence duration and speech patterns
-        if (timeSinceLastSpeech > 2000 || // More than 2 seconds silence
+        if (timeSinceLastSpeech > 3000 || // Zwiększono z 2s na 3s dla stabilności
             (finalTranscript && detectSpeakerChange(finalTranscript, recordingWordBuffer))) {
             
             // Switch speaker
@@ -2195,7 +2205,7 @@ function setupRecordingWebSpeech() {
         if (interimTranscript && websocket && websocket.readyState === WebSocket.OPEN) {
             const wordsCount = interimTranscript.split(' ').length;
             
-            if (wordsCount >= 3) { // Send partial after 3+ words
+            if (wordsCount >= 5) { // Zwiększono z 3 na 5 słów dla stabilności
                 console.log('🎤🔬 Sending partial transcript to server:', interimTranscript);
                 
                 const partialData = {
@@ -2221,32 +2231,68 @@ function setupRecordingWebSpeech() {
         console.error('❌ Recording speech recognition error:', event.error);
         console.error('❌ Error details:', event);
         
-        // Handle specific error types
+        // Handle specific error types - ULEPSZONA OBSŁUGA
         if (event.error === 'not-allowed') {
             console.error('❌ Microphone access denied');
+            return; // Nie restartuj jeśli nie ma dostępu
         } else if (event.error === 'network') {
             console.error('❌ Network error in speech recognition');
+            restartAttempts++;
         } else if (event.error === 'no-speech') {
-            console.error('❌ No speech detected');
+            console.log('⚠️ No speech detected - to jest normalne podczas ciszy');
+            // NIE traktuj jako błąd, to normalne podczas ciszy
+            return;
         } else if (event.error === 'aborted') {
             console.error('❌ Speech recognition aborted');
+            return; // Nie restartuj jeśli został przerwany celowo
+        } else if (event.error === 'audio-capture') {
+            console.error('❌ Audio capture error');
+            restartAttempts++;
+        } else if (event.error === 'service-not-allowed') {
+            console.error('❌ Speech service not allowed');
+            return; // Nie restartuj jeśli serwis nie jest dozwolony
+        }
+        
+        // Ogranicz liczbę prób restartowania
+        if (restartAttempts > 5) {
+            console.error('❌ Too many restart attempts, stopping...');
+            return;
         }
     };
     
     webSpeechRecognition.onend = () => {
         console.log('🎤🔬 Recording speech recognition ended');
         
-        // Auto restart if still recording
+        // Auto restart if still recording - ZOPTYMALIZOWANY RESTART
         if (currentRecording && !currentRecording.stopped) {
             console.log('🔄 Restarting recording speech recognition...');
+            
+            // Zwiększony timeout z 100ms na 1000ms dla stabilności
             setTimeout(() => {
                 try {
-                    webSpeechRecognition.start();
-                    console.log('🔄 Recording speech recognition restarted');
+                    if (currentRecording && !currentRecording.stopped && restartAttempts <= 5) {
+                        webSpeechRecognition.start();
+                        console.log('🔄 Recording speech recognition restarted');
+                    }
                 } catch (error) {
                     console.error('❌ Error restarting recording speech recognition:', error);
+                    restartAttempts++;
+                    
+                    // Jeśli restart się nie udał, spróbuj ponownie za dłuższy czas
+                    if (restartAttempts <= 5) {
+                        setTimeout(() => {
+                            try {
+                                if (currentRecording && !currentRecording.stopped) {
+                                    webSpeechRecognition.start();
+                                    console.log('🔄 Recording speech recognition restarted after longer delay');
+                                }
+                            } catch (secondError) {
+                                console.error('❌ Second restart attempt failed:', secondError);
+                            }
+                        }, 3000); // 3 sekundy opóźnienia
+                    }
                 }
-            }, 100);
+            }, 1000); // Zwiększono z 100ms na 1000ms
         }
     };
     
@@ -2363,13 +2409,13 @@ function startRecordingTimer() {
     }, 1000);
 }
 
-// Save Recording Progress (co 10 sekund)
+// Save Recording Progress (co 30 sekund - zmniejszona częstotliwość dla stabilności)
 function startRecordingSave() {
     recordingSaveInterval = setInterval(() => {
         if (currentRecording && recordingTranscript) {
             saveRecordingProgress();
         }
-    }, 10000); // 10 sekund
+    }, 30000); // 30 sekund - zmniejszono częstotliwość żeby nie zakłócać transkrypcji
 }
 
 // Save Recording Progress to Database
