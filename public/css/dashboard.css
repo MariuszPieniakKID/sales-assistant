@@ -968,4 +968,102 @@ body {
 .ai-field strong {
     color: #333;
     font-weight: 600;
+}
+
+/* ChatGPT Analysis Section Styling */
+.chatgpt-analysis-section {
+    margin-top: 30px;
+    padding: 20px;
+    background: #f8f9fa;
+    border-radius: 12px;
+    border-left: 4px solid #667eea;
+}
+
+.chatgpt-analysis-section h3 {
+    margin-top: 0;
+    color: #333;
+    font-size: 18px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.analysis-status {
+    font-size: 14px;
+    margin-left: auto;
+}
+
+.analysis-status small {
+    color: #666;
+    font-size: 12px;
+    margin-left: 8px;
+}
+
+.analysis-results {
+    margin-top: 20px;
+    display: grid;
+    gap: 20px;
+}
+
+.analysis-section {
+    padding: 15px;
+    border-radius: 8px;
+    border-left: 4px solid;
+}
+
+.analysis-section.positive {
+    background: #f0fff4;
+    border-color: #48bb78;
+}
+
+.analysis-section.negative {
+    background: #fef5e7;
+    border-color: #ed8936;
+}
+
+.analysis-section.recommendations {
+    background: #e6f3ff;
+    border-color: #4299e1;
+}
+
+.analysis-section h4 {
+    margin: 0 0 12px 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #333;
+}
+
+.analysis-content {
+    font-size: 14px;
+    line-height: 1.6;
+    color: #555;
+}
+
+.analysis-in-progress, .analysis-error, .analysis-pending, .analysis-empty {
+    padding: 15px;
+    border-radius: 8px;
+    text-align: center;
+    font-size: 14px;
+    color: #666;
+}
+
+.analysis-in-progress {
+    background: #fff5f5;
+    border: 1px solid #fed7d7;
+}
+
+.analysis-error {
+    background: #fef5e7;
+    border: 1px solid #fbd38d;
+}
+
+.analysis-pending {
+    background: #f7fafc;
+    border: 1px solid #cbd5e0;
+}
+
+.analysis-empty {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
 } 

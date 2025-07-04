@@ -444,6 +444,79 @@ function renderRecordingDetailsInSection(recording) {
             </div>
         </div>
         
+        <!-- Analiza ChatGPT -->
+        ${recording.ai_analysis_status ? `
+        <div class="chatgpt-analysis-section">
+            <h3>
+                <i class="fas fa-robot"></i>
+                Analiza ChatGPT
+                <span class="analysis-status">
+                    ${recording.ai_analysis_status === 'completed' ? 
+                        `<span style="color: green;">✅ Zakończona</span>` : 
+                        recording.ai_analysis_status === 'analyzing' ? 
+                        `<span style="color: orange;">🔄 W toku...</span>` : 
+                        recording.ai_analysis_status === 'failed' ? 
+                        `<span style="color: red;">❌ Błąd</span>` : 
+                        `<span style="color: gray;">⏳ Oczekuje</span>`
+                    }
+                    ${recording.ai_analysis_completed_at ? 
+                        `<small>(${new Date(recording.ai_analysis_completed_at).toLocaleString('pl-PL')})</small>` : 
+                        ''
+                    }
+                </span>
+            </h3>
+            
+            ${recording.ai_analysis_status === 'completed' ? `
+            <div class="analysis-results">
+                ${recording.positive_findings ? `
+                <div class="analysis-section positive">
+                    <h4>✅ Pozytywne wnioski</h4>
+                    <div class="analysis-content">
+                        ${escapeHtml(recording.positive_findings).replace(/\n/g, '<br>')}
+                    </div>
+                </div>
+                ` : ''}
+                
+                ${recording.negative_findings ? `
+                <div class="analysis-section negative">
+                    <h4>⚠️ Obszary do poprawy</h4>
+                    <div class="analysis-content">
+                        ${escapeHtml(recording.negative_findings).replace(/\n/g, '<br>')}
+                    </div>
+                </div>
+                ` : ''}
+                
+                ${recording.recommendations ? `
+                <div class="analysis-section recommendations">
+                    <h4>💡 Rekomendacje</h4>
+                    <div class="analysis-content">
+                        ${escapeHtml(recording.recommendations).replace(/\n/g, '<br>')}
+                    </div>
+                </div>
+                ` : ''}
+                
+                ${!recording.positive_findings && !recording.negative_findings && !recording.recommendations ? `
+                <div class="analysis-empty">
+                    <p>Analiza została zakończona, ale nie zawiera szczegółowych wyników.</p>
+                </div>
+                ` : ''}
+            </div>
+            ` : recording.ai_analysis_status === 'analyzing' ? `
+            <div class="analysis-in-progress">
+                <p><i class="fas fa-spinner fa-spin"></i> Analiza w toku... Wyniki będą dostępne za chwilę.</p>
+            </div>
+            ` : recording.ai_analysis_status === 'failed' ? `
+            <div class="analysis-error">
+                <p><i class="fas fa-exclamation-triangle"></i> Wystąpił błąd podczas analizy. Spróbuj ponownie później.</p>
+            </div>
+            ` : `
+            <div class="analysis-pending">
+                <p><i class="fas fa-clock"></i> Analiza oczekuje na przetworzenie...</p>
+            </div>
+            `}
+        </div>
+        ` : ''}
+        
         <!-- Notatki -->
         ${recording.notes ? `
         <div class="recording-notes-section">

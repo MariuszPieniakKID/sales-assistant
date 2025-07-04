@@ -282,6 +282,24 @@ async function runDatabaseMigrations(pool) {
             console.log('✅ Tabela recordings już istnieje');
         }
         
+        // Dodaj kolumny dla analizy ChatGPT jeśli nie istnieją
+        const addAnalysisColumns = [
+            'ALTER TABLE recordings ADD COLUMN IF NOT EXISTS positive_findings TEXT',
+            'ALTER TABLE recordings ADD COLUMN IF NOT EXISTS negative_findings TEXT',
+            'ALTER TABLE recordings ADD COLUMN IF NOT EXISTS recommendations TEXT',
+            'ALTER TABLE recordings ADD COLUMN IF NOT EXISTS ai_analysis_status VARCHAR(50) DEFAULT \'pending\'',
+            'ALTER TABLE recordings ADD COLUMN IF NOT EXISTS ai_analysis_completed_at TIMESTAMP'
+        ];
+        
+        for (const query of addAnalysisColumns) {
+            try {
+                await pool.query(query);
+                console.log(`✅ Dodano kolumnę do recordings: ${query.split('ADD COLUMN IF NOT EXISTS')[1]?.split(' ')[0]}`);
+            } catch (error) {
+                console.log(`⚠️ Kolumna już istnieje lub błąd: ${error.message}`);
+            }
+        }
+        
         console.log('✅ Migracje bazy danych ukończone pomyślnie');
         
     } catch (error) {
@@ -1662,10 +1680,12 @@ app.get('/api/meetings-all', requireAuth, async (req, res) => {
       WHERE p.user_id = $1
     `, [req.session.userId]);
     
-    // Pobierz nagrania
+    // Pobierz nagrania (z analizą ChatGPT)
     const recordingsResult = await client.query(`
       SELECT r.*, c.name as client_name, p.name as product_name,
              r.created_at as meeting_datetime,
+             r.positive_findings, r.negative_findings, r.recommendations,
+             r.ai_analysis_status, r.ai_analysis_completed_at,
              'recording' as type
       FROM recordings r 
       JOIN clients c ON r.client_id = c.id 
@@ -5052,6 +5072,36 @@ async function stopRecordingSession(ws, data) {
             transcriptLength: recording.transcript.length
         }));
         
+        // Rozpocznij analizę przez ChatGPT w tle (bez czekania)
+        if (recording.transcript && recording.transcript.trim().length > 50) {
+            console.log(`[${recordingId}] 🤖 Rozpoczynanie analizy ChatGPT...`);
+            analyzeRecordingWithChatGPT(recordingId, recording.clientId, recording.productId, recording.transcript)
+                .then(() => {
+                    console.log(`[${recordingId}] ✅ Analiza ChatGPT zakończona`);
+                    // Wyślij powiadomienie do frontendu o zakończonej analizie
+                    if (ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({
+                            type: 'RECORDING_ANALYSIS_COMPLETED',
+                            recordingId: recordingId,
+                            message: 'Analiza ChatGPT zakończona'
+                        }));
+                    }
+                })
+                .catch(error => {
+                    console.error(`[${recordingId}] ❌ Błąd analizy ChatGPT:`, error);
+                    // Wyślij powiadomienie o błędzie
+                    if (ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({
+                            type: 'RECORDING_ANALYSIS_ERROR',
+                            recordingId: recordingId,
+                            message: 'Błąd analizy ChatGPT: ' + error.message
+                        }));
+                    }
+                });
+        } else {
+            console.log(`[${recordingId}] ⚠️ Transkrypcja zbyt krótka dla analizy ChatGPT`);
+        }
+        
     } catch (error) {
         console.error(`[${recordingId}] ❌ Błąd podczas zatrzymywania nagrania:`, error);
         ws.send(JSON.stringify({
@@ -5164,6 +5214,241 @@ async function processRecordingPartialMethod2(ws, data) {
     } catch (error) {
         console.error(`[${recordingId}] ❌ Błąd podczas przetwarzania częściowej transkrypcji Method 2:`, error);
     }
+}
+
+// Analiza nagrania przez ChatGPT
+async function analyzeRecordingWithChatGPT(recordingId, clientId, productId, transcript) {
+    console.log(`[${recordingId}] 🤖 Rozpoczynanie analizy ChatGPT...`);
+    
+    try {
+        // Zaktualizuj status analizy na 'analyzing'
+        await safeQuery(`
+            UPDATE recordings 
+            SET ai_analysis_status = 'analyzing', updated_at = NOW()
+            WHERE id = $1
+        `, [recordingId]);
+        
+        // Pobierz dane klienta
+        const clientResult = await safeQuery(`
+            SELECT * FROM clients WHERE id = $1
+        `, [clientId]);
+        
+        const client = clientResult.rows[0];
+        if (!client) {
+            throw new Error(`Nie znaleziono klienta o ID: ${clientId}`);
+        }
+        
+        // Pobierz dane produktu (w tym skrypt sprzedażowy)
+        const productResult = await safeQuery(`
+            SELECT * FROM products WHERE id = $1
+        `, [productId]);
+        
+        const product = productResult.rows[0];
+        if (!product) {
+            throw new Error(`Nie znaleziono produktu o ID: ${productId}`);
+        }
+        
+        // Pobierz poprzednie rozmowy z tym klientem
+        const previousSalesResult = await safeQuery(`
+            SELECT 
+                s.meeting_datetime,
+                s.positive_findings,
+                s.negative_findings,
+                s.recommendations,
+                p.name as product_name
+            FROM sales s
+            JOIN products p ON s.product_id = p.id
+            WHERE s.client_id = $1
+            ORDER BY s.meeting_datetime DESC
+            LIMIT 3
+        `, [clientId]);
+        
+        const previousSales = previousSalesResult.rows;
+        
+        // Stwórz prompt dla ChatGPT
+        const prompt = createSalesAnalysisPrompt(client, product, transcript, previousSales);
+        
+        console.log(`[${recordingId}] 🤖 Wysyłanie zapytania do ChatGPT...`);
+        
+        // Wywołaj ChatGPT
+        const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+            },
+            body: JSON.stringify({
+                model: 'gpt-3.5-turbo',
+                messages: [
+                    {
+                        role: 'system',
+                        content: 'Jesteś ekspertem w analizie sprzedaży. Twoje odpowiedzi są zawsze w języku polskim i dobrze sformatowane.'
+                    },
+                    {
+                        role: 'user',
+                        content: prompt
+                    }
+                ],
+                max_tokens: 1500,
+                temperature: 0.7
+            })
+        });
+        
+        if (!openaiResponse.ok) {
+            throw new Error(`OpenAI API error: ${openaiResponse.status} ${openaiResponse.statusText}`);
+        }
+        
+        const openaiData = await openaiResponse.json();
+        const analysisText = openaiData.choices[0].message.content;
+        
+        console.log(`[${recordingId}] 🤖 Otrzymano odpowiedź z ChatGPT (${analysisText.length} znaków)`);
+        
+        // Parsuj odpowiedź ChatGPT
+        const parsedAnalysis = parseChatGPTAnalysis(analysisText);
+        
+        // Zapisz wyniki do bazy danych
+        await safeQuery(`
+            UPDATE recordings 
+            SET 
+                positive_findings = $1,
+                negative_findings = $2,
+                recommendations = $3,
+                ai_analysis_status = 'completed',
+                ai_analysis_completed_at = NOW(),
+                updated_at = NOW()
+            WHERE id = $4
+        `, [
+            parsedAnalysis.positive_findings,
+            parsedAnalysis.negative_findings,
+            parsedAnalysis.recommendations,
+            recordingId
+        ]);
+        
+        console.log(`[${recordingId}] ✅ Analiza ChatGPT zapisana do bazy danych`);
+        
+    } catch (error) {
+        console.error(`[${recordingId}] ❌ Błąd analizy ChatGPT:`, error);
+        
+        // Zapisz błąd do bazy danych
+        await safeQuery(`
+            UPDATE recordings 
+            SET 
+                ai_analysis_status = 'failed',
+                updated_at = NOW()
+            WHERE id = $1
+        `, [recordingId]);
+        
+        throw error;
+    }
+}
+
+// Stwórz prompt dla analizy sprzedaży
+function createSalesAnalysisPrompt(client, product, transcript, previousSales) {
+    let prompt = `
+ANALIZA ROZMOWY SPRZEDAŻOWEJ
+
+Jesteś doświadczonym ekspertem i nauczycielem sprzedaży. Przeanalizuj poniższą rozmowę i podaj szczegółową analizę.
+
+INFORMACJE O KLIENCIE:
+- Nazwa: ${client.name}
+- Opis: ${client.description || 'Brak opisu'}
+- Komentarz: ${client.comment || 'Brak komentarza'}
+- Notatki AI: ${client.ai_notes || 'Brak notatek'}
+
+INFORMACJE O PRODUKCIE:
+- Nazwa: ${product.name}
+- Opis: ${product.description || 'Brak opisu'}
+- Komentarz: ${product.comment || 'Brak komentarza'}
+`;
+
+    // Dodaj skrypt sprzedażowy jeśli istnieje
+    if (product.sales_script_text) {
+        prompt += `
+SKRYPT SPRZEDAŻOWY:
+${product.sales_script_text}
+`;
+    }
+
+    // Dodaj poprzednie rozmowy jeśli istnieją
+    if (previousSales && previousSales.length > 0) {
+        prompt += `
+POPRZEDNIE ROZMOWY Z TYM KLIENTEM:
+`;
+        previousSales.forEach((sale, index) => {
+            prompt += `
+${index + 1}. Data: ${sale.meeting_datetime} (Produkt: ${sale.product_name})
+   Pozytywne wnioski: ${sale.positive_findings || 'Brak'}
+   Obszary do poprawy: ${sale.negative_findings || 'Brak'}
+   Rekomendacje: ${sale.recommendations || 'Brak'}
+`;
+        });
+    }
+
+    prompt += `
+TRANSKRYPCJA ROZMOWY:
+${transcript}
+
+ZADANIE:
+Przeanalizuj rozmowę pod kątem skuteczności sprzedaży. Pamiętaj, że w transkrypcji mogą być błędy dotyczące tego, kto co powiedział - musisz wynioskować to z kontekstu.
+
+Jeśli jest dostępny skrypt sprzedażowy, sprawdź jak dobrze sprzedawca się z niego wywiązał.
+
+Jeśli są poprzednie rozmowy, porównaj obecną rozmowę z wcześniejszymi i oceń postęp.
+
+Podaj swoją analizę w formacie:
+
+===POZYTYWNE WNIOSKI===
+[Lista pozytywnych aspektów rozmowy, technik sprzedażowych, które zostały dobrze wykonane]
+
+===OBSZARY DO POPRAWY===
+[Lista problemów, błędów, przeoczonych okazji w rozmowie]
+
+===REKOMENDACJE===
+[Konkretne zalecenia dotyczące dalszych działań, poprawy technik sprzedażowych, następnych kroków]
+
+Odpowiadaj wyłącznie w języku polskim. Bądź konkretny i konstruktywny w swojej analizie.
+`;
+
+    return prompt;
+}
+
+// Parsuj odpowiedź ChatGPT do struktury
+function parseChatGPTAnalysis(analysisText) {
+    const sections = {
+        positive_findings: '',
+        negative_findings: '',
+        recommendations: ''
+    };
+    
+    try {
+        // Znajdź sekcje w tekście
+        const positiveMatch = analysisText.match(/===POZYTYWNE WNIOSKI===(.*?)(?===|$)/s);
+        const negativeMatch = analysisText.match(/===OBSZARY DO POPRAWY===(.*?)(?===|$)/s);
+        const recommendationsMatch = analysisText.match(/===REKOMENDACJE===(.*?)(?===|$)/s);
+        
+        if (positiveMatch) {
+            sections.positive_findings = positiveMatch[1].trim();
+        }
+        
+        if (negativeMatch) {
+            sections.negative_findings = negativeMatch[1].trim();
+        }
+        
+        if (recommendationsMatch) {
+            sections.recommendations = recommendationsMatch[1].trim();
+        }
+        
+        // Jeśli parsowanie nie powiodło się, użyj całego tekstu jako analizy
+        if (!sections.positive_findings && !sections.negative_findings && !sections.recommendations) {
+            sections.positive_findings = analysisText;
+        }
+        
+    } catch (error) {
+        console.error('❌ Błąd parsowania analizy ChatGPT:', error);
+        sections.positive_findings = analysisText;
+    }
+    
+    return sections;
 }
 
 // Start serwera z WebSocket support
