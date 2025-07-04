@@ -45,6 +45,9 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Uruchom sprawdzanie sesji co 2 minuty
         startSessionCheck();
+        
+        // Sprawdź parametr URL i otwórz odpowiednią sekcję
+        checkURLSection();
     }
 
     // Załaduj dane użytkownika
@@ -183,6 +186,14 @@ document.addEventListener('DOMContentLoaded', function() {
     // Załaduj sekcję
     async function loadSection(section) {
         console.log('📄 Ładowanie sekcji:', section);
+        
+        // SPECJALNA OBSŁUGA DLA SEKCJI SPOTKANIA - odświeżenie strony
+        if (section === 'spotkania') {
+            console.log('🔄 Odświeżanie strony dla sekcji spotkania...');
+            // Dodaj parametr do URL żeby po odświeżeniu otworzyć sekcję spotkania
+            window.location.href = window.location.pathname + '?section=spotkania';
+            return;
+        }
         
         // Aktualizuj tytuł strony
         const sectionTitles = {
@@ -647,6 +658,99 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (error) {
             console.error('❌ Błąd fetchWithAuth:', error);
             throw error;
+        }
+    }
+    
+    // Sprawdź parametr URL i otwórz odpowiednią sekcję
+    function checkURLSection() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const sectionParam = urlParams.get('section');
+        
+        if (sectionParam) {
+            console.log('🔗 Znaleziono parametr section w URL:', sectionParam);
+            
+            // Usuń parametr z URL (dla czystości)
+            const newURL = window.location.pathname;
+            window.history.replaceState({}, document.title, newURL);
+            
+            // Otwórz odpowiednią sekcję
+            if (sectionParam === 'spotkania') {
+                // Znajdź i aktywuj link spotkań
+                const spotkaniLink = document.querySelector('[data-section="spotkania"]');
+                if (spotkaniLink) {
+                    console.log('🎯 Otwieranie sekcji spotkania z parametru URL');
+                    updateActiveNavLink(spotkaniLink);
+                    
+                    // Załaduj sekcję spotkania normalnie (bez odświeżania)
+                    loadSectionDirect('spotkania');
+                }
+            }
+        }
+    }
+    
+    // Załaduj sekcję bezpośrednio (bez odświeżania) - używane przez checkURLSection
+    async function loadSectionDirect(section) {
+        console.log('📄 Ładowanie sekcji bezpośrednio:', section);
+        
+        // Aktualizuj tytuł strony
+        const sectionTitles = {
+            'dashboard': 'Dashboard',
+            'produkty': 'Produkty',
+            'klienci': 'Klienci',
+            'spotkania': 'Spotkania',
+            'profil': 'Edytuj Profil',
+            'sesja': 'Sesja z podpowiedziami Live',
+            'admin': 'Panel Administratora'
+        };
+        
+        pageTitle.textContent = sectionTitles[section] || 'Dashboard';
+        
+        if (section === 'dashboard') {
+            // Pokaż dashboard
+            showDashboard();
+        } else {
+            // Załaduj zewnętrzną sekcję (ta sama logika co w loadSection ale bez sprawdzania spotkania)
+            try {
+                console.log(`🔄 Pobieranie treści dla sekcji: ${section}`);
+                
+                const response = await fetchWithAuth(`/${section}`, {
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-Section-Request': 'true'
+                    }
+                });
+                if (!response) {
+                    return;
+                }
+                
+                if (response.ok) {
+                    const html = await response.text();
+                    
+                    if (html.includes('<form') && html.includes('email') && html.includes('password')) {
+                        console.log('❌ Otrzymano stronę logowania zamiast sekcji - sesja wygasła');
+                        
+                        if (sessionCheckInterval) {
+                            clearInterval(sessionCheckInterval);
+                        }
+                        
+                        window.location.href = '/login';
+                        return;
+                    }
+                    
+                    contentArea.innerHTML = html;
+                    console.log(`✅ Sekcja ${section} załadowana pomyślnie`);
+                    
+                    setTimeout(() => {
+                        loadSectionScript(section);
+                    }, 100);
+                } else {
+                    console.error(`❌ Błąd HTTP ${response.status} przy ładowaniu sekcji ${section}`);
+                    showError(`Nie można załadować sekcji (${response.status})`);
+                }
+            } catch (error) {
+                console.error('❌ Błąd ładowania sekcji:', error);
+                showError('Błąd połączenia - sprawdź internet i spróbuj ponownie');
+            }
         }
     }
     
