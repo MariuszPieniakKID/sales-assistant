@@ -2087,6 +2087,8 @@ async function setupRecordingAudio() {
 
 // Setup Web Speech Recognition for Recording with Method 2 (Enhanced Speaker Diarization)
 function setupRecordingWebSpeech() {
+    console.log('🔧 Setting up Web Speech Recognition for recording...');
+    
     if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
         console.error('❌ Web Speech API not supported');
         return;
@@ -2101,6 +2103,13 @@ function setupRecordingWebSpeech() {
     webSpeechRecognition.interimResults = true;
     webSpeechRecognition.maxAlternatives = 1;
     
+    console.log('🔧 Web Speech Recognition configured:', {
+        lang: webSpeechRecognition.lang,
+        continuous: webSpeechRecognition.continuous,
+        interimResults: webSpeechRecognition.interimResults,
+        maxAlternatives: webSpeechRecognition.maxAlternatives
+    });
+    
     // Enhanced speaker tracking variables for recording
     let recordingLastSpeaker = null;
     let recordingLastSpeechTime = 0;
@@ -2113,11 +2122,15 @@ function setupRecordingWebSpeech() {
     };
     
     webSpeechRecognition.onresult = (event) => {
+        console.log('🎤🔬 Recording speech recognition got results:', event.results.length);
+        
         let interimTranscript = '';
         let finalTranscript = '';
         
         for (let i = event.resultIndex; i < event.results.length; i++) {
             const transcript = event.results[i][0].transcript;
+            
+            console.log('🎤🔬 Result', i, ':', transcript, 'isFinal:', event.results[i].isFinal);
             
             if (event.results[i].isFinal) {
                 finalTranscript += transcript;
@@ -2125,6 +2138,9 @@ function setupRecordingWebSpeech() {
                 interimTranscript += transcript;
             }
         }
+        
+        console.log('🎤🔬 Final transcript:', finalTranscript);
+        console.log('🎤🔬 Interim transcript:', interimTranscript);
         
         // Enhanced speaker detection for recording
         const currentTime = Date.now();
@@ -2157,6 +2173,8 @@ function setupRecordingWebSpeech() {
         
         // Send final transcript to server with speaker info
         if (finalTranscript && websocket && websocket.readyState === WebSocket.OPEN) {
+            console.log('🎤🔬 Sending final transcript to server:', finalTranscript);
+            
             const transcriptData = {
                 type: 'RECORDING_TRANSCRIPT_METHOD2',
                 recordingId: currentRecording?.id,
@@ -2178,6 +2196,8 @@ function setupRecordingWebSpeech() {
             const wordsCount = interimTranscript.split(' ').length;
             
             if (wordsCount >= 3) { // Send partial after 3+ words
+                console.log('🎤🔬 Sending partial transcript to server:', interimTranscript);
+                
                 const partialData = {
                     type: 'RECORDING_PARTIAL_METHOD2',
                     recordingId: currentRecording?.id,
@@ -2199,6 +2219,18 @@ function setupRecordingWebSpeech() {
     
     webSpeechRecognition.onerror = (event) => {
         console.error('❌ Recording speech recognition error:', event.error);
+        console.error('❌ Error details:', event);
+        
+        // Handle specific error types
+        if (event.error === 'not-allowed') {
+            console.error('❌ Microphone access denied');
+        } else if (event.error === 'network') {
+            console.error('❌ Network error in speech recognition');
+        } else if (event.error === 'no-speech') {
+            console.error('❌ No speech detected');
+        } else if (event.error === 'aborted') {
+            console.error('❌ Speech recognition aborted');
+        }
     };
     
     webSpeechRecognition.onend = () => {
@@ -2210,12 +2242,15 @@ function setupRecordingWebSpeech() {
             setTimeout(() => {
                 try {
                     webSpeechRecognition.start();
+                    console.log('🔄 Recording speech recognition restarted');
                 } catch (error) {
                     console.error('❌ Error restarting recording speech recognition:', error);
                 }
             }, 100);
         }
     };
+    
+    console.log('✅ Web Speech Recognition setup complete for recording');
 }
 
 // Speaker Change Detection Function for Recording (copied from Method 2)
@@ -2468,13 +2503,51 @@ function onRecordingStarted(data) {
     startRecordingSave();
     
     // Start speech recognition
+    console.log('🎤 Attempting to start recording speech recognition...');
+    console.log('🎤 webSpeechRecognition status:', webSpeechRecognition ? 'exists' : 'null');
+    
     if (webSpeechRecognition) {
         try {
+            console.log('🎤 Calling webSpeechRecognition.start()...');
             webSpeechRecognition.start();
-            console.log('🎤 Recording speech recognition started');
+            console.log('🎤 Recording speech recognition started successfully');
         } catch (error) {
             console.error('❌ Error starting recording speech recognition:', error);
+            console.error('❌ Error details:', error.message);
+            
+            // Try to setup again if it failed
+            console.log('🔄 Attempting to setup Web Speech Recognition again...');
+            setupRecordingWebSpeech();
+            
+            // Try to start again
+            setTimeout(() => {
+                try {
+                    console.log('🔄 Second attempt to start speech recognition...');
+                    webSpeechRecognition.start();
+                    console.log('✅ Speech recognition started on second attempt');
+                } catch (secondError) {
+                    console.error('❌ Second attempt failed:', secondError);
+                }
+            }, 500);
         }
+    } else {
+        console.error('❌ webSpeechRecognition is null - setting up...');
+        setupRecordingWebSpeech();
+        
+        // Try to start after setup
+        setTimeout(() => {
+            if (webSpeechRecognition) {
+                try {
+                    console.log('🔄 Starting speech recognition after setup...');
+                    webSpeechRecognition.start();
+                    console.log('✅ Speech recognition started after setup');
+                } catch (error) {
+                    console.error('❌ Error starting speech recognition after setup:', error);
+                }
+            } else {
+                console.error('❌ webSpeechRecognition still null after setup');
+            }
+        }, 500);
     }
     
     showToast('Nagranie rozpoczęte', 'success');
