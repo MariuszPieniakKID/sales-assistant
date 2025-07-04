@@ -37,10 +37,16 @@
                 Powrót do listy spotkań
             </button>
             <h2 id="meetingDetailsTitle">Szczegóły spotkania</h2>
-            <button class="export-pdf-btn" id="exportPdfBtn">
-                <i class="fas fa-file-pdf"></i>
-                Pobierz PDF
-            </button>
+            <div class="export-buttons">
+                <button class="export-pdf-btn" id="exportPdfBtn">
+                    <i class="fas fa-file-pdf"></i>
+                    Pobierz PDF
+                </button>
+                <button class="export-raw-data-btn" id="exportRawDataBtn">
+                    <i class="fas fa-code"></i>
+                    Surowe dane
+                </button>
+            </div>
         </div>
 
         <div class="meeting-details-content" id="meetingDetailsContent">
@@ -81,9 +87,13 @@
     transform: translateX(-2px);
 }
 
-.export-pdf-btn {
-    background: #dc3545;
-    color: white;
+.export-buttons {
+    display: flex;
+    gap: 12px;
+    margin-left: auto;
+}
+
+.export-pdf-btn, .export-raw-data-btn {
     border: none;
     padding: 12px 20px;
     border-radius: 8px;
@@ -92,14 +102,28 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-left: auto;
     transition: all 0.3s ease;
+    color: white;
+}
+
+.export-pdf-btn {
+    background: #dc3545;
 }
 
 .export-pdf-btn:hover {
     background: #c82333;
     transform: translateY(-1px);
     box-shadow: 0 4px 8px rgba(220, 53, 69, 0.3);
+}
+
+.export-raw-data-btn {
+    background: #6c757d;
+}
+
+.export-raw-data-btn:hover {
+    background: #5a6268;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(108, 117, 125, 0.3);
 }
 
 .meeting-details-content {

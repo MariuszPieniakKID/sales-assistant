@@ -84,6 +84,12 @@ function setupEventListeners() {
     if (exportPdfBtn) {
         exportPdfBtn.addEventListener('click', exportMeetingToPDF);
     }
+    
+    // Przycisk eksportu surowych danych
+    const exportRawDataBtn = document.getElementById('exportRawDataBtn');
+    if (exportRawDataBtn) {
+        exportRawDataBtn.addEventListener('click', exportRawDataToPDF);
+    }
 }
 
 // Ładowanie spotkań z API
@@ -371,6 +377,12 @@ function renderMeetingDetailsInSection(meeting) {
         // Resetuj klasę dla standardowego widoku live sessions
         contentContainer.className = 'meeting-details-content';
     }
+    
+    // Ukryj przycisk "Surowe dane" dla live sessions
+    const exportRawDataBtn = document.getElementById('exportRawDataBtn');
+    if (exportRawDataBtn) {
+        exportRawDataBtn.style.display = 'none';
+    }
 }
 
 // Renderowanie szczegółów nagrania w sekcji
@@ -537,6 +549,17 @@ function renderRecordingDetailsInSection(recording) {
         contentContainer.innerHTML = detailsHTML;
         // Dodaj klasę dla stylowania nagrania
         contentContainer.className = 'meeting-details-content recording-details';
+    }
+    
+    // Pokaż/ukryj przycisk "Surowe dane" w zależności od statusu analizy
+    const exportRawDataBtn = document.getElementById('exportRawDataBtn');
+    if (exportRawDataBtn) {
+        if (recording.ai_analysis_status === 'completed' && 
+            (recording.chatgpt_prompt || recording.chatgpt_raw_response)) {
+            exportRawDataBtn.style.display = 'flex';
+        } else {
+            exportRawDataBtn.style.display = 'none';
+        }
     }
 }
 
@@ -1224,8 +1247,79 @@ async function exportMeetingToPDF() {
     }
 }
 
+// Funkcja eksportu surowych danych ChatGPT do PDF
+async function exportRawDataToPDF() {
+    if (!currentMeetingForExport) {
+        showError('Brak danych spotkania do eksportu');
+        return;
+    }
+    
+    try {
+        console.log('Eksportowanie surowych danych do PDF:', currentMeetingForExport.id);
+        
+        // Sprawdź czy to nagranie z analizą ChatGPT
+        if (currentMeetingForExport.type !== 'recording') {
+            showError('Eksport surowych danych dostępny tylko dla nagrań');
+            return;
+        }
+        
+        if (currentMeetingForExport.ai_analysis_status !== 'completed') {
+            showError('Brak analizy ChatGPT dla tego nagrania');
+            return;
+        }
+        
+        // Wyślij żądanie do backendu o surowe dane
+        const response = await fetch('/api/recordings/export-raw-data', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            credentials: 'include',
+            body: JSON.stringify({
+                recordingId: currentMeetingForExport.id
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        // Pobierz HTML content jako tekst
+        const htmlContent = await response.text();
+        
+        console.log('Otrzymano HTML content, długość:', htmlContent.length);
+        
+        // Utwórz nazwę pliku
+        const clientName = currentMeetingForExport.client_name || 'Nieznany_klient';
+        const fileName = `surowe_dane_${clientName.replace(/[^a-zA-Z0-9]/g, '_')}_${currentMeetingForExport.id}.html`;
+        
+        // Utwórz blob z HTML
+        const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
+        
+        // Utwórz link do pobrania
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = fileName;
+        
+        // Dodaj do DOM, kliknij i usuń
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        showSuccess('📄 Surowe dane ChatGPT zostały pobrane jako plik HTML!');
+        
+    } catch (error) {
+        console.error('Błąd eksportu surowych danych:', error);
+        showError('Nie udało się wyeksportować surowych danych: ' + error.message);
+    }
+}
+
 // Eksport funkcji dla dostępu globalnego
 window.openMeetingDetails = openMeetingDetails;
 window.saveMeetingNotes = saveMeetingNotes;
 window.switchTab = switchTab;
-window.exportMeetingToPDF = exportMeetingToPDF; 
+window.exportMeetingToPDF = exportMeetingToPDF;
+window.exportRawDataToPDF = exportRawDataToPDF; 

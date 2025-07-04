@@ -282,13 +282,15 @@ async function runDatabaseMigrations(pool) {
             console.log('✅ Tabela recordings już istnieje');
         }
         
-        // Dodaj kolumny dla analizy ChatGPT jeśli nie istnieją
+                 // Dodaj kolumny dla analizy ChatGPT jeśli nie istnieją
         const addAnalysisColumns = [
             'ALTER TABLE recordings ADD COLUMN IF NOT EXISTS positive_findings TEXT',
             'ALTER TABLE recordings ADD COLUMN IF NOT EXISTS negative_findings TEXT',
             'ALTER TABLE recordings ADD COLUMN IF NOT EXISTS recommendations TEXT',
             'ALTER TABLE recordings ADD COLUMN IF NOT EXISTS ai_analysis_status VARCHAR(50) DEFAULT \'pending\'',
-            'ALTER TABLE recordings ADD COLUMN IF NOT EXISTS ai_analysis_completed_at TIMESTAMP'
+            'ALTER TABLE recordings ADD COLUMN IF NOT EXISTS ai_analysis_completed_at TIMESTAMP',
+            'ALTER TABLE recordings ADD COLUMN IF NOT EXISTS chatgpt_prompt TEXT',
+            'ALTER TABLE recordings ADD COLUMN IF NOT EXISTS chatgpt_raw_response TEXT'
         ];
         
         for (const query of addAnalysisColumns) {
@@ -1686,6 +1688,7 @@ app.get('/api/meetings-all', requireAuth, async (req, res) => {
              r.created_at as meeting_datetime,
              r.positive_findings, r.negative_findings, r.recommendations,
              r.ai_analysis_status, r.ai_analysis_completed_at,
+             r.chatgpt_prompt, r.chatgpt_raw_response,
              'recording' as type
       FROM recordings r 
       JOIN clients c ON r.client_id = c.id 
@@ -5270,6 +5273,23 @@ async function analyzeRecordingWithChatGPT(recordingId, clientId, productId, tra
         
         console.log(`[${recordingId}] 🤖 Wysyłanie zapytania do ChatGPT...`);
         
+        // Przygotuj request body
+        const requestBody = {
+            model: 'gpt-3.5-turbo',
+            messages: [
+                {
+                    role: 'system',
+                    content: 'Jesteś ekspertem w analizie sprzedaży. Twoje odpowiedzi są zawsze w języku polskim i dobrze sformatowane.'
+                },
+                {
+                    role: 'user',
+                    content: prompt
+                }
+            ],
+            max_tokens: 1500,
+            temperature: 0.7
+        };
+        
         // Wywołaj ChatGPT
         const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
             method: 'POST',
@@ -5277,21 +5297,7 @@ async function analyzeRecordingWithChatGPT(recordingId, clientId, productId, tra
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
             },
-            body: JSON.stringify({
-                model: 'gpt-3.5-turbo',
-                messages: [
-                    {
-                        role: 'system',
-                        content: 'Jesteś ekspertem w analizie sprzedaży. Twoje odpowiedzi są zawsze w języku polskim i dobrze sformatowane.'
-                    },
-                    {
-                        role: 'user',
-                        content: prompt
-                    }
-                ],
-                max_tokens: 1500,
-                temperature: 0.7
-            })
+            body: JSON.stringify(requestBody)
         });
         
         if (!openaiResponse.ok) {
@@ -5306,7 +5312,7 @@ async function analyzeRecordingWithChatGPT(recordingId, clientId, productId, tra
         // Parsuj odpowiedź ChatGPT
         const parsedAnalysis = parseChatGPTAnalysis(analysisText);
         
-        // Zapisz wyniki do bazy danych
+        // Zapisz wyniki do bazy danych (wraz z surowymi danymi)
         await safeQuery(`
             UPDATE recordings 
             SET 
@@ -5315,12 +5321,16 @@ async function analyzeRecordingWithChatGPT(recordingId, clientId, productId, tra
                 recommendations = $3,
                 ai_analysis_status = 'completed',
                 ai_analysis_completed_at = NOW(),
+                chatgpt_prompt = $4,
+                chatgpt_raw_response = $5,
                 updated_at = NOW()
-            WHERE id = $4
+            WHERE id = $6
         `, [
             parsedAnalysis.positive_findings,
             parsedAnalysis.negative_findings,
             parsedAnalysis.recommendations,
+            prompt, // Surowy prompt wysłany do ChatGPT
+            JSON.stringify(openaiData), // Surowa odpowiedź z ChatGPT
             recordingId
         ]);
         
@@ -5450,6 +5460,199 @@ function parseChatGPTAnalysis(analysisText) {
     
     return sections;
 }
+
+// Eksport surowych danych ChatGPT do PDF
+app.post('/api/recordings/export-raw-data', requireAuth, async (req, res) => {
+  let browser = null;
+  
+  try {
+    const { recordingId } = req.body;
+    
+    if (!recordingId) {
+      return res.status(400).json({ success: false, message: 'Brak ID nagrania' });
+    }
+    
+    console.log('🎯 Generowanie PDF z surowymi danymi dla nagrania:', recordingId);
+    
+    // Pobierz nagranie z surowymi danymi ChatGPT
+    const recordingResult = await safeQuery(`
+      SELECT r.*, c.name as client_name, p.name as product_name,
+             r.chatgpt_prompt, r.chatgpt_raw_response
+      FROM recordings r 
+      JOIN clients c ON r.client_id = c.id 
+      JOIN products p ON r.product_id = p.id 
+      WHERE r.id = $1 AND p.user_id = $2
+    `, [recordingId, req.session.userId]);
+    
+    if (recordingResult.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Nagranie nie znalezione' });
+    }
+    
+    const recording = recordingResult.rows[0];
+    
+    if (!recording.chatgpt_prompt || !recording.chatgpt_raw_response) {
+      return res.status(400).json({ success: false, message: 'Brak surowych danych ChatGPT dla tego nagrania' });
+    }
+    
+    // Parsuj surową odpowiedź ChatGPT
+    let parsedResponse;
+    try {
+      parsedResponse = JSON.parse(recording.chatgpt_raw_response);
+    } catch (error) {
+      parsedResponse = { error: 'Błąd parsowania odpowiedzi', raw: recording.chatgpt_raw_response };
+    }
+    
+    // Przygotuj zawartość PDF jako HTML
+    const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>Surowe dane ChatGPT - ${recording.client_name}</title>
+        <style>
+            body { 
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+                margin: 0; 
+                padding: 20px; 
+                line-height: 1.6; 
+                color: #333; 
+                background: white;
+            }
+            .header { 
+                border-bottom: 3px solid #667eea; 
+                padding-bottom: 20px; 
+                margin-bottom: 30px; 
+                text-align: center;
+            }
+            .header h1 { 
+                color: #667eea; 
+                margin: 0; 
+                font-size: 28px;
+                font-weight: 700;
+            }
+            .header .meta { 
+                color: #666; 
+                margin-top: 15px; 
+                font-size: 16px;
+                line-height: 1.8;
+            }
+            .section { 
+                margin-bottom: 35px; 
+                page-break-inside: avoid; 
+            }
+            .section h2 { 
+                color: #667eea; 
+                border-bottom: 2px solid #e2e8f0; 
+                padding-bottom: 8px; 
+                margin-bottom: 15px;
+                font-size: 20px;
+                font-weight: 600;
+            }
+            .code-block { 
+                background: #f8fafc; 
+                padding: 20px; 
+                border-radius: 8px; 
+                border-left: 4px solid #667eea;
+                font-family: 'Courier New', Courier, monospace;
+                font-size: 12px;
+                white-space: pre-wrap;
+                word-wrap: break-word;
+                max-height: none;
+                overflow: visible;
+            }
+            .response-block { 
+                background: #f0fff4; 
+                padding: 20px; 
+                border-radius: 8px; 
+                border-left: 4px solid #48bb78;
+                font-size: 14px;
+                white-space: pre-wrap;
+            }
+            .json-block {
+                background: #fff5f5; 
+                padding: 20px; 
+                border-radius: 8px; 
+                border-left: 4px solid #f56565;
+                font-family: 'Courier New', Courier, monospace;
+                font-size: 11px;
+                white-space: pre-wrap;
+                word-wrap: break-word;
+            }
+            .footer {
+                margin-top: 40px;
+                padding-top: 20px;
+                border-top: 1px solid #e2e8f0;
+                text-align: center;
+                color: #666;
+                font-size: 12px;
+            }
+            .meta-info {
+                background: #f7fafc;
+                padding: 15px;
+                border-radius: 8px;
+                margin-bottom: 20px;
+                font-size: 14px;
+            }
+            .meta-info strong {
+                color: #333;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h1>🤖 Surowe dane ChatGPT</h1>
+            <div class="meta">
+                <strong>Klient:</strong> ${recording.client_name || 'Nieznany'}<br>
+                <strong>Produkt:</strong> ${recording.product_name || 'Nieznany'}<br>
+                <strong>Data nagrania:</strong> ${new Date(recording.created_at).toLocaleString('pl-PL')}<br>
+                <strong>ID nagrania:</strong> ${recordingId}
+            </div>
+        </div>
+
+        <div class="meta-info">
+            <strong>Status analizy:</strong> ${recording.ai_analysis_status}<br>
+            <strong>Data analizy:</strong> ${recording.ai_analysis_completed_at ? new Date(recording.ai_analysis_completed_at).toLocaleString('pl-PL') : 'Nieznana'}<br>
+            <strong>Długość transkrypcji:</strong> ${recording.transcript ? recording.transcript.length + ' znaków' : 'Brak'}<br>
+            <strong>Długość promptu:</strong> ${recording.chatgpt_prompt ? recording.chatgpt_prompt.length + ' znaków' : 'Brak'}
+        </div>
+
+        <div class="section">
+            <h2>📝 Prompt wysłany do ChatGPT</h2>
+            <div class="code-block">${recording.chatgpt_prompt || 'Brak danych'}</div>
+        </div>
+
+        <div class="section">
+            <h2>🤖 Surowa odpowiedź ChatGPT</h2>
+            <div class="response-block">${parsedResponse.choices?.[0]?.message?.content || 'Brak tekstu odpowiedzi'}</div>
+        </div>
+
+        <div class="section">
+            <h2>🔧 Pełna odpowiedź JSON</h2>
+            <div class="json-block">${JSON.stringify(parsedResponse, null, 2)}</div>
+        </div>
+
+        <div class="footer">
+            <p>Wygenerowano: ${new Date().toLocaleString('pl-PL')} | System analiz sprzedażowych</p>
+        </div>
+    </body>
+    </html>
+    `;
+
+    // Wyślij HTML jako odpowiedź
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="surowe_dane_${recordingId}.html"`);
+    res.send(htmlContent);
+
+    console.log('✅ Surowe dane ChatGPT wygenerowane jako HTML');
+
+  } catch (error) {
+    console.error('❌ Błąd generowania surowych danych:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Błąd generowania surowych danych: ' + error.message 
+    });
+  }
+});
 
 // Start serwera z WebSocket support
 server.listen(PORT, '::', async () => {
