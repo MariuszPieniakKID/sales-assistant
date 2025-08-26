@@ -20,6 +20,9 @@ const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY
 });
 
+// Admin email configuration (fallback to default)
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'admin@admin.pl').toLowerCase();
+
 // --- START: Zaawansowane logowanie do pliku ---
 const logFile = path.join(__dirname, 'server.log');
 const logStream = fs.createWriteStream(logFile, { flags: 'a' });
@@ -371,7 +374,11 @@ function requireAuth(req, res, next) {
 
 // Middleware sprawdzający uprawnienia admina
 function requireAdmin(req, res, next) {
-  if (req.session && req.session.userId && req.session.userId === 3) { // User ID 3 to admin
+  if (
+    req.session &&
+    req.session.userEmail &&
+    String(req.session.userEmail).toLowerCase() === ADMIN_EMAIL
+  ) {
     next();
   } else {
     res.status(403).json({ success: false, message: 'Brak uprawnień administratora' });
@@ -690,13 +697,22 @@ app.get('/api/user', requireAuth, async (req, res) => {
         }
 
         const user = result.rows[0];
+        const isAdmin = String(user.email || '').toLowerCase() === ADMIN_EMAIL;
         res.json({
             success: true,
+            // Backward-compatible top-level fields
+            id: user.id,
+            email: user.email,
+            firstName: user.first_name,
+            lastName: user.last_name,
+            isAdmin,
+            // Structured object
             user: {
                 id: user.id,
                 email: user.email,
                 firstName: user.first_name,
-                lastName: user.last_name
+                lastName: user.last_name,
+                isAdmin
             }
         });
     } catch (error) {

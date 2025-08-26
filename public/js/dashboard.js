@@ -58,7 +58,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             if (response.ok) {
                 const userData = await response.json();
-                userName.textContent = userData.firstName;
+                userName.textContent = userData.firstName || (userData.user && userData.user.firstName) || '';
                 console.log('✅ Dane użytkownika załadowane:', userData);
             } else {
                 console.error('❌ Błąd autoryzacji - przekierowanie do logowania');
@@ -80,11 +80,12 @@ document.addEventListener('DOMContentLoaded', function() {
             if (response.ok) {
                 const userData = await response.json();
                 
-                // Sprawdź czy ID użytkownika to 3 (admin)
-                isAdmin = userData.id === 3;
+                // Preferuj flagę isAdmin z backendu, fallback na porównanie emaila
+                isAdmin = Boolean(userData.isAdmin || (userData.user && userData.user.isAdmin));
                 
                 console.log('👤 Status użytkownika:', {
-                    id: userData.id,
+                    id: userData.id || (userData.user && userData.user.id),
+                    email: userData.email || (userData.user && userData.user.email),
                     isAdmin: isAdmin
                 });
                 
